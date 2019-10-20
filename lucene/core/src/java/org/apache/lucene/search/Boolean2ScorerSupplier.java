@@ -58,34 +58,34 @@ final class Boolean2ScorerSupplier extends ScorerSupplier {
     this.minShouldMatch = minShouldMatch;
   }
 
-  private long computeCost() {
+  private long computeCost() { // 是否有must和filter
     OptionalLong minRequiredCost = Stream.concat(
         subs.get(Occur.MUST).stream(),
         subs.get(Occur.FILTER).stream())
         .mapToLong(ScorerSupplier::cost)
-        .min();
-    if (minRequiredCost.isPresent() && minShouldMatch == 0) {
+        .min(); // 从must和fiter中找最小的那个
+    if (minRequiredCost.isPresent() && minShouldMatch == 0) { //当前是否有值&& 必须要匹配一个
       return minRequiredCost.getAsLong();
     } else {
-      final Collection<ScorerSupplier> optionalScorers = subs.get(Occur.SHOULD);
-      final long shouldCost = MinShouldMatchSumScorer.cost(
-          optionalScorers.stream().mapToLong(ScorerSupplier::cost),
+      final Collection<ScorerSupplier> optionalScorers = subs.get(Occur.SHOULD); // 找should
+      final long shouldCost = MinShouldMatchSumScorer.cost( // cost打分
+          optionalScorers.stream().mapToLong(ScorerSupplier::cost), //通过cost将stream转化成以一个long的stream
           optionalScorers.size(), minShouldMatch);
-      return Math.min(minRequiredCost.orElse(Long.MAX_VALUE), shouldCost);
+      return Math.min(minRequiredCost.orElse(Long.MAX_VALUE), shouldCost); // 求消耗最小的
     }
   }
 
   @Override
   public long cost() {
     if (cost == -1) {
-      cost = computeCost();
+      cost = computeCost(); // 打分
     }
     return cost;
   }
 
   @Override
   public Scorer get(long leadCost) throws IOException {
-    Scorer scorer = getInternal(leadCost);
+    Scorer scorer = getInternal(leadCost); // 打分进来，可以是DisjunctionSumScorer
     if (scoreMode == ScoreMode.TOP_SCORES &&
           subs.get(Occur.SHOULD).isEmpty() && subs.get(Occur.MUST).isEmpty()) {
       // no scoring clauses but scores are needed so we wrap the scorer in
@@ -99,14 +99,14 @@ final class Boolean2ScorerSupplier extends ScorerSupplier {
 
   private Scorer getInternal(long leadCost) throws IOException {
     // three cases: conjunction, disjunction, or mix
-    leadCost = Math.min(leadCost, cost());
+    leadCost = Math.min(leadCost, cost()); // cost打分，就是预估匹配的叶子数
 
     // pure conjunction
-    if (subs.get(Occur.SHOULD).isEmpty()) {
+    if (subs.get(Occur.SHOULD).isEmpty()) { // 若should为空
       return excl(req(subs.get(Occur.FILTER), subs.get(Occur.MUST), leadCost), subs.get(Occur.MUST_NOT), leadCost);
     }
 
-    // pure disjunction
+    // pure disjunction  // 若filter和must都为空
     if (subs.get(Occur.FILTER).isEmpty() && subs.get(Occur.MUST).isEmpty()) {
       return excl(opt(subs.get(Occur.SHOULD), minShouldMatch, scoreMode, leadCost), subs.get(Occur.MUST_NOT), leadCost);
     }
@@ -179,8 +179,8 @@ final class Boolean2ScorerSupplier extends ScorerSupplier {
   }
 
   private Scorer excl(Scorer main, Collection<ScorerSupplier> prohibited, long leadCost) throws IOException {
-    if (prohibited.isEmpty()) {
-      return main;
+    if (prohibited.isEmpty()) { //若没有must_not的话
+      return main; // 就直接返回
     } else {
       return new ReqExclScorer(main, opt(prohibited, 1, ScoreMode.COMPLETE_NO_SCORES, leadCost));
     }
@@ -193,7 +193,7 @@ final class Boolean2ScorerSupplier extends ScorerSupplier {
     } else {
       final List<Scorer> optionalScorers = new ArrayList<>();
       for (ScorerSupplier scorer : optional) {
-        optionalScorers.add(scorer.get(leadCost));
+        optionalScorers.add(scorer.get(leadCost)); // 这里scorer.get又会去计算一次预估匹配的数据量
       }
       if (minShouldMatch > 1) {
         return new MinShouldMatchSumScorer(weight, optionalScorers, minShouldMatch);

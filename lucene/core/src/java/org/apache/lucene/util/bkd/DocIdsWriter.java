@@ -25,19 +25,19 @@ import org.apache.lucene.store.IndexInput;
 class DocIdsWriter {
 
   private DocIdsWriter() {}
-
+ // Id有序无序都可以下载
   static void writeDocIds(int[] docIds, int start, int count, DataOutput out) throws IOException {
     // docs can be sorted either when all docs in a block have the same value
     // or when a segment is sorted
     boolean sorted = true;
-    for (int i = 1; i < count; ++i) {
+    for (int i = 1; i < count; ++i) { // 自带检查，若后面的数小于前面的数，则说明无需
       if (docIds[start + i - 1] > docIds[start + i]) {
         sorted = false;
         break;
       }
     }
-    if (sorted) {
-      out.writeByte((byte) 0);
+    if (sorted) { // 若排好序，增增量写入
+      out.writeByte((byte) 0);// 有序
       int previous = 0;
       for (int i = 0; i < count; ++i) {
         int doc = docIds[start + i];
@@ -46,35 +46,35 @@ class DocIdsWriter {
       }
     } else {
       long max = 0;
-      for (int i = 0; i < count; ++i) {
+      for (int i = 0; i < count; ++i) { //找最大值
         max |= Integer.toUnsignedLong(docIds[start + i]);
       }
       if (max <= 0xffffff) {
-        out.writeByte((byte) 24);
+        out.writeByte((byte) 24); // 每个文档使用24位，无序
         for (int i = 0; i < count; ++i) {
           out.writeShort((short) (docIds[start + i] >>> 8));
           out.writeByte((byte) docIds[start + i]);
         }
       } else {
-        out.writeByte((byte) 32);
+        out.writeByte((byte) 32); // 每个文档使用32位，无序
         for (int i = 0; i < count; ++i) {
           out.writeInt(docIds[start + i]);
         }
       }
     }
   }
-
+   // 参考BKDWriter.build()中叶子存储过程：writeLeafBlockDocs函数,先存储的docCount，
   /** Read {@code count} integers into {@code docIDs}. */
   static void readInts(IndexInput in, int count, int[] docIDs) throws IOException {
     final int bpv = in.readByte();
-    switch (bpv) {
+    switch (bpv) {// 有序
       case 0:
         readDeltaVInts(in, count, docIDs);
         break;
-      case 32:
+      case 32: //无序，32表示
         readInts32(in, count, docIDs);
         break;
-      case 24:
+      case 24: // 无序，24位表示
         readInts24(in, count, docIDs);
         break;
       default:

@@ -47,18 +47,18 @@ public final class FieldReader extends Terms implements Accountable {
       RamUsageEstimator.shallowSizeOfInstance(FieldReader.class)
       + 3 * RamUsageEstimator.shallowSizeOfInstance(BytesRef.class);
 
-  final long numTerms;
+  final long numTerms; // 词的总个数
   final FieldInfo fieldInfo;
   final long sumTotalTermFreq;
   final long sumDocFreq;
   final int docCount;
   final long rootBlockFP;
   final BytesRef rootCode;
-  final BytesRef minTerm;
+  final BytesRef minTerm; // 有这两个词吗
   final BytesRef maxTerm;
-  final BlockTreeTermsReader parent;
+  final BlockTreeTermsReader parent; //BlockTreeTermsReader
 
-  final FST<BytesRef> index;
+  final FST<BytesRef> index;//实际跑到这里，比较占用内存空间， fst文件结构
   //private boolean DEBUG;
 
   FieldReader(BlockTreeTermsReader parent, FieldInfo fieldInfo, long numTerms, BytesRef rootCode, long sumTotalTermFreq, long sumDocFreq, int docCount,
@@ -83,7 +83,7 @@ public final class FieldReader extends Terms implements Accountable {
     clone.seek(indexStartFP);
     if (metaIn == indexIn) { // Only true before Lucene 8.6
       index = new FST<>(clone, clone, ByteSequenceOutputs.getSingleton(), new OffHeapFSTStore());
-    } else {
+    } else { // 8.6之后跑到了这里
       index = new FST<>(metaIn, clone, ByteSequenceOutputs.getSingleton(), new OffHeapFSTStore());
     }
     /*
@@ -145,7 +145,7 @@ public final class FieldReader extends Terms implements Accountable {
 
   @Override
   public TermsEnum iterator() throws IOException {
-    return new SegmentTermsEnum(this);
+    return new SegmentTermsEnum(this);  //词典精确查询
   }
 
   @Override
@@ -180,7 +180,7 @@ public final class FieldReader extends Terms implements Accountable {
     return new IntersectTermsEnum(this, compiled.automaton, compiled.runAutomaton, compiled.commonSuffixRef, startTerm);
   }
     
-  @Override
+  @Override // FieldReader显示的固定
   public long ramBytesUsed() {
     return BASE_RAM_BYTES_USED + ((index!=null)? index.ramBytesUsed() : 0);
   }

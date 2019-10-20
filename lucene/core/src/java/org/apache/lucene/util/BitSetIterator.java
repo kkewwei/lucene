@@ -58,8 +58,8 @@ public class BitSetIterator extends DocIdSetIterator {
       throw new IllegalArgumentException("cost must be >= 0, got " + cost);
     }
     this.bits = bits;
-    this.length = bits.length();
-    this.cost = cost;
+    this.length = bits.length(); // 总共存储了多少个数据
+    this.cost = cost;  // 多少匹配上了
   }
 
   /** Return the wrapped {@link BitSet}. */
@@ -78,7 +78,7 @@ public class BitSetIterator extends DocIdSetIterator {
   }
 
   @Override
-  public int nextDoc() {
+  public int nextDoc() { // 获取下一个文档Id
     return advance(doc + 1);
   }
 

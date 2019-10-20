@@ -155,13 +155,13 @@ final class ForUtil {
    * @throws IOException If there is a low-level I/O error
    */
   void writeBlock(int[] data, byte[] encoded, IndexOutput out) throws IOException {
-    if (isAllEqual(data)) {
+    if (isAllEqual(data)) { // 所有数据是否一样
       out.writeByte((byte) ALL_VALUES_EQUAL);
       out.writeVInt(data[0]);
       return;
     }
 
-    final int numBits = bitsRequired(data);
+    final int numBits = bitsRequired(data); // 编码需要的长度
     assert numBits > 0 && numBits <= 32 : numBits;
     final PackedInts.Encoder encoder = encoders[numBits];
     final int iters = iterations[numBits];
@@ -169,10 +169,10 @@ final class ForUtil {
     final int encodedSize = encodedSizes[numBits];
     assert iters * encoder.byteBlockCount() >= encodedSize;
 
-    out.writeByte((byte) numBits);
+    out.writeByte((byte) numBits); // doc文件、pos文件
 
     encoder.encode(data, 0, encoded, 0, iters);
-    out.writeBytes(encoded, encodedSize);
+    out.writeBytes(encoded, encodedSize); // 向doc文件、pos文件中写入数据
   }
 
   /**

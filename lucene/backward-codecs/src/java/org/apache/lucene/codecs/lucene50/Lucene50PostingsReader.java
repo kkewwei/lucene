@@ -78,20 +78,20 @@ public final class Lucene50PostingsReader extends PostingsReaderBase {
     // but for now we at least verify proper structure of the checksum footer: which looks
     // for FOOTER_MAGIC + algorithmID. This is cheap and can detect some forms of corruption
     // such as file truncation.
-    
+    // 这里读取的是：_b_Lucene50_0.doc
     String docName = IndexFileNames.segmentFileName(state.segmentInfo.name, state.segmentSuffix, Lucene50PostingsFormat.DOC_EXTENSION);
     try {
       docIn = state.directory.openInput(docName, state.context);
       version = CodecUtil.checkIndexHeader(docIn, DOC_CODEC, VERSION_START, VERSION_CURRENT, state.segmentInfo.getId(), state.segmentSuffix);
       forUtil = new ForUtil(docIn);
       CodecUtil.retrieveChecksum(docIn);
-
+      // 再去读取pos文件
       if (state.fieldInfos.hasProx()) {
         String proxName = IndexFileNames.segmentFileName(state.segmentInfo.name, state.segmentSuffix, Lucene50PostingsFormat.POS_EXTENSION);
         posIn = state.directory.openInput(proxName, state.context);
         CodecUtil.checkIndexHeader(posIn, POS_CODEC, version, version, state.segmentInfo.getId(), state.segmentSuffix);
         CodecUtil.retrieveChecksum(posIn);
-
+        // 再去读取pay文件
         if (state.fieldInfos.hasPayloads() || state.fieldInfos.hasOffsets()) {
           String payName = IndexFileNames.segmentFileName(state.segmentInfo.name, state.segmentSuffix, Lucene50PostingsFormat.PAY_EXTENSION);
           payIn = state.directory.openInput(payName, state.context);

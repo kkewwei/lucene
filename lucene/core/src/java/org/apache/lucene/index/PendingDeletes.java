@@ -30,15 +30,15 @@ import org.apache.lucene.util.IOUtils;
 
 /**
  * This class handles accounting and applying pending deletes for live segment readers
- */
+ */ // 对存量segment的删除，临时保存live的segment
 class PendingDeletes {
   protected final SegmentCommitInfo info;
   // Read-only live docs, null until live docs are initialized or if all docs are alive
-  private Bits liveDocs;
+  private Bits liveDocs; // 只读FixedBits
   // Writeable live docs, null if this instance is not ready to accept writes, in which
   // case getMutableBits needs to be called
   private FixedBitSet writeableLiveDocs;
-  protected int pendingDeleteCount;
+  protected int pendingDeleteCount; // 存量segment中需要删除的文档个数
   boolean liveDocsInitialized;
 
   PendingDeletes(SegmentReader reader, SegmentCommitInfo info) {
@@ -65,14 +65,14 @@ class PendingDeletes {
     // if we pull mutable bits but we haven't been initialized something is completely off.
     // this means we receive deletes without having the bitset that is on-disk ready to be cloned
     assert liveDocsInitialized : "can't delete if liveDocs are not initialized";
-    if (writeableLiveDocs == null) {
+    if (writeableLiveDocs == null) { // 若不存在
       // Copy on write: this means we've cloned a
       // SegmentReader sharing the current liveDocs
       // instance; must now make a private clone so we can
       // change it:
-      if (liveDocs != null) {
+      if (liveDocs != null) {// 若liveDocs存在，首先copy
         writeableLiveDocs = FixedBitSet.copyOf(liveDocs);
-      } else {
+      } else { // 默认为所有的文档都是存活的
         writeableLiveDocs = new FixedBitSet(info.info.maxDoc());
         writeableLiveDocs.set(0, info.info.maxDoc());
       }
@@ -91,9 +91,9 @@ class PendingDeletes {
     FixedBitSet mutableBits = getMutableBits();
     assert mutableBits != null;
     assert docID >= 0 && docID < mutableBits.length() : "out of bounds: docid=" + docID + " liveDocsLength=" + mutableBits.length() + " seg=" + info.info.name + " maxDoc=" + info.info.maxDoc();
-    final boolean didDelete = mutableBits.get(docID);
+    final boolean didDelete = mutableBits.get(docID); // 若存在，那么就标志
     if (didDelete) {
-      mutableBits.clear(docID);
+      mutableBits.clear(docID); //对应位标志位0
       pendingDeleteCount++;
     }
     return didDelete;
@@ -124,7 +124,7 @@ class PendingDeletes {
 
   /**
    * Called once a new reader is opened for this segment ie. when deletes or updates are applied.
-   */
+   */ // 只要一个新的reader被打开了，那么就调用
   void onNewReader(CodecReader reader, SegmentCommitInfo info) throws IOException {
     if (liveDocsInitialized == false) {
       assert writeableLiveDocs == null;
@@ -191,8 +191,8 @@ class PendingDeletes {
     // until segments file is written:
     boolean success = false;
     try {
-      Codec codec = info.info.getCodec();
-      codec.liveDocsFormat().writeLiveDocs(liveDocs, trackingDir, info, pendingDeleteCount, IOContext.DEFAULT);
+      Codec codec = info.info.getCodec(); // Lucene86Codec
+      codec.liveDocsFormat().writeLiveDocs(liveDocs, trackingDir, info, pendingDeleteCount, IOContext.DEFAULT); // 写_n.liv文件
       success = true;
     } finally {
       if (!success) {
@@ -211,7 +211,7 @@ class PendingDeletes {
     // then info's delGen remains pointing to the previous
     // (successfully written) del docs:
     info.advanceDelGen();
-    info.setDelCount(info.getDelCount() + pendingDeleteCount);
+    info.setDelCount(info.getDelCount() + pendingDeleteCount); // 更新删除的文件
     dropChanges();
     return true;
   }

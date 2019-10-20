@@ -52,20 +52,20 @@ public class DisjunctionDISIApproximation extends DocIdSetIterator {
     DisiWrapper top = subIterators.top();
     final int doc = top.doc;
     do {
-      top.doc = top.approximation.nextDoc();
-      top = subIterators.updateTop();
-    } while (top.doc == doc);
+      top.doc = top.approximation.nextDoc(); // 更换subIterators上栈顶找到的下一个文档
+      top = subIterators.updateTop(); // 对subIterators根据当前查找的文档Id进行排序
+    } while (top.doc == doc); // 要是相同的话，一般都是有问题的，。
 
     return top.doc;
   }
 
   @Override
-  public int advance(int target) throws IOException {
-    DisiWrapper top = subIterators.top();
+  public int advance(int target) throws IOException { 
+    DisiWrapper top = subIterators.top(); // 取出第一个
     do {
-      top.doc = top.approximation.advance(target);
-      top = subIterators.updateTop();
-    } while (top.doc < target);
+      top.doc = top.approximation.advance(target); // 求取下一个docId
+      top = subIterators.updateTop(); // 再次取出新的
+    } while (top.doc < target);// 找一个doc，使 top.doc < target
 
     return top.doc;
   }

@@ -85,7 +85,7 @@ public class LatLonPoint extends Field {
    */
   public void setLocationValue(double latitude, double longitude) {
     final byte[] bytes;
-
+    // 维度数据经纬只用8位长度
     if (fieldsData == null) {
       bytes = new byte[8];
       fieldsData = new BytesRef(bytes);
@@ -93,7 +93,7 @@ public class LatLonPoint extends Field {
       bytes = ((BytesRef) fieldsData).bytes;
     }
 
-    int latitudeEncoded = encodeLatitude(latitude);
+    int latitudeEncoded = encodeLatitude(latitude); // 将64位long编码成32位长度
     int longitudeEncoded = encodeLongitude(longitude);
     NumericUtils.intToSortableBytes(latitudeEncoded, bytes, 0);
     NumericUtils.intToSortableBytes(longitudeEncoded, bytes, Integer.BYTES);

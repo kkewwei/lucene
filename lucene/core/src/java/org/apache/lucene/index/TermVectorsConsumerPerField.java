@@ -24,19 +24,19 @@ import org.apache.lucene.analysis.tokenattributes.TermFrequencyAttribute;
 import org.apache.lucene.codecs.TermVectorsWriter;
 import org.apache.lucene.util.ByteBlockPool;
 import org.apache.lucene.util.BytesRef;
-
-final class TermVectorsConsumerPerField extends TermsHashPerField {
+// Lucene的倒排索引有两种格式，一种是用于搜索的Postings，在源码中由FreqProxTermsWriterPerField负责；另一种是TermsVectors，由TermsVectorsWriterPerField实现。
+final class TermVectorsConsumerPerField extends TermsHashPerField { // segment内共享，segment完成后就清空。和FreqProxTermsWriterPerField一一对应
 
   private TermVectorsPostingsArray termVectorsPostingsArray;
 
-  private final TermVectorsConsumer termsWriter;
+  private final TermVectorsConsumer termsWriter;// TermVectorsConsumer
   private final FieldInvertState fieldState;
   private final FieldInfo fieldInfo;
 
-  private boolean doVectors;
-  private boolean doVectorPositions;
-  private boolean doVectorOffsets;
-  private boolean doVectorPayloads;
+  private boolean doVectors; // 默认为true
+  private boolean doVectorPositions; // 默认为true
+  private boolean doVectorOffsets; // 默认为true
+  private boolean doVectorPayloads; // 默认为true
 
   private OffsetAttribute offsetAttribute;
   private PayloadAttribute payloadAttribute;
@@ -57,23 +57,23 @@ final class TermVectorsConsumerPerField extends TermsHashPerField {
    *  are enabled, to write the vectors to
    *  RAMOutputStream, which is then quickly flushed to
    *  the real term vectors files in the Directory. */  @Override
-  void finish() {
+  void finish() {// 所有域处理完后会调用，将自己放在termsWriter中
     if (!doVectors || getNumTerms() == 0) {
       return;
     }
-    termsWriter.addFieldToFlush(this);
+    termsWriter.addFieldToFlush(this); // 把产生的TermVectorsConsumerPerField放入termsWriter里面
   }
-
+  // 是nextField.finsh()函数, 当前文档每个域都调用的
   void finishDocument() throws IOException {
     if (doVectors == false) {
       return;
     }
 
-    doVectors = false;
+    doVectors = false; // 把状态改了
 
-    final int numPostings = getNumTerms();
+    final int numPostings = getNumTerms(); //存放着一个域的distinct(词)个数
 
-    final BytesRef flushTerm = termsWriter.flushTerm;
+    final BytesRef flushTerm = termsWriter.flushTerm; // 
 
     assert numPostings >= 0;
 
@@ -82,42 +82,42 @@ final class TermVectorsConsumerPerField extends TermsHashPerField {
     // our hash into the DocWriter.
 
     TermVectorsPostingsArray postings = termVectorsPostingsArray;
-    final TermVectorsWriter tv = termsWriter.writer;
+    final TermVectorsWriter tv = termsWriter.writer;// CompressingTermVectorsWriter，一个segment共享一个，落盘完成后就置空了
 
     sortTerms();
-    final int[] termIDs = getSortedTermIDs();
-
+    final int[] termIDs = getSortedTermIDs();// 一个域内termId的个数
+    // numPostings 每个distinct(词), 这个域加一个
     tv.startField(fieldInfo, numPostings, doVectorPositions, doVectorOffsets, hasPayloads);
-    
-    final ByteSliceReader posReader = doVectorPositions ? termsWriter.vectorSliceReaderPos : null;
-    final ByteSliceReader offReader = doVectorOffsets ? termsWriter.vectorSliceReaderOff : null;
-    
-    for(int j=0;j<numPostings;j++) {
-      final int termID = termIDs[j];
-      final int freq = postings.freqs[termID];
+    // 整个链共享一个
+    final ByteSliceReader posReader = doVectorPositions ? termsWriter.vectorSliceReaderPos : null;//ByteSliceReader, 为了读取某一个词
+    final ByteSliceReader offReader = doVectorOffsets ? termsWriter.vectorSliceReaderOff : null; // ByteSliceReader  为了读取某一个词
+    //以每个词为粒度, 开始依次初始化处理这个域的每一个单词,
+    for(int j=0;j<numPostings;j++) { // 扫描该域每个distinct(词)。放入tv中
+      final int termID = termIDs[j]; // 从词排序最小的那个开始, 得到词Id
+      final int freq = postings.freqs[termID];  // 获取该词的词频
 
       // Get BytesRef
-      termBytePool.setBytesRef(flushTerm, postings.textStarts[termID]);
-      tv.startTerm(flushTerm, freq);
+      termBytePool.setBytesRef(flushTerm, postings.textStarts[termID]); // 获取该词，放在flushTerm中
+      tv.startTerm(flushTerm, freq);  // value存储使用了压缩发则，主要是存储词字符
       
-      if (doVectorPositions || doVectorOffsets) {
+      if (doVectorPositions || doVectorOffsets) { // 主要是nextFiled中的东西
         if (posReader != null) {
-          initReader(posReader, termID, 0);
+          initReader(posReader, termID, 0); // 读取这个词在0个stream上的所有长度
         }
         if (offReader != null) {
-          initReader(offReader, termID, 1);
+          initReader(offReader, termID, 1); //  读取这个词在1个stream上的所有长度
         }
-        tv.addProx(freq, posReader, offReader);
+        tv.addProx(freq, posReader, offReader); // 把nextTermVector中byteBuffer stream0/1都给读取出来，放到CompressingTermVectorsWriter的buffer中
       }
-      tv.finishTerm();
+      tv.finishTerm(); // 啥事都不做
     }
-    tv.finishField();
+    tv.finishField(); // 啥事都不做，仅仅清空curField=null
 
-    reset();
+    reset(); // 这里会清空TermVectorsConsumerPerField里面的BytesRefHash里面ids等值
 
-    fieldInfo.setStoreTermVectors();
+    fieldInfo.setStoreTermVectors(); // 啥都不干
   }
-
+ // 在写入每个域时候，会对TermVectorsConsumerPerField进行初始化，
   @Override
   boolean start(IndexableField field, boolean first) {
     super.start(field, first);
@@ -133,24 +133,24 @@ final class TermVectorsConsumerPerField extends TermsHashPerField {
         reset();
       }
 
-      reinitHash();
+      reinitHash();// 清空TermVectorsConsumerPerField.TermVectorsPostingsArray
 
       hasPayloads = false;
 
-      doVectors = field.fieldType().storeTermVectors();
+      doVectors = field.fieldType().storeTermVectors(); // 存储termVector
 
-      if (doVectors) {
+      if (doVectors) { // 若设置了doVectors
 
         termsWriter.hasVectors = true;
 
-        doVectorPositions = field.fieldType().storeTermVectorPositions();
+        doVectorPositions = field.fieldType().storeTermVectorPositions();  // true
 
         // Somewhat confusingly, unlike postings, you are
         // allowed to index TV offsets without TV positions:
-        doVectorOffsets = field.fieldType().storeTermVectorOffsets();
+        doVectorOffsets = field.fieldType().storeTermVectorOffsets(); // true
 
         if (doVectorPositions) {
-          doVectorPayloads = field.fieldType().storeTermVectorPayloads();
+          doVectorPayloads = field.fieldType().storeTermVectorPayloads(); // true
         } else {
           doVectorPayloads = false;
           if (field.fieldType().storeTermVectorPayloads()) {
@@ -193,41 +193,41 @@ final class TermVectorsConsumerPerField extends TermsHashPerField {
 
       if (doVectorPayloads) {
         // Can be null:
-        payloadAttribute = fieldState.payloadAttribute;
+        payloadAttribute = fieldState.payloadAttribute; // null
       } else {
         payloadAttribute = null;
       }
     }
 
-    return doVectors;
+    return doVectors; // true
   }
 
   void writeProx(TermVectorsPostingsArray postings, int termID) {
     if (doVectorOffsets) {
       int startOffset = fieldState.offset + offsetAttribute.startOffset();
       int endOffset = fieldState.offset + offsetAttribute.endOffset();
-
-      writeVInt(1, startOffset - postings.lastOffsets[termID]);
+      // 压缩存储
+      writeVInt(1, startOffset - postings.lastOffsets[termID]); // 也是为了减少存储的大小，在CompressingTermVectorsWriter的addProx那里通过累加复原了
       writeVInt(1, endOffset - startOffset);
       postings.lastOffsets[termID] = endOffset;
     }
 
-    if (doVectorPositions) {
+    if (doVectorPositions) { // // 没看懂记录着有啥用
       final BytesRef payload;
       if (payloadAttribute == null) {
         payload = null;
       } else {
         payload = payloadAttribute.getPayload();
-      }
-      
-      final int pos = fieldState.position - postings.lastPositions[termID];
+      } // 这样做的目的是为了减少存储的size大小，使用增量方式，减少了position的大小。后面在实际放入positionsBuf时给还原出来了
+      // 若是某个词是第一次lastPositions，那么lastPositions[termID]直接等于0
+      final int pos = fieldState.position - postings.lastPositions[termID]; // 若来了一个新的termId，那么postings.lastPositions[termID]一定为0。压缩存储
       if (payload != null && payload.length > 0) {
         writeVInt(0, (pos<<1)|1);
         writeVInt(0, payload.length);
         writeBytes(0, payload.bytes, payload.offset, payload.length);
         hasPayloads = true;
       } else {
-        writeVInt(0, pos<<1);
+        writeVInt(0, pos<<1); // 存储0
       }
       postings.lastPositions[termID] = fieldState.position;
     }
@@ -248,7 +248,7 @@ final class TermVectorsConsumerPerField extends TermsHashPerField {
   void addTerm(final int termID, final int docID) {
     TermVectorsPostingsArray postings = termVectorsPostingsArray;
 
-    postings.freqs[termID] += getTermFreq();
+    postings.freqs[termID] += getTermFreq(); // 词频用这个对象保留的
 
     writeProx(postings, termID);
   }
@@ -285,9 +285,9 @@ final class TermVectorsConsumerPerField extends TermsHashPerField {
       lastPositions = new int[size];
     }
 
-    int[] freqs;                                       // How many times this term occurred in the current doc
-    int[] lastOffsets;                                 // Last offset we saw
-    int[] lastPositions;                               // Last position where this term occurred
+    int[] freqs;   // How many times this term occurred in the current doc  都有，这个词并没有立马存入byteBuffer中，在后面finish时候直接使用的
+    int[] lastOffsets;  // Last offset we saw   该词出现的最后一次的endoffset
+    int[] lastPositions;      // Last position where this term occurred  都有，每次进入一个新词，就清空旧词的参数
 
     @Override
     ParallelPostingsArray newInstance(int size) {

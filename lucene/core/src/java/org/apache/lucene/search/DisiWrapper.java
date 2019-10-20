@@ -28,7 +28,7 @@ public class DisiWrapper {
   public final Scorer scorer;
   public final long cost;
   public final float matchCost; // the match cost for two-phase iterators, 0 otherwise
-  public int doc; // the current doc, used for comparison
+  public int doc; // the current doc, used for comparison  文档Id
   public DisiWrapper next; // reference to a next element, see #topList
 
   // An approximation of the iterator, or the iterator itself if it does not
@@ -49,8 +49,8 @@ public class DisiWrapper {
   public DisiWrapper(Scorer scorer) {
     this.scorer = scorer;
     this.spans = null;
-    this.iterator = scorer.iterator();
-    this.cost = iterator.cost();
+    this.iterator = scorer.iterator(); // 就是
+    this.cost = iterator.cost(); // 匹配的文档数
     this.doc = -1;
     this.twoPhaseView = scorer.twoPhaseIterator();
       

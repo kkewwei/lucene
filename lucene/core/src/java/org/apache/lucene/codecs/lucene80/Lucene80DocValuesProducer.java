@@ -57,7 +57,7 @@ final class Lucene80DocValuesProducer extends DocValuesProducer implements Close
   private final Map<String,SortedEntry> sorted = new HashMap<>();
   private final Map<String,SortedSetEntry> sortedSets = new HashMap<>();
   private final Map<String,SortedNumericEntry> sortedNumerics = new HashMap<>();
-  private long ramBytesUsed;
+  private long ramBytesUsed; //仅仅是类名
   private final IndexInput data;
   private final int maxDoc;
   private int version = -1;

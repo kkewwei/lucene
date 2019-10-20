@@ -38,7 +38,7 @@ import org.apache.lucene.util.RamUsageEstimator;
 // NOTE: instances of this class are accessed either via a private
 // instance on DocumentWriterPerThread, or via sync'd code by
 // DocumentsWriterDeleteQueue
-
+// 每个DocumentsWriterDeleteQueue都会拥有一个BufferedUpdates，DocumentsWriterDeleteQueue也会持有一个该对象的全局实例：globalBufferedUpdates
 class BufferedUpdates implements Accountable {
 
   /* Rough logic: HashMap has an array[Entry] w/ varying
@@ -50,7 +50,7 @@ class BufferedUpdates implements Accountable {
      OBJ_HEADER + string.length*CHAR).
      Term's text is String (OBJ_HEADER + 4*INT + POINTER +
      OBJ_HEADER + string.length*CHAR).  Integer is
-     OBJ_HEADER + INT. */
+     OBJ_HEADER + INT. */ // 默认为160
   final static int BYTES_PER_DEL_TERM = 9*RamUsageEstimator.NUM_BYTES_OBJECT_REF + 7*RamUsageEstimator.NUM_BYTES_OBJECT_HEADER + 10*Integer.BYTES;
 
   /* Rough logic: HashMap has an array[Entry] w/ varying
@@ -59,12 +59,12 @@ class BufferedUpdates implements Accountable {
      (OBJ_HEADER + 3*POINTER + INT).  Query we often
      undercount (say 24 bytes).  Integer is OBJ_HEADER + INT. */
   final static int BYTES_PER_DEL_QUERY = 5*RamUsageEstimator.NUM_BYTES_OBJECT_REF + 2*RamUsageEstimator.NUM_BYTES_OBJECT_HEADER + 2*Integer.BYTES + 24;
-  final AtomicInteger numTermDeletes = new AtomicInteger();
+  final AtomicInteger numTermDeletes = new AtomicInteger(); //需要删除的term个数
   final AtomicInteger numFieldUpdates = new AtomicInteger();
-
+  // BufferedUpdates会维护三种类型的删除：
   final Map<Term,Integer> deleteTerms = new HashMap<>(); // TODO cut this over to FieldUpdatesBuffer
   final Map<Query,Integer> deleteQueries = new HashMap<>();
-
+  // 存放需要删除的docID，这里主要是记录新增或更新文档发生异常时已经缓存了的docID，在写入时会过滤这些doc，避免写入发生异常的doc
   final Map<String, FieldUpdatesBuffer> fieldUpdates = new HashMap<>();
   
 
@@ -108,7 +108,7 @@ class BufferedUpdates implements Accountable {
       return s;
     }
   }
-
+  // query可以是TermQuery
   public void addQuery(Query query, int docIDUpto) {
     Integer current = deleteQueries.put(query, docIDUpto);
     // increment bytes used only if the query wasn't added so far.
@@ -135,7 +135,7 @@ class BufferedUpdates implements Accountable {
     // delete on that term, therefore we seem to over-count. this over-counting
     // is done to respect IndexWriterConfig.setMaxBufferedDeleteTerms.
     numTermDeletes.incrementAndGet();
-    if (current == null) {
+    if (current == null) { // 当前旧的为null
       termsBytesUsed.addAndGet(BYTES_PER_DEL_TERM + term.bytes.length + (Character.BYTES * term.field().length()));
     }
   }

@@ -36,7 +36,7 @@ public abstract class AbstractPagedMutable<T extends AbstractPagedMutable<T>> ex
 
   final long size;
   final int pageShift;
-  final int pageMask;
+  final int pageMask; // 1<<27
   final PackedInts.Mutable[] subMutables;
   final int bitsPerValue;
 
@@ -79,7 +79,7 @@ public abstract class AbstractPagedMutable<T extends AbstractPagedMutable<T>> ex
   }
 
   final int indexInPage(long index) {
-    return (int) index & pageMask;
+    return (int) index & pageMask;  // 1<<27
   }
 
   @Override

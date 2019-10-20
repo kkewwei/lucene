@@ -35,7 +35,7 @@ import org.apache.lucene.search.MaxScoreAccumulator.DocAndScore;
  * {@link Float#NEGATIVE_INFINITY} are not valid scores.  This
  * collector will not properly collect hits with such
  * scores.
- */
+ */ // TopScoreDocCollector 类的排序规则为 “先打分，后文档号”
 public abstract class TopScoreDocCollector extends TopDocsCollector<ScoreDoc> {
 
   abstract static class ScorerLeafCollector implements LeafCollector {
@@ -44,12 +44,12 @@ public abstract class TopScoreDocCollector extends TopDocsCollector<ScoreDoc> {
 
     @Override
     public void setScorer(Scorable scorer) throws IOException {
-      this.scorer = scorer;
+      this.scorer = scorer; // ConstantScoreScorer
     }
   }
-
+  //使用优先级队列 PriorityQueue 来存放满足搜索条件的文档信息（文档信息至少包含了文档打分 score 以及文档号 docId），分数最低的文档信息位于堆顶，堆的大小默认为段中的文档总数（用户也可以指定堆的大小，即用户期望的返回结果 TopN 的 N 值）。
   private static class SimpleTopScoreDocCollector extends TopScoreDocCollector {
-
+     // 通过堆顶替换，来保持最大堆
     SimpleTopScoreDocCollector(int numHits, HitsThresholdChecker hitsThresholdChecker,
                                MaxScoreAccumulator minScoreAcc) {
       super(numHits, hitsThresholdChecker, minScoreAcc);
@@ -70,22 +70,22 @@ public abstract class TopScoreDocCollector extends TopDocsCollector<ScoreDoc> {
             updateGlobalMinCompetitiveScore(scorer);
           }
         }
-
+        // 开始遍历选中的文档，然后进行得分统计。
         @Override
         public void collect(int doc) throws IOException {
           float score = scorer.score();
 
           // This collector relies on the fact that scorers produce positive values:
           assert score >= 0; // NOTE: false for NaN
-
+          //
           totalHits++;
           hitsThresholdChecker.incrementHitCount();
 
           if (minScoreAcc != null && (totalHits & minScoreAcc.modInterval) == 0) {
             updateGlobalMinCompetitiveScore(scorer);
           }
-
-          if (score <= pqTop.score) {
+          // 得分最小的放在最上面
+          if (score <= pqTop.score) {// 小于等于顶置。目前使用全部score为1，达到我们期望的值后，
             if (totalHitsRelation == TotalHits.Relation.EQUAL_TO) {
               // we just reached totalHitsThreshold, we can start setting the min
               // competitive score now
@@ -96,10 +96,10 @@ public abstract class TopScoreDocCollector extends TopDocsCollector<ScoreDoc> {
             // documents with lower doc Ids. Therefore reject those docs too.
             return;
           }
-          pqTop.doc = doc + docBase;
+          pqTop.doc = doc + docBase; //
           pqTop.score = score;
-          pqTop = pq.updateTop();
-          updateMinCompetitiveScore(scorer);
+          pqTop = pq.updateTop(); // 重新更新堆顶元素
+          updateMinCompetitiveScore(scorer); // 应该是调整
         }
 
       };
@@ -223,7 +223,7 @@ public abstract class TopScoreDocCollector extends TopDocsCollector<ScoreDoc> {
   static TopScoreDocCollector create(int numHits, ScoreDoc after, HitsThresholdChecker hitsThresholdChecker,
                                      MaxScoreAccumulator minScoreAcc) {
 
-    if (numHits <= 0) {
+    if (numHits <= 0) { // 就是每次需要返回的个数
       throw new IllegalArgumentException("numHits must be > 0; please use TotalHitCountCollector if you just need the total hit count");
     }
 
@@ -231,7 +231,7 @@ public abstract class TopScoreDocCollector extends TopDocsCollector<ScoreDoc> {
       throw new IllegalArgumentException("hitsThresholdChecker must be non null");
     }
 
-    if (after == null) {
+    if (after == null) { // ES跑到这里
       return new SimpleTopScoreDocCollector(numHits, hitsThresholdChecker, minScoreAcc);
     } else {
       return new PagingTopScoreDocCollector(numHits, after, hitsThresholdChecker, minScoreAcc);
@@ -267,7 +267,7 @@ public abstract class TopScoreDocCollector extends TopDocsCollector<ScoreDoc> {
     };
   }
 
-  int docBase;
+  int docBase; // 这个叶子的起始文档
   ScoreDoc pqTop;
   final HitsThresholdChecker hitsThresholdChecker;
   final MaxScoreAccumulator minScoreAcc;
@@ -276,12 +276,12 @@ public abstract class TopScoreDocCollector extends TopDocsCollector<ScoreDoc> {
   // prevents instantiation
   TopScoreDocCollector(int numHits, HitsThresholdChecker hitsThresholdChecker,
                        MaxScoreAccumulator minScoreAcc) {
-    super(new HitQueue(numHits, true));
+    super(new HitQueue(numHits, true)); // numHits:每次需要返回的个数
     assert hitsThresholdChecker != null;
 
     // HitQueue implements getSentinelObject to return a ScoreDoc, so we know
     // that at this point top() is already initialized.
-    pqTop = pq.top();
+    pqTop = pq.top();// qp优先级队列就是由new HitQueue构成，返回的就是堆顶元素
     this.hitsThresholdChecker = hitsThresholdChecker;
     this.minScoreAcc = minScoreAcc;
   }
@@ -318,7 +318,7 @@ public abstract class TopScoreDocCollector extends TopDocsCollector<ScoreDoc> {
   }
 
   protected void updateMinCompetitiveScore(Scorable scorer) throws IOException {
-    if (hitsThresholdChecker.isThresholdReached()
+    if (hitsThresholdChecker.isThresholdReached() // 统计当前计算得分的文档个数是否超过10000个文档
           && pqTop != null
           && pqTop.score != Float.NEGATIVE_INFINITY) { // -Infinity is the score of sentinels
       // since we tie-break on doc id and collect in doc id order, we can require

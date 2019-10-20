@@ -77,20 +77,20 @@ public final class Lucene84PostingsReader extends PostingsReaderBase {
     // but for now we at least verify proper structure of the checksum footer: which looks
     // for FOOTER_MAGIC + algorithmID. This is cheap and can detect some forms of corruption
     // such as file truncation.
-    
+    //  读取doc文件
     String docName = IndexFileNames.segmentFileName(state.segmentInfo.name, state.segmentSuffix, Lucene84PostingsFormat.DOC_EXTENSION);
     try {
-      docIn = state.directory.openInput(docName, state.context);
+      docIn = state.directory.openInput(docName, state.context); // 在读取集群元数据时候，使用的NIO方式。
       version = CodecUtil.checkIndexHeader(docIn, DOC_CODEC, VERSION_START, VERSION_CURRENT, state.segmentInfo.getId(), state.segmentSuffix);
       CodecUtil.retrieveChecksum(docIn);
-
+      // 读取pos文件
       if (state.fieldInfos.hasProx()) {
-        String proxName = IndexFileNames.segmentFileName(state.segmentInfo.name, state.segmentSuffix, Lucene84PostingsFormat.POS_EXTENSION);
+        String proxName = IndexFileNames.segmentFileName(state.segmentInfo.name, state.segmentSuffix, Lucene84PostingsFormat.POS_EXTENSION); //_v_Lucene84_0.pos
         posIn = state.directory.openInput(proxName, state.context);
         CodecUtil.checkIndexHeader(posIn, POS_CODEC, version, version, state.segmentInfo.getId(), state.segmentSuffix);
         CodecUtil.retrieveChecksum(posIn);
-
-        if (state.fieldInfos.hasPayloads() || state.fieldInfos.hasOffsets()) {
+        // 读取.pay文件
+        if (state.fieldInfos.hasPayloads() || state.fieldInfos.hasOffsets()) { // 有的话，需要分别读取。可以看出，offset和payload是放在一起的
           String payName = IndexFileNames.segmentFileName(state.segmentInfo.name, state.segmentSuffix, Lucene84PostingsFormat.PAY_EXTENSION);
           payIn = state.directory.openInput(payName, state.context);
           CodecUtil.checkIndexHeader(payIn, PAY_CODEC, version, version, state.segmentInfo.getId(), state.segmentSuffix);
@@ -109,11 +109,11 @@ public final class Lucene84PostingsReader extends PostingsReaderBase {
     }
   }
 
-  @Override
+  @Override // tim文件
   public void init(IndexInput termsIn, SegmentReadState state) throws IOException {
     // Make sure we are talking to the matching postings writer
     CodecUtil.checkIndexHeader(termsIn, TERMS_CODEC, VERSION_START, VERSION_CURRENT, state.segmentInfo.getId(), state.segmentSuffix);
-    final int indexBlockSize = termsIn.readVInt();
+    final int indexBlockSize = termsIn.readVInt();//128
     if (indexBlockSize != BLOCK_SIZE) {
       throw new IllegalStateException("index-time BLOCK_SIZE (" + indexBlockSize + ") != read-time BLOCK_SIZE (" + BLOCK_SIZE + ")");
     }

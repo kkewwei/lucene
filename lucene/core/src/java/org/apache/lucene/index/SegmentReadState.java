@@ -27,7 +27,7 @@ import org.apache.lucene.store.IOContext;
  */
 public class SegmentReadState {
   /** {@link Directory} where this segment is read from. */ 
-  public final Directory directory;
+  public final Directory directory; // Lucene50CompoundReader 可以决定是否使用mmap还是nio
 
   /** {@link SegmentInfo} describing this segment. */
   public final SegmentInfo segmentInfo;
@@ -46,7 +46,7 @@ public class SegmentReadState {
    *  a new {@link PostingsFormat} then any files you
    *  write/read must be derived using this suffix (use
    *  {@link IndexFileNames#segmentFileName(String,String,String)}). */
-  public final String segmentSuffix;
+  public final String segmentSuffix; //Lucene84_0
 
   /** Create a {@code SegmentReadState}. */
   public SegmentReadState(Directory dir, SegmentInfo info,

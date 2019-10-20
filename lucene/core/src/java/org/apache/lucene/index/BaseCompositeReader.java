@@ -47,9 +47,9 @@ import java.util.List;
  * @lucene.internal
  */
 public abstract class BaseCompositeReader<R extends IndexReader> extends CompositeReader {
-  private final R[] subReaders;
+  private final R[] subReaders; // SegmentReader
   private final int[] starts;       // 1st docno for each reader
-  private final int maxDoc;
+  private final int maxDoc; // subReaders里面所有文档的总和
   private int numDocs = -1;         // computed lazily
 
   /** List view solely for {@link #getSequentialSubReaders()},
@@ -65,13 +65,13 @@ public abstract class BaseCompositeReader<R extends IndexReader> extends Composi
    * to do this.
    */
   protected BaseCompositeReader(R[] subReaders) throws IOException {
-    this.subReaders = subReaders;
+    this.subReaders = subReaders; // SegmentReader
     this.subReadersList = Collections.unmodifiableList(Arrays.asList(subReaders));
     starts = new int[subReaders.length + 1];    // build starts array
     long maxDoc = 0;
     for (int i = 0; i < subReaders.length; i++) {
       starts[i] = (int) maxDoc;
-      final IndexReader r = subReaders[i];
+      final IndexReader r = subReaders[i]; // SegmentReader
       maxDoc += r.maxDoc();      // compute maxDocs
       r.registerParentReader(this);
     }
@@ -110,8 +110,8 @@ public abstract class BaseCompositeReader<R extends IndexReader> extends Composi
     int numDocs = this.numDocs;
     if (numDocs == -1) {
       numDocs = 0;
-      for (IndexReader r : subReaders) {
-        numDocs += r.numDocs();
+      for (IndexReader r : subReaders) { // r = ExitableDirectoryReader$ExitableLeafReader
+        numDocs += r.numDocs(); // 查询时
       }
       assert numDocs >= 0;
       this.numDocs = numDocs;

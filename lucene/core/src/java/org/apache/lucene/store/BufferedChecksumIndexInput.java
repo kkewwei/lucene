@@ -38,7 +38,7 @@ public class BufferedChecksumIndexInput extends ChecksumIndexInput {
 
   @Override
   public byte readByte() throws IOException {
-    final byte b = main.readByte();
+    final byte b = main.readByte(); // ByteBufferIndexInput.$SingleBufferImpl
     digest.update(b);
     return b;
   }

@@ -20,33 +20,33 @@ package org.apache.lucene.util.packed;
 
 /**
  * Non-specialized {@link BulkOperation} for {@link PackedInts.Format#PACKED}.
- */
+ */// block的概念：假如每个数据长度为6，用long存储，一个long为64，那么存储3*2*32=192个字节，可以恰好是64的整数倍，存储不浪费一点空间，192个字节需要3个long来组成。
 class BulkOperationPacked extends BulkOperation {
-
-  private final int bitsPerValue;
-  private final int longBlockCount;
-  private final int longValueCount;
-  private final int byteBlockCount;
-  private final int byteValueCount;
+  // BulkOperationPacked文章可以看下这里：https://blog.csdn.net/asdfsadfasdfsa/article/details/88689381
+  private final int bitsPerValue; //每个长度为12   192bit
+  private final int longBlockCount;   // 一个block需要几个long来存储。当前为3，
+  private final int longValueCount;    //一个block可以存储多少个bitsPerValue长度的数据， 当前为16
+  private final int byteBlockCount; // 若我们换成byte来存储，一个block需要几个byte来存储     24的话  3
+  private final int byteValueCount; // 若我们换成byte来存储，一个block可以存储多少个bitsPerValue长度的数据。当前为2
   private final long mask;
   private final int intMask;
 
-  public BulkOperationPacked(int bitsPerValue) {
+  public BulkOperationPacked(int bitsPerValue) { //
     this.bitsPerValue = bitsPerValue;
     assert bitsPerValue > 0 && bitsPerValue <= 64;
     int blocks = bitsPerValue;
-    while ((blocks & 1) == 0) {
+    while ((blocks & 1) == 0) {// 右边的数为0的全部去掉，就是为了求bitsPerValue和64之间的最大公约数
       blocks >>>= 1;
     }
     this.longBlockCount = blocks;
     this.longValueCount = 64 * longBlockCount / bitsPerValue;
-    int byteBlockCount = 8 * longBlockCount;
+    int byteBlockCount = 8 * longBlockCount; // 一个block需要24个byte来充当
     int byteValueCount = longValueCount;
-    while ((byteBlockCount & 1) == 0 && (byteValueCount & 1) == 0) {
+    while ((byteBlockCount & 1) == 0 && (byteValueCount & 1) == 0) { // 此时一个block需要24个byte存放，可以存储32个byte。那好，大家一起降级公约数。
       byteBlockCount >>>= 1;
       byteValueCount >>>= 1;
     }
-    this.byteBlockCount = byteBlockCount;
+    this.byteBlockCount = byteBlockCount; //
     this.byteValueCount = byteValueCount;
     if (bitsPerValue == 64) {
       this.mask = ~0L;
@@ -54,7 +54,7 @@ class BulkOperationPacked extends BulkOperation {
       this.mask = (1L << bitsPerValue) - 1;
     }
     this.intMask = (int) mask;
-    assert longValueCount * bitsPerValue == 64 * longBlockCount;
+    assert longValueCount * bitsPerValue == 64 * longBlockCount; // 验证公约数相等
   }
 
   @Override
@@ -64,9 +64,9 @@ class BulkOperationPacked extends BulkOperation {
 
   @Override
   public int longValueCount() {
-    return longValueCount;
+    return longValueCount; // 一个block需要多少位长度
   }
-
+  //若我们换成byte来存储，一个block需要几个byte来存储
   @Override
   public int byteBlockCount() {
     return byteBlockCount;
@@ -83,7 +83,7 @@ class BulkOperationPacked extends BulkOperation {
     int bitsLeft = 64;
     for (int i = 0; i < longValueCount * iterations; ++i) {
       bitsLeft -= bitsPerValue;
-      if (bitsLeft < 0) {
+      if (bitsLeft < 0) { // 在0-63之内
         values[valuesOffset++] =
             ((blocks[blocksOffset++] & ((1L << (bitsPerValue + bitsLeft)) - 1)) << -bitsLeft)
             | (blocks[blocksOffset] >>> (64 + bitsLeft));
@@ -213,29 +213,29 @@ class BulkOperationPacked extends BulkOperation {
       }
     }
   }
-
+  // 开始对数组进行编码，怎样将4个长度为6的数据放入到3个长度为8的byte中
   @Override
-  public void encode(long[] values, int valuesOffset, byte[] blocks,
+  public void encode(long[] values, int valuesOffset, byte[] blocks, //blocks 真正存放byte的地方
       int blocksOffset, int iterations) {
-    int nextBlock = 0;
+    int nextBlock = 0; // 缓存的block
     int bitsLeft = 8;
     for (int i = 0; i < byteValueCount * iterations; ++i) {
-      final long v = values[valuesOffset++];
+      final long v = values[valuesOffset++]; // 读取出来
       assert PackedInts.unsignedBitsRequired(v) <= bitsPerValue;
-      if (bitsPerValue < bitsLeft) {
+      if (bitsPerValue < bitsLeft) { // 该byte内可用长度够用
         // just buffer
         nextBlock |= v << (bitsLeft - bitsPerValue);
         bitsLeft -= bitsPerValue;
       } else {
         // flush as many blocks as possible
-        int bits = bitsPerValue - bitsLeft;
-        blocks[blocksOffset++] = (byte) (nextBlock | (v >>> bits));
+        int bits = bitsPerValue - bitsLeft; // 除了使用剩余的俩位置，还需要4个byte存储
+        blocks[blocksOffset++] = (byte) (nextBlock | (v >>> bits)); // 将之前存储的6位+2位一起存储起来
         while (bits >= 8) {
           bits -= 8;
           blocks[blocksOffset++] = (byte) (v >>> bits);
         }
         // then buffer
-        bitsLeft = 8 - bits;
+        bitsLeft = 8 - bits; // 把这个数据剩余的4个bit长度给存储在缓存中
         nextBlock = (int) ((v & ((1L << bits) - 1)) << bitsLeft);
       }
     }

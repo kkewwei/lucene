@@ -55,7 +55,7 @@ final class BufferedUpdatesStream implements Accountable {
   // Starts at 1 so that SegmentInfos that have never had
   // deletes applied (whose bufferedDelGen defaults to 0)
   // will be correct:
-  private long nextGen = 1;
+  private long nextGen = 1; // 全局的
   private final FinishedSegments finishedSegments;
   private final InfoStream infoStream;
   private final AtomicLong bytesUsed = new AtomicLong();
@@ -81,7 +81,7 @@ final class BufferedUpdatesStream implements Accountable {
     assert checkDeleteStats();
 
     updates.add(packet);
-    numTerms.addAndGet(packet.numTermDeletes);
+    numTerms.addAndGet(packet.numTermDeletes); // 需要删除的doc个数累加
     bytesUsed.addAndGet(packet.bytesUsed);
     if (infoStream.isEnabled("BD")) {
       infoStream.message("BD", String.format(Locale.ROOT, "push new packet (%s), packetCount=%d, bytesUsed=%.3f MB", packet, updates.size(), bytesUsed.get()/1024./1024.));
@@ -268,7 +268,7 @@ final class BufferedUpdatesStream implements Accountable {
 
     SegmentState(ReadersAndUpdates rld, IOUtils.IOConsumer<ReadersAndUpdates> onClose, SegmentCommitInfo info) throws IOException {
       this.rld = rld;
-      reader = rld.getReader(IOContext.READ);
+      reader = rld.getReader(IOContext.READ);// 新产生的segment通过mmap打开以实现准实时查询
       startDelCount = rld.getDelCount();
       delGen = info.getBufferedDeletesGen();
       this.onClose = onClose;

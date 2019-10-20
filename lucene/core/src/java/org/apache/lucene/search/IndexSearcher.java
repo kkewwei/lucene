@@ -88,25 +88,25 @@ import org.apache.lucene.util.ThreadInterruptedException;
 public class IndexSearcher {
 
   private static QueryCache DEFAULT_QUERY_CACHE;
-  private static QueryCachingPolicy DEFAULT_CACHING_POLICY = new UsageTrackingQueryCachingPolicy();
+  private static QueryCachingPolicy DEFAULT_CACHING_POLICY = new UsageTrackingQueryCachingPolicy(); // es和lucene中都是这个
   static {
-    final int maxCachedQueries = 1000;
+    final int maxCachedQueries = 1000; // 缓存的结果数量，默认值1000
     // min of 32MB or 5% of the heap size
-    final long maxRamBytesUsed = Math.min(1L << 25, Runtime.getRuntime().maxMemory() / 20);
+    final long maxRamBytesUsed = Math.min(1L << 25, Runtime.getRuntime().maxMemory() / 20); // 可用内存的5%和32M最小值
     DEFAULT_QUERY_CACHE = new LRUQueryCache(maxCachedQueries, maxRamBytesUsed);
-  }
+  } //  LRUQueryCache用来对一个Query查询的结果进行缓存，缓存的内容仅仅是文档号集，由于不会缓存文档的打分（Score），所以只有不需要打分的收集器（Collector）才可以使用LRUQueryCache，比如说TotalHitCountCollector收集器，另外缓存的文档号集使用BitDocIdSet对象进行存储，在BitDocIdSet中实际使用了FixedBitSet对象进行存储。
   /**
    * By default we count hits accurately up to 1000. This makes sure that we
    * don't spend most time on computing hit counts
    */
   private static final int TOTAL_HITS_THRESHOLD = 1000;
-
-  final IndexReader reader; // package private for testing!
-  
+  // 查询时会获取这个值
+  final IndexReader reader; // package private for testing! 查询时是ExitableLeafReader,refresh时是ElasticsearchDirectoryReader
+  // refresh的时候是ElasticsearchDirectoryReader
   // NOTE: these members might change in incompatible ways
   // in the next release
-  protected final IndexReaderContext readerContext;
-  protected final List<LeafReaderContext> leafContexts;
+  protected final IndexReaderContext readerContext; // LeafReaderContext
+  protected final List<LeafReaderContext> leafContexts; // 该shard所有的segments
   /** used with executor - each slice holds a set of leafs executed within one thread */
   private final LeafSlice[] leafSlices;
 
@@ -116,7 +116,7 @@ public class IndexSearcher {
   // the default Similarity
   private static final Similarity defaultSimilarity = new BM25Similarity();
 
-  private QueryCache queryCache = DEFAULT_QUERY_CACHE;
+  private QueryCache queryCache = DEFAULT_QUERY_CACHE;//ES中是OptOutQueryCache
   private QueryCachingPolicy queryCachingPolicy = DEFAULT_CACHING_POLICY;
 
   /**
@@ -180,7 +180,7 @@ public class IndexSearcher {
    * 
    * @lucene.experimental */
   public IndexSearcher(IndexReader r, Executor executor) {
-    this(r.getContext(), executor);
+    this(r.getContext(), executor); // r.getContext()会跑到CompositeReader.getContext()
   }
 
   /**
@@ -197,7 +197,7 @@ public class IndexSearcher {
    * @see IndexReader#getContext()
    * @lucene.experimental
    */
-  public IndexSearcher(IndexReaderContext context, Executor executor) {
+  public IndexSearcher(IndexReaderContext context, Executor executor) { //context =CompositeReaderContext
     assert context.isTopLevel: "IndexSearcher's ReaderContext must be topLevel for reader" + context.reader();
     reader = context.reader();
     this.executor = executor;
@@ -278,7 +278,7 @@ public class IndexSearcher {
   
   /** Return the {@link IndexReader} this searches. */
   public IndexReader getIndexReader() {
-    return reader;
+    return reader; // 查询时是ExitableLeafReader,refresh时是ElasticsearchDirectoryReader
   }
 
   /** 
@@ -441,9 +441,9 @@ public class IndexSearcher {
    */
   public void search(Query query, Collector results)
     throws IOException {
-    query = rewrite(query);
-    search(leafContexts, createWeight(query, results.scoreMode(), 1), results);
-  }
+    query = rewrite(query); // 查询会进来，跑这里，query可以是IndexOrDocValuesQuery。会接着进入ContextIndexSearcher.rewrite
+    search(leafContexts, createWeight(query, results.scoreMode(), 1), results); // createWeight跑到ContextIndexSearcher
+  } //会进入ContextIndexSearcher.search() 
 
   /** Search implementation with arbitrary sorting, plus
    * control over whether hit scores and max score
@@ -655,7 +655,7 @@ public class IndexSearcher {
         // continue with the following leaf
         continue;
       }
-      BulkScorer scorer = weight.bulkScorer(ctx);
+      BulkScorer scorer = weight.bulkScorer(ctx); // PointRangeQuery$1
       if (scorer != null) {
         try {
           scorer.score(leafCollector, ctx.reader().getLiveDocs());
@@ -673,7 +673,7 @@ public class IndexSearcher {
    */
   public Query rewrite(Query original) throws IOException {
     Query query = original;
-    for (Query rewrittenQuery = query.rewrite(reader); rewrittenQuery != query;
+    for (Query rewrittenQuery = query.rewrite(reader); rewrittenQuery != query; // 递归迭代式重写。让query自己重新写
          rewrittenQuery = query.rewrite(reader)) {
       query = rewrittenQuery;
     }
@@ -720,12 +720,12 @@ public class IndexSearcher {
    * Creates a {@link Weight} for the given query, potentially adding caching
    * if possible and configured.
    * @lucene.experimental
-   */
+   */ // query可以是IndexOrDocValuesQuery
   public Weight createWeight(Query query, ScoreMode scoreMode, float boost) throws IOException {
-    final QueryCache queryCache = this.queryCache;
-    Weight weight = query.createWeight(this, scoreMode, boost);
-    if (scoreMode.needsScores() == false && queryCache != null) {
-      weight = queryCache.doCache(weight, queryCachingPolicy);
+    final QueryCache queryCache = this.queryCache;// lucene中是LRUQueryCache，es中是OptOutQueryCache
+    Weight weight = query.createWeight(this, scoreMode, boost);// 对FST遍历查找了
+    if (scoreMode.needsScores() == false && queryCache != null) { // 不需要打分的话，可以尝试从缓存中找下
+      weight = queryCache.doCache(weight, queryCachingPolicy); // 看样子还是可能从缓存中找数据了
     }
     return weight;
   }

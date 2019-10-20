@@ -40,19 +40,19 @@ import org.apache.lucene.store.IndexOutput;
 import org.apache.lucene.util.IOUtils;
 import org.apache.lucene.util.bkd.BKDReader;
 import org.apache.lucene.util.bkd.BKDWriter;
-
+// 该segment该域所有字段都会共享这一个对象（绑定一个dim），当该segment刷新到磁盘后，就会关闭该对象。
 /** Writes dimensional values */
 public class Lucene60PointsWriter extends PointsWriter implements Closeable {
 
   /** Output used to write the BKD tree data file */
-  protected final IndexOutput dataOut;
+  protected final IndexOutput dataOut; // dim文件
 
   /** Maps field name to file pointer in the data file where the BKD index is located. */
-  protected final Map<String,Long> indexFPs = new HashMap<>();
+  protected final Map<String,Long> indexFPs = new HashMap<>(); // file_name -> 该字段在dim文件中的位置
 
   final SegmentWriteState writeState;
-  final int maxPointsInLeafNode;
-  final double maxMBSortInHeap;
+  final int maxPointsInLeafNode; // 默认BKDWriter.DEFAULT_MAX_POINTS_IN_LEAF_NODE，1024
+  final double maxMBSortInHeap; // 默认BKDWriter.DEFAULT_MAX_MB_SORT_IN_HEAP， 16
   private boolean finished;
 
   /** Full constructor */
@@ -61,10 +61,10 @@ public class Lucene60PointsWriter extends PointsWriter implements Closeable {
     this.writeState = writeState;
     this.maxPointsInLeafNode = maxPointsInLeafNode;
     this.maxMBSortInHeap = maxMBSortInHeap;
-    String dataFileName = IndexFileNames.segmentFileName(writeState.segmentInfo.name,
+    String dataFileName = IndexFileNames.segmentFileName(writeState.segmentInfo.name, // dim
                                                          writeState.segmentSuffix,
                                                          Lucene60PointsFormat.DATA_EXTENSION);
-    dataOut = writeState.directory.createOutput(dataFileName, writeState.context);
+    dataOut = writeState.directory.createOutput(dataFileName, writeState.context); // _12.dim
     boolean success = false;
     try {
       CodecUtil.writeIndexHeader(dataOut,
@@ -81,15 +81,15 @@ public class Lucene60PointsWriter extends PointsWriter implements Closeable {
   }
 
   /** Uses the defaults values for {@code maxPointsInLeafNode} (1024) and {@code maxMBSortInHeap} (16.0) */
-  public Lucene60PointsWriter(SegmentWriteState writeState) throws IOException {
+  public Lucene60PointsWriter(SegmentWriteState writeState) throws IOException { // 创建dim
     this(writeState, BKDWriter.DEFAULT_MAX_POINTS_IN_LEAF_NODE, BKDWriter.DEFAULT_MAX_MB_SORT_IN_HEAP);
   }
-
+  // 该segment的每个域都会进来一次
   @Override
   public void writeField(FieldInfo fieldInfo, PointsReader reader) throws IOException {
 
     PointValues values = reader.getValues(fieldInfo.name);
-
+    // 每个维度看来都要建立一个BKDWriter
     try (BKDWriter writer = new BKDWriter(writeState.segmentInfo.maxDoc(),
                                           writeState.directory,
                                           writeState.segmentInfo.name,
@@ -100,8 +100,8 @@ public class Lucene60PointsWriter extends PointsWriter implements Closeable {
                                           maxMBSortInHeap,
                                           values.size())) {
 
-      if (values instanceof MutablePointValues) {
-        Runnable finalizer = writer.writeField(dataOut, dataOut, dataOut, fieldInfo.name, (MutablePointValues) values);
+      if (values instanceof MutablePointValues) {// 会进来
+        Runnable finalizer = writer.writeField(dataOut, dataOut, dataOut, fieldInfo.name, (MutablePointValues) values); // 写入Dim文件
         if (finalizer != null) {
           indexFPs.put(fieldInfo.name, dataOut.getFilePointer());
           finalizer.run();
@@ -234,19 +234,19 @@ public class Lucene60PointsWriter extends PointsWriter implements Closeable {
       throw new IllegalStateException("already finished");
     }
     finished = true;
-    CodecUtil.writeFooter(dataOut);
-
-    String indexFileName = IndexFileNames.segmentFileName(writeState.segmentInfo.name,
+    CodecUtil.writeFooter(dataOut); // dim文件结尾
+    // _0.dii文件
+    String indexFileName = IndexFileNames.segmentFileName(writeState.segmentInfo.name, // 开始写入dii文件
                                                           writeState.segmentSuffix,
                                                           Lucene60PointsFormat.INDEX_EXTENSION);
     // Write index file
     try (IndexOutput indexOut = writeState.directory.createOutput(indexFileName, writeState.context)) {
       CodecUtil.writeIndexHeader(indexOut,
-                                 Lucene60PointsFormat.META_CODEC_NAME,
+                                 Lucene60PointsFormat.META_CODEC_NAME, // Lucene60PointsFormatMeta
                                  Lucene60PointsFormat.INDEX_VERSION_CURRENT,
                                  writeState.segmentInfo.getId(),
                                  writeState.segmentSuffix);
-      int count = indexFPs.size();
+      int count = indexFPs.size(); // 几个field
       indexOut.writeVInt(count);
       for(Map.Entry<String,Long> ent : indexFPs.entrySet()) {
         FieldInfo fieldInfo = writeState.fieldInfos.fieldInfo(ent.getKey());
@@ -254,7 +254,7 @@ public class Lucene60PointsWriter extends PointsWriter implements Closeable {
           throw new IllegalStateException("wrote field=\"" + ent.getKey() + "\" but that field doesn't exist in FieldInfos");
         }
         indexOut.writeVInt(fieldInfo.number);
-        indexOut.writeVLong(ent.getValue());
+        indexOut.writeVLong(ent.getValue()); // 该字段在dim中的偏移量
       }
       CodecUtil.writeFooter(indexOut);
     }

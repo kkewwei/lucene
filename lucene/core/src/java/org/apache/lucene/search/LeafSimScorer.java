@@ -35,7 +35,7 @@ public final class LeafSimScorer {
    * Sole constructor: Score documents of {@code reader} with {@code scorer}.
    */
   public LeafSimScorer(SimScorer scorer, LeafReader reader, String field, boolean needsScores) throws IOException {
-    this.scorer = Objects.requireNonNull(scorer);
+    this.scorer = Objects.requireNonNull(scorer); //BM25Similarity$BM25Scorer
     norms = needsScores ? reader.getNormValues(field) : null;
   }
 

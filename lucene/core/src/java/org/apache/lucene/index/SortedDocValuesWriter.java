@@ -34,8 +34,8 @@ import static org.apache.lucene.util.ByteBlockPool.BYTE_BLOCK_SIZE;
 
 /** Buffers up pending byte[] per doc, deref and sorting via
  *  int ord, then flushes when segment flushes. */
-class SortedDocValuesWriter extends DocValuesWriter<SortedDocValues> {
-  final BytesRefHash hash;
+class SortedDocValuesWriter extends DocValuesWriter<SortedDocValues> { // DocValuesWriter仅能否针对不分词的字段设置
+  final BytesRefHash hash;// 存储的是真正每个field的值
   private PackedLongValues.Builder pending;
   private DocsWithFieldSet docsWithField;
   private final Counter iwBytesUsed;
@@ -79,15 +79,15 @@ class SortedDocValuesWriter extends DocValuesWriter<SortedDocValues> {
   }
 
   private void addOneValue(BytesRef value) {
-    int termID = hash.add(value);
-    if (termID < 0) {
-      termID = -termID-1;
-    } else {
+    int termID = hash.add(value); // 针对整个value，存起来
+    if (termID < 0) { // 该value已经存在
+      termID = -termID-1;//
+    } else { // 该value不存在
       // reserve additional space for each unique value:
       // 1. when indexing, when hash is 50% full, rehash() suddenly needs 2*size ints.
       //    TODO: can this same OOM happen in THPF?
       // 2. when flushing, we need 1 int per value (slot in the ordMap).
-      iwBytesUsed.addAndGet(2 * Integer.BYTES);
+      iwBytesUsed.addAndGet(2 * Integer.BYTES); // 为每个单独的value保留2个空间
     }
     
     pending.add(termID);
@@ -133,7 +133,7 @@ class SortedDocValuesWriter extends DocValuesWriter<SortedDocValues> {
     final int valueCount = hash.size();
     if (finalOrds == null) {
       updateBytesUsed();
-      finalSortedValues = hash.sort();
+      finalSortedValues = hash.sort();// 对所有的terms内容进行了排序
       finalOrds = pending.build();
       finalOrdMap = new int[valueCount];
       for (int ord = 0; ord < valueCount; ord++) {
@@ -168,7 +168,7 @@ class SortedDocValuesWriter extends DocValuesWriter<SortedDocValues> {
   private static class BufferedSortedDocValues extends SortedDocValues {
     final BytesRefHash hash;
     final BytesRef scratch = new BytesRef();
-    final int[] sortedValues;
+    final int[] sortedValues;// 对所有的terms内容进行了排序
     final int[] ordMap;
     final int valueCount;
     private int ord;
@@ -178,7 +178,7 @@ class SortedDocValuesWriter extends DocValuesWriter<SortedDocValues> {
     public BufferedSortedDocValues(BytesRefHash hash, int valueCount, PackedLongValues docToOrd, int[] sortedValues, int[] ordMap, DocIdSetIterator docsWithField) {
       this.hash = hash;
       this.valueCount = valueCount;
-      this.sortedValues = sortedValues;
+      this.sortedValues = sortedValues;// 对所有的terms内容进行了排序
       this.iter = docToOrd.iterator();
       this.ordMap = ordMap;
       this.docsWithField = docsWithField;

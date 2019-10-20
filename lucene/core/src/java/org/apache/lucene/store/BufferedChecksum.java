@@ -25,8 +25,8 @@ import java.util.zip.Checksum;
  */
 public class BufferedChecksum implements Checksum {
   private final Checksum in;
-  private final byte buffer[];
-  private int upto;
+  private final byte buffer[];  // buffer默认大小256b
+  private int upto; // 当前buffer已经写到的位置
   /** Default buffer size: 256 */
   public static final int DEFAULT_BUFFERSIZE = 256;
   
@@ -43,7 +43,7 @@ public class BufferedChecksum implements Checksum {
   
   @Override
   public void update(int b) {
-    if (upto == buffer.length) {
+    if (upto == buffer.length) { // 若放满了
       flush();
     }
     buffer[upto++] = (byte) b;
@@ -51,7 +51,7 @@ public class BufferedChecksum implements Checksum {
 
   @Override
   public void update(byte[] b, int off, int len) {
-    if (len >= buffer.length) {
+    if (len >= buffer.length) { //
       flush();
       in.update(b, off, len);
     } else { 

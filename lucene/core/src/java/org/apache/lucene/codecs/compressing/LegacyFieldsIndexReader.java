@@ -37,7 +37,7 @@ import org.apache.lucene.util.packed.PackedInts;
 /**
  * Random-access reader for {@link FieldsIndexWriter}.
  * @lucene.internal
- */
+ */// 之前该类是：（CompressingStoredFieldsIndexReader， 初始化过程中，会读取 fdx 文件全部内容，读取 fdt 文件的头尾信息。中间真正 store fields 的内容不会直接读取，而是在该类中如下 visitDocument 函数根据 docID 计算出指定位置读取。）
 final class LegacyFieldsIndexReader extends FieldsIndex {
 
   private static final long BASE_RAM_BYTES_USED = RamUsageEstimator.shallowSizeOfInstance(LegacyFieldsIndexReader.class);
@@ -48,8 +48,8 @@ final class LegacyFieldsIndexReader extends FieldsIndex {
   final int[] avgChunkDocs;
   final long[] avgChunkSizes;
   final PackedInts.Reader[] docBasesDeltas; // delta from the avg
-  final PackedInts.Reader[] startPointersDeltas; // delta from the avg
-
+  final PackedInts.Reader[] startPointersDeltas; // delta from the avg引用较大内存资源，详见 long类型
+   // 可以参考：http://lucene.apache.org/core/8_2_0/core/org/apache/lucene/codecs/compressing/CompressingStoredFieldsIndexWriter.html
   // It is the responsibility of the caller to close fieldsIndexIn after this constructor
   // has been called
   LegacyFieldsIndexReader(IndexInput fieldsIndexIn, SegmentInfo si) throws IOException {
@@ -66,7 +66,7 @@ final class LegacyFieldsIndexReader extends FieldsIndex {
     int blockCount = 0;
 
     for (;;) {
-      final int numChunks = fieldsIndexIn.readVInt();
+      final int numChunks = fieldsIndexIn.readVInt(); // 读取chunk数
       if (numChunks == 0) {
         break;
       }
@@ -81,9 +81,9 @@ final class LegacyFieldsIndexReader extends FieldsIndex {
       }
 
       // doc bases
-      docBases[blockCount] = fieldsIndexIn.readVInt();
-      avgChunkDocs[blockCount] = fieldsIndexIn.readVInt();
-      final int bitsPerDocBase = fieldsIndexIn.readVInt();
+      docBases[blockCount] = fieldsIndexIn.readVInt();//   first document ID of the block of chunks
+      avgChunkDocs[blockCount] = fieldsIndexIn.readVInt(); //  average number of documents in a single chunk
+      final int bitsPerDocBase = fieldsIndexIn.readVInt(); // number of bits required to represent a delta from the average using ZigZag encoding
       if (bitsPerDocBase > 32) {
         throw new CorruptIndexException("Corrupted bitsPerDocBase: " + bitsPerDocBase, fieldsIndexIn);
       }
@@ -91,8 +91,8 @@ final class LegacyFieldsIndexReader extends FieldsIndex {
 
       // start pointers
       startPointers[blockCount] = fieldsIndexIn.readVLong();
-      avgChunkSizes[blockCount] = fieldsIndexIn.readVLong();
-      final int bitsPerStartPointer = fieldsIndexIn.readVInt();
+      avgChunkSizes[blockCount] = fieldsIndexIn.readVLong(); //  the average size of a chunk of compressed documents, as a VLong
+      final int bitsPerStartPointer = fieldsIndexIn.readVInt(); // number of bits required to represent a delta from the average using ZigZag encoding
       if (bitsPerStartPointer > 64) {
         throw new CorruptIndexException("Corrupted bitsPerStartPointer: " + bitsPerStartPointer, fieldsIndexIn);
       }

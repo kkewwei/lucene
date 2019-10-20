@@ -32,14 +32,14 @@ final class ByteSliceReader extends DataInput {
   ByteBlockPool pool;
   int bufferUpto;
   byte[] buffer;
-  public int upto;
+  public int upto; // bytePool内部长度
   int limit;
   int level;
-  public int bufferOffset;
+  public int bufferOffset; // 这个bytePool在所有buffer[]中的绝对起始位置
 
   public int endIndex;
-
-  public void init(ByteBlockPool pool, int startIndex, int endIndex) {
+  // startIndex 和 endIndex都是绝对位置
+  public void init(ByteBlockPool pool, int startIndex, int endIndex) { // 读取第i个stream的value
 
     assert endIndex-startIndex >= 0;
     assert startIndex >= 0;
@@ -49,18 +49,18 @@ final class ByteSliceReader extends DataInput {
     this.endIndex = endIndex;
 
     level = 0;
-    bufferUpto = startIndex / ByteBlockPool.BYTE_BLOCK_SIZE;
+    bufferUpto = startIndex / ByteBlockPool.BYTE_BLOCK_SIZE; //第几个
     bufferOffset = bufferUpto * ByteBlockPool.BYTE_BLOCK_SIZE;
     buffer = pool.buffers[bufferUpto];
     upto = startIndex & ByteBlockPool.BYTE_BLOCK_MASK;
 
     final int firstSize = ByteBlockPool.LEVEL_SIZE_ARRAY[0];
-
+    // 就是在一个buffer之内
     if (startIndex+firstSize >= endIndex) {
       // There is only this one slice to read
       limit = endIndex & ByteBlockPool.BYTE_BLOCK_MASK;
-    } else
-      limit = upto+firstSize-4;
+    } else //
+      limit = upto+firstSize-4; // 说的是跳过那4个byte
   }
 
   public boolean eof() {

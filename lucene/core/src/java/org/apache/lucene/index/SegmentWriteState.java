@@ -35,7 +35,7 @@ public class SegmentWriteState {
 
   /** {@link Directory} where this segment will be written
    *  to. */
-  public final Directory directory;
+  public final Directory directory; //index_name/o/index
 
   /** {@link SegmentInfo} describing this segment. */
   public final SegmentInfo segmentInfo;
@@ -46,7 +46,7 @@ public class SegmentWriteState {
 
   /** Number of deleted documents set while flushing the
    *  segment. */
-  public int delCountOnFlush;
+  public int delCountOnFlush; // 在flush到磁盘前，先统计有多少需要删除的文档（首先统计的是Segment未刷新前内存中的文档个数）
   /** Number of only soft deleted documents set while flushing the
    *  segment. */
   public int softDelCountOnFlush;
@@ -56,7 +56,7 @@ public class SegmentWriteState {
    * the docIDUpto, meaning any docID &lt; docIDUpto containing this term should
    * be deleted/updated.
    */
-  public final BufferedUpdates segUpdates;
+  public final BufferedUpdates segUpdates; // 取自单个单线DWPT的pendingUpdates
 
   /** {@link FixedBitSet} recording live documents; this is
    *  only set if there is one or more deleted documents. */
@@ -70,7 +70,7 @@ public class SegmentWriteState {
    *  {@link IndexFileNames#segmentFileName(String,String,String)}).
    *  
    *  Note: the suffix must be either empty, or be a textual suffix contain exactly two parts (separated by underscore), or be a base36 generation. */
-  public final String segmentSuffix;
+  public final String segmentSuffix; // Lucene80_0
   
   /** {@link IOContext} for all writes; you should pass this
    *  to {@link Directory#createOutput(String,IOContext)}. */

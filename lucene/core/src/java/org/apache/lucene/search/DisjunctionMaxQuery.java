@@ -97,7 +97,7 @@ public final class DisjunctionMaxQuery extends Query implements Iterable<Query> 
    * change suddenly in the next release.</p>
    */
   protected class DisjunctionMaxWeight extends Weight {
-
+    //Weight可以是TermWeight
     /** The Weights for our subqueries, in 1-1 correspondence with disjuncts */
     protected final ArrayList<Weight> weights = new ArrayList<>();  // The Weight's for our subqueries, in 1-1 correspondence with disjuncts
     private final ScoreMode scoreMode;
@@ -136,7 +136,7 @@ public final class DisjunctionMaxQuery extends Query implements Iterable<Query> 
       List<Scorer> scorers = new ArrayList<>();
       for (Weight w : weights) {
         // we will advance() subscorers
-        Scorer subScorer = w.scorer(context);
+        Scorer subScorer = w.scorer(context); // 搬移返回null
         if (subScorer != null) {
           scorers.add(subScorer);
         }

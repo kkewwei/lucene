@@ -146,7 +146,7 @@ public final class CollectionUtil {
   public static <T extends Comparable<? super T>> void introSort(List<T> list) {
     final int size = list.size();
     if (size <= 1) return;
-    introSort(list, Comparator.naturalOrder());
+    introSort(list, Comparator.naturalOrder()); // 按照大小写字母进行排序
   }
 
   // Tim sorts:

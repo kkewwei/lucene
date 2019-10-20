@@ -45,7 +45,7 @@ public class OneMergeWrappingMergePolicy extends FilterMergePolicy {
   public MergeSpecification findMerges(MergeTrigger mergeTrigger, SegmentInfos segmentInfos, MergeContext mergeContext)
       throws IOException {
     return wrapSpec(in.findMerges(mergeTrigger, segmentInfos, mergeContext));
-  }
+  }// in = SoftDeletesRetentionMergePolicy
 
   @Override
   public MergeSpecification findForcedMerges(SegmentInfos segmentInfos, int maxSegmentCount,

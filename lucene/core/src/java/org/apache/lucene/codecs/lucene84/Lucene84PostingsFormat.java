@@ -435,10 +435,10 @@ public final class Lucene84PostingsFormat extends PostingsFormat {
 
   @Override
   public FieldsProducer fieldsProducer(SegmentReadState state) throws IOException {
-    PostingsReaderBase postingsReader = new Lucene84PostingsReader(state);
+    PostingsReaderBase postingsReader = new Lucene84PostingsReader(state); // 映射doc,pay,pos文件
     boolean success = false;
     try {
-      FieldsProducer ret = new BlockTreeTermsReader(postingsReader, state);
+      FieldsProducer ret = new BlockTreeTermsReader(postingsReader, state);// 真正映射读取tip,tim文件
       success = true;
       return ret;
     } finally {

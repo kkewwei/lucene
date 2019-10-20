@@ -43,10 +43,10 @@ public abstract class TopDocsCollector<T extends ScoreDoc> implements Collector 
    * HitQueue for example aggregates the top scoring documents, while other PQ
    * implementations may hold documents sorted by other criteria.
    */
-  protected final PriorityQueue<T> pq;
+  protected final PriorityQueue<T> pq;  // 就是HitQueue对象，会初始化默认长度
 
   /** The total number of documents that the collector encountered. */
-  protected int totalHits;
+  protected int totalHits; // 当前统计的文档个数
 
   /** Whether {@link #totalHits} is exact or a lower bound. */
   protected TotalHits.Relation totalHitsRelation = TotalHits.Relation.EQUAL_TO;

@@ -27,15 +27,15 @@ import java.io.IOException;
 
 public final class RateLimitedIndexOutput extends IndexOutput {
   
-  private final IndexOutput delegate;
-  private final RateLimiter rateLimiter;
+  private final IndexOutput delegate; // 可以是_2.cfs文件
+  private final RateLimiter rateLimiter; // MergeRateLimiter
 
   /** How many bytes we've written since we last called rateLimiter.pause. */
-  private long bytesSinceLastPause;
+  private long bytesSinceLastPause; // 上次限速结束后，到现在的写入字节，还在持续统计写入的字节数
   
   /** Cached here not not always have to call RateLimiter#getMinPauseCheckBytes()
    * which does volatile read. */
-  private long currentMinPauseCheckBytes;
+  private long currentMinPauseCheckBytes; // 当写了多少数据后,才check是否写入超速了， 不超过1MB
 
   public RateLimitedIndexOutput(final RateLimiter rateLimiter, final IndexOutput delegate) {
     super("RateLimitedIndexOutput(" + delegate + ")", delegate.getName());
@@ -70,10 +70,10 @@ public final class RateLimitedIndexOutput extends IndexOutput {
   public void writeBytes(byte[] b, int offset, int length) throws IOException {
     bytesSinceLastPause += length;
     checkRate();
-    delegate.writeBytes(b, offset, length);
+    delegate.writeBytes(b, offset, length);// 检查是否需要merge中断 // 可以是_2.cfs文件
   }
   
-  private void checkRate() throws IOException {
+  private void checkRate() throws IOException {// 检查是否需要merge中断
     if (bytesSinceLastPause > currentMinPauseCheckBytes) {
       rateLimiter.pause(bytesSinceLastPause);
       bytesSinceLastPause = 0;

@@ -23,7 +23,7 @@ import org.apache.lucene.util.PriorityQueue;
 public class TopDocs {
 
   /** The total number of hits for the query. */
-  public TotalHits totalHits;
+  public TotalHits totalHits; // 和scoreDocs有啥区别
 
   /** The top hits for the query. */
   public ScoreDoc[] scoreDocs;
@@ -43,7 +43,7 @@ public class TopDocs {
     final boolean useScoreDocIndex;
 
     // Which hit within the shard:
-    int hitIndex;
+    int hitIndex; // 当前shard返回结果中，取到了哪个docId
 
     ShardRef(int shardIndex, boolean useScoreDocIndex) {
       this.shardIndex = shardIndex;
@@ -76,7 +76,7 @@ public class TopDocs {
     final int firstShardIndex = first.getShardIndex(firstDoc);
     final int secondShardIndex = second.getShardIndex(secondDoc);
     // Tie break: earlier shard wins
-    if (firstShardIndex< secondShardIndex) {
+    if (firstShardIndex< secondShardIndex) { // shardId越小越靠前
       return true;
     } else if (firstShardIndex > secondShardIndex) {
       return false;
@@ -102,7 +102,7 @@ public class TopDocs {
     }
 
     // Returns true if first is < second
-    @Override
+    @Override // 定义了如何对比，对比当前每个shard结果的score
     public boolean lessThan(ShardRef first, ShardRef second) {
       assert first != second;
       ScoreDoc firstScoreDoc = shardHits[first.shardIndex][first.hitIndex];
@@ -112,7 +112,7 @@ public class TopDocs {
       } else if (firstScoreDoc.score > secondScoreDoc.score) {
         return true;
       } else {
-        return tieBreakLessThan(first, firstScoreDoc, second, secondScoreDoc);
+        return tieBreakLessThan(first, firstScoreDoc, second, secondScoreDoc); // 逼平shardId
       }
     }
   }
@@ -191,7 +191,7 @@ public class TopDocs {
 
   /**
    * Same as {@link #merge(int, TopDocs[])} but also ignores the top
-   * {@code start} top docs. This is typically useful for pagination.
+   * {@code start} top docs. This is typically useful for pagination. 分页
    *
    * Note: If {@code setShardIndex} is true, this method will assume the incoming order of {@code shardHits} reflects
    * each shard's index and will fill the {@link ScoreDoc#shardIndex}, otherwise
@@ -233,20 +233,20 @@ public class TopDocs {
     }
     return (TopFieldDocs) mergeAux(sort, start, topN, shardHits, setShardIndex);
   }
-
+  // 辅助的方法
   /** Auxiliary method used by the {@link #merge} impls. A sort value of null
    *  is used to indicate that docs should be sorted by score. */
   private static TopDocs mergeAux(Sort sort, int start, int size, TopDocs[] shardHits, boolean setShardIndex) {
 
     final PriorityQueue<ShardRef> queue;
     if (sort == null) {
-      queue = new ScoreMergeSortQueue(shardHits);
+      queue = new ScoreMergeSortQueue(shardHits); // 几个shard
     } else {
       queue = new MergeSortQueue(sort, shardHits);
     }
 
-    long totalHitCount = 0;
-    TotalHits.Relation totalHitsRelation = TotalHits.Relation.EQUAL_TO;
+    long totalHitCount = 0; // 总共匹配的个数
+    TotalHits.Relation totalHitsRelation = TotalHits.Relation.EQUAL_TO; // 若有一个不是精确值，整个查询就不是精确值
     int availHitCount = 0;
     for(int shardIDX=0;shardIDX<shardHits.length;shardIDX++) {
       final TopDocs shard = shardHits[shardIDX];
@@ -255,12 +255,12 @@ public class TopDocs {
       totalHitCount += shard.totalHits.value;
       // If any hit count is a lower bound then the merged
       // total hit count is a lower bound as well
-      if (shard.totalHits.relation == TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO) {
+      if (shard.totalHits.relation == TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO) { // 不是精确值
         totalHitsRelation = TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO;
       }
       if (shard.scoreDocs != null && shard.scoreDocs.length > 0) {
         availHitCount += shard.scoreDocs.length;
-        queue.add(new ShardRef(shardIDX, setShardIndex == false));
+        queue.add(new ShardRef(shardIDX, setShardIndex == false)); // 每个shard的返回数组，只有score越大的越靠前，其次shardId越小越靠前
       }
     }
 
@@ -268,14 +268,14 @@ public class TopDocs {
     if (availHitCount <= start) {
       hits = new ScoreDoc[0];
     } else {
-      hits = new ScoreDoc[Math.min(size, availHitCount - start)];
-      int requestedResultWindow = start + size;
+      hits = new ScoreDoc[Math.min(size, availHitCount - start)]; // 需要返回的只
+      int requestedResultWindow = start + size; // 查询终止index
       int numIterOnHits = Math.min(availHitCount, requestedResultWindow);
       int hitUpto = 0;
-      while (hitUpto < numIterOnHits) {
+      while (hitUpto < numIterOnHits) { // 要取得个数
         assert queue.size() > 0;
-        ShardRef ref = queue.top();
-        final ScoreDoc hit = shardHits[ref.shardIndex].scoreDocs[ref.hitIndex++];
+        ShardRef ref = queue.top(); // 取出第一个
+        final ScoreDoc hit = shardHits[ref.shardIndex].scoreDocs[ref.hitIndex++]; //当前shard取到的结果+1。取出其中一个sore
         if (setShardIndex) {
           // caller asked us to record shardIndex (index of the TopDocs array) this hit is coming from:
           hit.shardIndex = ref.shardIndex;
@@ -283,15 +283,15 @@ public class TopDocs {
           throw new IllegalArgumentException("setShardIndex is false but TopDocs[" + ref.shardIndex + "].scoreDocs[" + (ref.hitIndex-1) + "] is not set");
         }
           
-        if (hitUpto >= start) {
+        if (hitUpto >= start) { // 只有大于查询的from参数，才再获取值
           hits[hitUpto - start] = hit;
         }
-
+        // 总共取到的hit个数
         hitUpto++;
 
-        if (ref.hitIndex < shardHits[ref.shardIndex].scoreDocs.length) {
+        if (ref.hitIndex < shardHits[ref.shardIndex].scoreDocs.length) { // 该shard里面的doc还没取完
           // Not done with this these TopDocs yet:
-          queue.updateTop();
+          queue.updateTop(); // 按照得分最大排名，重新查找
         } else {
           queue.pop();
         }
@@ -299,8 +299,8 @@ public class TopDocs {
     }
 
     TotalHits totalHits = new TotalHits(totalHitCount, totalHitsRelation);
-    if (sort == null) {
-      return new TopDocs(totalHits, hits);
+    if (sort == null) { // 没有排序
+      return new TopDocs(totalHits, hits); // 已经将所有shard的取值按照score得分计算出了哪些DocId需要返回
     } else {
       return new TopFieldDocs(totalHits, hits, sort.getSort());
     }

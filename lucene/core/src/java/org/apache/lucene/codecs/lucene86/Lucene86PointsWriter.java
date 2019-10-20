@@ -43,11 +43,11 @@ import org.apache.lucene.util.bkd.BKDWriter;
 public class Lucene86PointsWriter extends PointsWriter implements Closeable {
 
   /** Outputs used to write the BKD tree data files. */
-  protected final IndexOutput metaOut, indexOut, dataOut;
+  protected final IndexOutput metaOut, indexOut, dataOut;// dataOut=kdd文件，metaOut=kdm文件
 
   final SegmentWriteState writeState;
-  final int maxPointsInLeafNode;
-  final double maxMBSortInHeap;
+  final int maxPointsInLeafNode; // 由DEFAULT_MAX_POINTS_IN_LEAF_NODE控制，单个叶子最多512个数据
+  final double maxMBSortInHeap; // 由DEFAULT_MAX_MB_SORT_IN_HEAP控制，最多16MB
   private boolean finished;
 
   /** Full constructor */
@@ -56,13 +56,13 @@ public class Lucene86PointsWriter extends PointsWriter implements Closeable {
     this.writeState = writeState;
     this.maxPointsInLeafNode = maxPointsInLeafNode;
     this.maxMBSortInHeap = maxMBSortInHeap;
-    String dataFileName = IndexFileNames.segmentFileName(writeState.segmentInfo.name,
+    String dataFileName = IndexFileNames.segmentFileName(writeState.segmentInfo.name, // kdd文件
                                                          writeState.segmentSuffix,
                                                          Lucene86PointsFormat.DATA_EXTENSION);
-    dataOut = writeState.directory.createOutput(dataFileName, writeState.context);
+    dataOut = writeState.directory.createOutput(dataFileName, writeState.context); // kdd文件
     boolean success = false;
     try {
-      CodecUtil.writeIndexHeader(dataOut,
+      CodecUtil.writeIndexHeader(dataOut, // 文件头： magic,codec,version,segmentSuffix
                                  Lucene86PointsFormat.DATA_CODEC_NAME,
                                  Lucene86PointsFormat.VERSION_CURRENT,
                                  writeState.segmentInfo.getId(),
@@ -70,7 +70,7 @@ public class Lucene86PointsWriter extends PointsWriter implements Closeable {
 
       String metaFileName = IndexFileNames.segmentFileName(writeState.segmentInfo.name,
           writeState.segmentSuffix,
-          Lucene86PointsFormat.META_EXTENSION);
+          Lucene86PointsFormat.META_EXTENSION); // kdm文件
       metaOut = writeState.directory.createOutput(metaFileName, writeState.context);
       CodecUtil.writeIndexHeader(metaOut,
           Lucene86PointsFormat.META_CODEC_NAME,
@@ -80,7 +80,7 @@ public class Lucene86PointsWriter extends PointsWriter implements Closeable {
 
       String indexFileName = IndexFileNames.segmentFileName(writeState.segmentInfo.name,
           writeState.segmentSuffix,
-          Lucene86PointsFormat.INDEX_EXTENSION);
+          Lucene86PointsFormat.INDEX_EXTENSION); // kdi文件
       indexOut = writeState.directory.createOutput(indexFileName, writeState.context);
       CodecUtil.writeIndexHeader(indexOut,
           Lucene86PointsFormat.INDEX_CODEC_NAME,
@@ -99,7 +99,7 @@ public class Lucene86PointsWriter extends PointsWriter implements Closeable {
   /** Uses the defaults values for {@code maxPointsInLeafNode} (1024) and {@code maxMBSortInHeap} (16.0) */
   public Lucene86PointsWriter(SegmentWriteState writeState) throws IOException {
     this(writeState, BKDWriter.DEFAULT_MAX_POINTS_IN_LEAF_NODE, BKDWriter.DEFAULT_MAX_MB_SORT_IN_HEAP);
-  }
+  } // 每个叶子最多512个，
 
   @Override
   public void writeField(FieldInfo fieldInfo, PointsReader reader) throws IOException {
@@ -116,10 +116,10 @@ public class Lucene86PointsWriter extends PointsWriter implements Closeable {
                                           maxMBSortInHeap,
                                           values.size())) {
 
-      if (values instanceof MutablePointValues) {
+      if (values instanceof MutablePointValues) { // 会进来，是多维的
         Runnable finalizer = writer.writeField(metaOut, indexOut, dataOut, fieldInfo.name, (MutablePointValues) values);
         if (finalizer != null) {
-          metaOut.writeInt(fieldInfo.number);
+          metaOut.writeInt(fieldInfo.number); //
           finalizer.run();
         }
         return;

@@ -49,7 +49,7 @@ public final class KeepOnlyLastCommitDeletionPolicy extends IndexDeletionPolicy 
     // Note that commits.size() should normally be 2 (if not
     // called by onInit above):
     int size = commits.size();
-    for(int i=0;i<size-1;i++) {
+    for(int i=0;i<size-1;i++) { //这里删除的时候，把最新的那个文件给保留了
       commits.get(i).delete();
     }
   }

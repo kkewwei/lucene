@@ -27,7 +27,7 @@ import org.apache.lucene.util.PriorityQueue;
  * This specialization is needed over {@link PriorityQueue} because the
  * pluggable comparison function makes the rebalancing quite slow.
  * @lucene.internal
- */
+ */ // 小头堆
 public final class DisiPriorityQueue implements Iterable<DisiWrapper> {
 
   static int leftNode(int node) {
@@ -43,7 +43,7 @@ public final class DisiPriorityQueue implements Iterable<DisiWrapper> {
   }
 
   private final DisiWrapper[] heap;
-  private int size;
+  private int size; // 还没添加到优先队列时当前存量个数
 
   public DisiPriorityQueue(int maxSize) {
     heap = new DisiWrapper[maxSize];
@@ -114,9 +114,9 @@ public final class DisiPriorityQueue implements Iterable<DisiWrapper> {
     downHeap(i);
     return result;
   }
-
+  // 
   public DisiWrapper updateTop() {
-    downHeap(size);
+    downHeap(size); // 修正前面size个元素
     return heap[0];
   }
 
@@ -124,12 +124,12 @@ public final class DisiPriorityQueue implements Iterable<DisiWrapper> {
     heap[0] = topReplacement;
     return updateTop();
   }
-
+  // 小堆
   void upHeap(int i) {
-    final DisiWrapper node = heap[i];
+    final DisiWrapper node = heap[i]; // 获取新添加的对象
     final int nodeDoc = node.doc;
     int j = parentNode(i);
-    while (j >= 0 && nodeDoc < heap[j].doc) {
+    while (j >= 0 && nodeDoc < heap[j].doc) { // 根据每个的文档id进行排序，文档个数最少的排序最前面
       heap[i] = heap[j];
       i = j;
       j = parentNode(j);
@@ -137,16 +137,16 @@ public final class DisiPriorityQueue implements Iterable<DisiWrapper> {
     heap[i] = node;
   }
 
-  void downHeap(int size) {
+  void downHeap(int size) { // 重新修正最小堆（根据文档Id排序），堆顶元素已经出去了，size是需要修正的最大size-1
     int i = 0;
     final DisiWrapper node = heap[0];
-    int j = leftNode(i);
+    int j = leftNode(i); // i的左孩子坐标
     if (j < size) {
-      int k = rightNode(j);
-      if (k < size && heap[k].doc < heap[j].doc) {
+      int k = rightNode(j); // i的右孩子坐标
+      if (k < size && heap[k].doc < heap[j].doc) {  // 找左右孩子最小的
         j = k;
       }
-      if (heap[j].doc < node.doc) {
+      if (heap[j].doc < node.doc) { // 根据文档Id排序
         do {
           heap[i] = heap[j];
           i = j;

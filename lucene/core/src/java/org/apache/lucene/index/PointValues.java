@@ -83,7 +83,7 @@ import org.apache.lucene.util.bkd.BKDWriter;
 public abstract class PointValues {
 
   /** Maximum number of bytes for each dimension */
-  public static final int MAX_NUM_BYTES = 16;
+  public static final int MAX_NUM_BYTES = 16; // 每个维度最多16byte
 
   /** Maximum number of dimensions */
   public static final int MAX_DIMENSIONS = BKDWriter.MAX_DIMS;
@@ -190,17 +190,17 @@ public abstract class PointValues {
   /** Used by {@link #intersect} to check how each recursive cell corresponds to the query. */
   public enum Relation {
     /** Return this if the cell is fully contained by the query */
-    CELL_INSIDE_QUERY,
+    CELL_INSIDE_QUERY, // 查询在数据范围之内
     /** Return this if the cell and query do not overlap */
-    CELL_OUTSIDE_QUERY,
+    CELL_OUTSIDE_QUERY, // 查询不在数据范围之内
     /** Return this if the cell partially overlaps the query */
-    CELL_CROSSES_QUERY
+    CELL_CROSSES_QUERY // 查询与数据范围较叉
   };
 
   /** We recurse the BKD tree, using a provided instance of this to guide the recursion.
    *
    * @lucene.experimental */
-  public interface IntersectVisitor {
+  public interface IntersectVisitor { // 使用该实例来指导遍历
     /** Called for all documents in a leaf cell that's fully contained by the query.  The
      *  consumer should blindly accept the docID. */
     void visit(int docID) throws IOException;
@@ -214,11 +214,11 @@ public abstract class PointValues {
     /** Similar to {@link IntersectVisitor#visit(int, byte[])} but in this case the packedValue
      * can have more than one docID associated to it. The provided iterator should not escape the
      * scope of this method so that implementations of PointValues are free to reuse it,*/
-    default void visit(DocIdSetIterator iterator, byte[] packedValue) throws IOException {
+    default void visit(DocIdSetIterator iterator, byte[] packedValue) throws IOException { // 遍历每个数据，明显有多余的计算
       int docID;
-      while ((docID = iterator.nextDoc()) != DocIdSetIterator.NO_MORE_DOCS) {
-        visit(docID, packedValue);
-      }
+      while ((docID = iterator.nextDoc()) != DocIdSetIterator.NO_MORE_DOCS) { // 这里明显有多余的比较工作在里面，相同的value比较了多次
+        visit(docID, packedValue); // 会跑到ExitableDirectoryReader$ExitableIntersectVisitor
+      } // 检查是否匹配，对于匹配的docId会暂存起来
     }
 
     /** Called for non-leaf cells to test how the cell relates to the query, to
@@ -250,7 +250,7 @@ public abstract class PointValues {
     if (estimatedPointCount >= size) {
       // math all docs
       return docCount;
-    } else if (size == docCount || estimatedPointCount == 0L ) {
+    } else if (size == docCount || estimatedPointCount == 0L ) { // 一般都跑到这里了
       // if the point count estimate is 0 or we have only single values
       // return this estimate
       return  estimatedPointCount;

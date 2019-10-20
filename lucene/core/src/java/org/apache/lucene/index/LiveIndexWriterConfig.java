@@ -40,9 +40,9 @@ import org.apache.lucene.util.Version;
 public class LiveIndexWriterConfig {
   
   private final Analyzer analyzer;
-  
-  private volatile int maxBufferedDocs;
-  private volatile double ramBufferSizeMB;
+  // Lucene提供的默认FlushPolicy的实现FlushByRamOrCountsPolicy中允许DocumentsWriterPerThread使用的最大文档数上限，超过则触发Flush。
+  private volatile int maxBufferedDocs; //以内存满了会刷新
+  private volatile double ramBufferSizeMB; // 16, Lucene提供的默认FlushPolicy的实现FlushByRamOrCountsPolicy中允许DocumentsWriterPerThread使用的最大内存上限，超过则触发flush。ES目的是不想使用Lucene实现的。es本身使用单个分片（有问题）indices.memory.index_buffer_size设置，默认10%
   private volatile IndexReaderWarmer mergedSegmentWarmer;
 
   // modified by IndexWriterConfig
@@ -56,10 +56,10 @@ public class LiveIndexWriterConfig {
 
   /** {@link OpenMode} that {@link IndexWriter} is opened
    *  with. */
-  protected volatile OpenMode openMode;
+  protected volatile OpenMode openMode; // ES在集群元数据恢复时，使用的Create，见GatewayMetaStae$LucenePersistedState()的构造函数。在shard恢复期间使用的append, 见InternalEngine.getIndexWriterConfig()。lucene默认CREATE_OR_APPEND
 
   /** Compatibility version to use for this index. */
-  protected int createdVersionMajor = Version.LATEST.major;
+  protected int createdVersionMajor = Version.LATEST.major; // 8
 
   /** {@link Similarity} to use when encoding norms. */
   protected volatile Similarity similarity;
@@ -78,21 +78,21 @@ public class LiveIndexWriterConfig {
   protected volatile InfoStream infoStream;
 
   /** {@link MergePolicy} for selecting merges. */
-  protected volatile MergePolicy mergePolicy;
+  protected volatile MergePolicy mergePolicy; // TieredMergePolicy
 
   /** True if readers should be pooled. */
   protected volatile boolean readerPooling;
-
+  // FlushPolicy决定了In-memory buffer何时被flush，默认的实现会根据RAM大小和文档个数来判断Flush的时机，FlushPolicy会在每次文档add/update/delete时调用判定。
   /** {@link FlushPolicy} to control when segments are
    *  flushed. */
-  protected volatile FlushPolicy flushPolicy;
+  protected volatile FlushPolicy flushPolicy; // FlushByRamOrCountsPolicy
 
   /** Sets the hard upper bound on RAM usage for a single
    *  segment, after which the segment is forced to flush. */
-  protected volatile int perThreadHardLimitMB;
+  protected volatile int perThreadHardLimitMB; // 除了FlushPolicy能决定Flush外，Lucene还会有一个指标强制限制DocumentsWriterPerThread占用的内存大小，当超过阈值则强制flush。
 
   /** True if segment flushes should use compound file format */
-  protected volatile boolean useCompoundFile = IndexWriterConfig.DEFAULT_USE_COMPOUND_FILE_SYSTEM;
+  protected volatile boolean useCompoundFile = IndexWriterConfig.DEFAULT_USE_COMPOUND_FILE_SYSTEM; // 默认合并
   
   /** True if calls to {@link IndexWriter#close()} should first do a commit. */
   protected boolean commitOnClose = IndexWriterConfig.DEFAULT_COMMIT_ON_CLOSE;
@@ -104,9 +104,9 @@ public class LiveIndexWriterConfig {
   protected Set<String> indexSortFields = Collections.emptySet();
 
   /** if an indexing thread should check for pending flushes on update in order to help out on a full flush*/
-  protected volatile boolean checkPendingFlushOnUpdate = true;
+  protected volatile boolean checkPendingFlushOnUpdate = true; // bulk线程帮忙进行flush
 
-  /** soft deletes field */
+  /** soft deletes field */ // 为__soft_deletes
   protected String softDeletesField = null;
 
   /** Amount of time to wait for merges returned by MergePolicy.findFullFlushMerges(...) */
@@ -130,10 +130,10 @@ public class LiveIndexWriterConfig {
       throw new NullPointerException();
     }
     infoStream = InfoStream.getDefault();
-    mergePolicy = new TieredMergePolicy();
+    mergePolicy = new TieredMergePolicy(); // 初始化的
     flushPolicy = new FlushByRamOrCountsPolicy();
     readerPooling = IndexWriterConfig.DEFAULT_READER_POOLING;
-    perThreadHardLimitMB = IndexWriterConfig.DEFAULT_RAM_PER_THREAD_HARD_LIMIT_MB;
+    perThreadHardLimitMB = IndexWriterConfig.DEFAULT_RAM_PER_THREAD_HARD_LIMIT_MB; // 1945M
     maxCommitMergeWaitMillis = IndexWriterConfig.DEFAULT_MAX_COMMIT_MERGE_WAIT_MILLIS;
   }
   
@@ -200,7 +200,7 @@ public class LiveIndexWriterConfig {
 
   /** Returns the value set by {@link #setRAMBufferSizeMB(double)} if enabled. */
   public double getRAMBufferSizeMB() {
-    return ramBufferSizeMB;
+    return ramBufferSizeMB; // lucene中默认16MB， ES中针对单个分片使用，indices.memory.index_buffer_size。
   }
   
   /**
@@ -286,7 +286,7 @@ public class LiveIndexWriterConfig {
   
   /** Returns the {@link OpenMode} set by {@link IndexWriterConfig#setOpenMode(OpenMode)}. */
   public OpenMode getOpenMode() {
-    return openMode;
+    return openMode; // CREATE_OR_APPEND
   }
 
   /**
@@ -450,7 +450,7 @@ public class LiveIndexWriterConfig {
    * due to too many pending flushes indexing threads will help our writing pending segment flushes to disk.
    *
    * @lucene.experimental
-   */
+   */// 写入线程是否帮忙刷新Flush
   public LiveIndexWriterConfig setCheckPendingFlushUpdate(boolean checkPendingFlushOnUpdate) {
     this.checkPendingFlushOnUpdate = checkPendingFlushOnUpdate;
     return this;

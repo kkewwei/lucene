@@ -106,7 +106,7 @@ public abstract class QueryParserBase extends QueryBuilder implements CommonQuer
     ReInit(new FastCharStream(new StringReader(query)));
     try {
       // TopLevelQuery is a Query followed by the end-of-input (EOF)
-      Query res = TopLevelQuery(field);
+      Query res = TopLevelQuery(field); // 跑到QueryParser.TopLevelQuery()，子类是QueryParser，是通过javacc自动生成的
       return res!=null ? res : newBooleanQuery().build();
     }
     catch (ParseException | TokenMgrError tme) {

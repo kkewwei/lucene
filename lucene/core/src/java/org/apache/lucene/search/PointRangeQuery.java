@@ -46,10 +46,10 @@ import org.apache.lucene.util.FutureArrays;
  * @lucene.experimental
  */
 public abstract class PointRangeQuery extends Query {
-  final String field;
-  final int numDims;
+  final String field; // 确定了读取那个域的索引
+  final int numDims; // 单个元素由几阶构成
   final int bytesPerDim;
-  final byte[] lowerPoint;
+  final byte[] lowerPoint; // 当前查找范围 的上下界
   final byte[] upperPoint;
 
   /** 
@@ -115,7 +115,7 @@ public abstract class PointRangeQuery extends Query {
     return new ConstantScoreWeight(this, boost) {
 
       private boolean matches(byte[] packedValue) {
-        for(int dim=0;dim<numDims;dim++) {
+        for(int dim=0;dim<numDims;dim++) { //是否匹配上下界
           int offset = dim*bytesPerDim;
           if (FutureArrays.compareUnsigned(packedValue, offset, offset + bytesPerDim, lowerPoint, offset, offset + bytesPerDim) < 0) {
             // Doc's value is too low, in this dimension
@@ -128,17 +128,17 @@ public abstract class PointRangeQuery extends Query {
         }
         return true;
       }
-
+      // 查询与数据范围的关系
       private Relation relate(byte[] minPackedValue, byte[] maxPackedValue) {
 
         boolean crosses = false;
 
         for(int dim=0;dim<numDims;dim++) {
           int offset = dim*bytesPerDim;
-
+          // 对比每一阶，只要有一阶不在范围内，就outside
           if (FutureArrays.compareUnsigned(minPackedValue, offset, offset + bytesPerDim, upperPoint, offset, offset + bytesPerDim) > 0 ||
               FutureArrays.compareUnsigned(maxPackedValue, offset, offset + bytesPerDim, lowerPoint, offset, offset + bytesPerDim) < 0) {
-            return Relation.CELL_OUTSIDE_QUERY;
+            return Relation.CELL_OUTSIDE_QUERY; // 查询不在数据范围之内
           }
 
           crosses |= FutureArrays.compareUnsigned(minPackedValue, offset, offset + bytesPerDim, lowerPoint, offset, offset + bytesPerDim) < 0 ||
@@ -159,18 +159,18 @@ public abstract class PointRangeQuery extends Query {
 
           @Override
           public void grow(int count) {
-            adder = result.grow(count);
+            adder = result.grow(count); // 先留好保存空间的结构，等待后面存储数据
           }
 
           @Override
           public void visit(int docID) {
-            adder.add(docID);
+            adder.add(docID); // 存放的是匹配的docId
           }
 
           @Override
           public void visit(int docID, byte[] packedValue) {
-            if (matches(packedValue)) {
-              visit(docID);
+            if (matches(packedValue)) { // 是否匹配上下界限,
+              visit(docID); // 就是上面这个函数,将docId存放起来
             }
           }
 
@@ -239,9 +239,9 @@ public abstract class PointRangeQuery extends Query {
 
       @Override
       public ScorerSupplier scorerSupplier(LeafReaderContext context) throws IOException {
-        LeafReader reader = context.reader();
+        LeafReader reader = context.reader(); // 开始时：ExitableDirectoryReader$ExitableLeafReader，后来是SegmentReader
 
-        PointValues values = reader.getPointValues(field);
+        PointValues values = reader.getPointValues(field); //开始是：ExitableDirectoryReader$ExitablePointValues，后来是BKDReader
         if (values == null) {
           // No docs in this segment/field indexed any points
           return null;
@@ -255,23 +255,23 @@ public abstract class PointRangeQuery extends Query {
         }
 
         boolean allDocsMatch;
-        if (values.getDocCount() == reader.maxDoc()) {
+        if (values.getDocCount() == reader.maxDoc()) { // 每个文档都包含的有这个字段
           final byte[] fieldPackedLower = values.getMinPackedValue();
-          final byte[] fieldPackedUpper = values.getMaxPackedValue();
+          final byte[] fieldPackedUpper = values.getMaxPackedValue(); // 获取最大值和最小值
           allDocsMatch = true;
           for (int i = 0; i < numDims; ++i) {
-            int offset = i * bytesPerDim;
+            int offset = i * bytesPerDim; // 查询范围
             if (FutureArrays.compareUnsigned(lowerPoint, offset, offset + bytesPerDim, fieldPackedLower, offset, offset + bytesPerDim) > 0
                 || FutureArrays.compareUnsigned(upperPoint, offset, offset + bytesPerDim, fieldPackedUpper, offset, offset + bytesPerDim) < 0) {
-              allDocsMatch = false;
+              allDocsMatch = false; // 需要查询的范围并不能把存储的范围完全包含中。
               break;
             }
           }
-        } else {
+        } else {//说明有删除，也不能全部包含
           allDocsMatch = false;
         }
 
-        final Weight weight = this;
+        final Weight weight = this; // PointRangeQuery$IntersectVisitor
         if (allDocsMatch) {
           // all docs have a value and all points are within bounds, so everything matches
           return new ScorerSupplier() {
@@ -293,7 +293,7 @@ public abstract class PointRangeQuery extends Query {
             long cost = -1;
 
             @Override
-            public Scorer get(long leadCost) throws IOException {
+            public Scorer get(long leadCost) throws IOException { // 参数没用
               if (values.getDocCount() == reader.maxDoc()
                   && values.getDocCount() == values.size()
                   && cost() > reader.maxDoc() / 2) {
@@ -308,7 +308,7 @@ public abstract class PointRangeQuery extends Query {
                 return new ConstantScoreScorer(weight, score(), scoreMode, iterator);
               }
 
-              values.intersect(visitor);
+              values.intersect(visitor); // 会进行具体的比较value,缓存docId，结果保存在了visitor
               DocIdSetIterator iterator = result.build().iterator();
               return new ConstantScoreScorer(weight, score(), scoreMode, iterator);
             }
@@ -317,7 +317,7 @@ public abstract class PointRangeQuery extends Query {
             public long cost() {
               if (cost == -1) {
                 // Computing the cost may be expensive, so only do it if necessary
-                cost = values.estimateDocCount(visitor);
+                cost = values.estimateDocCount(visitor);//会去遍历索引，预计匹配的分片树
                 assert cost >= 0;
               }
               return cost;
@@ -332,7 +332,7 @@ public abstract class PointRangeQuery extends Query {
         if (scorerSupplier == null) {
           return null;
         }
-        return scorerSupplier.get(Long.MAX_VALUE);
+        return scorerSupplier.get(Long.MAX_VALUE); //
       }
 
       @Override

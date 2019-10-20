@@ -42,7 +42,7 @@ public class SortedSetSelector {
    *       including the current default codec, support this.
    * </ul>
    */
-  public enum Type {
+  public enum Type {  // 主要是针对SortedSet类型的字段选择哪个词来代表这个set
     /** 
      * Selects the minimum value in the set 
      */
@@ -71,15 +71,15 @@ public class SortedSetSelector {
       throw new UnsupportedOperationException("fields containing more than " + (Integer.MAX_VALUE-1) + " unique terms are unsupported");
     }
     
-    SortedDocValues singleton = DocValues.unwrapSingleton(sortedSet);
+    SortedDocValues singleton = DocValues.unwrapSingleton(sortedSet); // 为null
     if (singleton != null) {
       // it's actually single-valued in practice, but indexed as multi-valued,
       // so just sort on the underlying single-valued dv directly.
       // regardless of selector type, this optimization is safe!
       return singleton;
     } else {
-      switch(selector) {
-        case MIN: return new MinValue(sortedSet);
+      switch(selector) { //
+        case MIN: return new MinValue(sortedSet); // 默认为这个
         case MAX: return new MaxValue(sortedSet);
         case MIDDLE_MIN: return new MiddleMinValue(sortedSet);
         case MIDDLE_MAX: return new MiddleMaxValue(sortedSet);
@@ -88,11 +88,11 @@ public class SortedSetSelector {
       }
     }
   }
-  
+   // 相同文档多个域名域同时取值时，每次只会取termId最小的那个
   /** Wraps a SortedSetDocValues and returns the first ordinal (min) */
   static class MinValue extends SortedDocValues {
     final SortedSetDocValues in;
-    private int ord;
+    private int ord; // 取出的是当前域其中一个同名字段的termId, 这里取出的是最小的那个
     
     MinValue(SortedSetDocValues in) {
       this.in = in;
@@ -105,15 +105,15 @@ public class SortedSetSelector {
 
     @Override
     public int nextDoc() throws IOException {
-      in.nextDoc();
-      setOrd();
+      in.nextDoc(); // 解析出每个词的termId
+      setOrd();// 这里只会取最小的那个值
       return docID();
     }
 
     @Override
     public int advance(int target) throws IOException {
       in.advance(target);
-      setOrd();
+      setOrd(); // 这里只会取最小的那个值
       return docID();
     }
 

@@ -79,10 +79,10 @@ public final class BlockTreeTermsReader extends FieldsProducer {
   
   static final BytesRef NO_OUTPUT = FST_OUTPUTS.getNoOutput();
 
-  static final int OUTPUT_FLAGS_NUM_BITS = 2;
-  static final int OUTPUT_FLAGS_MASK = 0x3;
-  static final int OUTPUT_FLAG_IS_FLOOR = 0x1;
-  static final int OUTPUT_FLAG_HAS_TERMS = 0x2;
+  static final int OUTPUT_FLAGS_NUM_BITS = 2; // output_flags_num_bits
+  static final int OUTPUT_FLAGS_MASK = 0x3; // output_flags_mask
+  static final int OUTPUT_FLAG_IS_FLOOR = 0x1; // output_flag_is_floor
+  static final int OUTPUT_FLAG_HAS_TERMS = 0x2; // output_flag_has_terms
 
   /** Extension of terms file */
   static final String TERMS_EXTENSION = "tim";
@@ -114,15 +114,15 @@ public final class BlockTreeTermsReader extends FieldsProducer {
   // Open input to the main terms dict file (_X.tib)
   final IndexInput termsIn;
   // Open input to the terms index file (_X.tip)
-  final IndexInput indexIn;
+  final IndexInput indexIn; // 读取tip文件的
 
   //private static final boolean DEBUG = BlockTreeTermsWriter.DEBUG;
 
   // Reads the terms dict entries, to gather state to
   // produce DocsEnum on demand
-  final PostingsReaderBase postingsReader;
-
-  private final Map<String,FieldReader> fieldMap;
+  final PostingsReaderBase postingsReader;// doc,pos文件读取值  Lucene84PostingsReader
+  // 虽然
+  private final Map<String,FieldReader> fieldMap; // fieldName -> FieldReader。该segment中每个拥有倒排索引结构的字段都共享这一个变量
   private final List<String> fieldList;
 
   final String segment;
@@ -132,15 +132,15 @@ public final class BlockTreeTermsReader extends FieldsProducer {
   /** Sole constructor. */
   public BlockTreeTermsReader(PostingsReaderBase postingsReader, SegmentReadState state) throws IOException {
     boolean success = false;
-    
-    this.postingsReader = postingsReader;
-    this.segment = state.segmentInfo.name;
 
-    try {
+    this.postingsReader = postingsReader;// Lucene50PostingsReader
+    this.segment = state.segmentInfo.name;// _b
+
+    try { //_b_Lucene50_0.tim文件
       String termsName = IndexFileNames.segmentFileName(segment, state.segmentSuffix, TERMS_EXTENSION);
-      termsIn = state.directory.openInput(termsName, state.context);
+      termsIn = state.directory.openInput(termsName, state.context);// 使用MMapIndexInput
       version = CodecUtil.checkIndexHeader(termsIn, TERMS_CODEC_NAME, VERSION_START, VERSION_CURRENT, state.segmentInfo.getId(), state.segmentSuffix);
-
+      // 读取tip文件
       String indexName = IndexFileNames.segmentFileName(segment, state.segmentSuffix, TERMS_INDEX_EXTENSION);
       indexIn = state.directory.openInput(indexName, state.context);
       CodecUtil.checkIndexHeader(indexIn, TERMS_INDEX_CODEC_NAME, version, version, state.segmentInfo.getId(), state.segmentSuffix);
@@ -155,43 +155,43 @@ public final class BlockTreeTermsReader extends FieldsProducer {
         CodecUtil.retrieveChecksum(indexIn);
         CodecUtil.retrieveChecksum(termsIn);
       }
-
+      // tdm文件
       // Read per-field details
       String metaName = IndexFileNames.segmentFileName(segment, state.segmentSuffix, TERMS_META_EXTENSION);
       Map<String, FieldReader> fieldMap = null;
       Throwable priorE = null;
-      long indexLength = -1, termsLength = -1;
+      long indexLength = -1, termsLength = -1;// 读取tdm文件，第一次见
       try (ChecksumIndexInput metaIn = version >= VERSION_META_FILE ? state.directory.openChecksumInput(metaName, state.context) : null) {
         try {
           final IndexInput indexMetaIn, termsMetaIn;
-          if (version >= VERSION_META_FILE) {
+          if (version >= VERSION_META_FILE) { // 相同的版本
             CodecUtil.checkIndexHeader(metaIn, TERMS_META_CODEC_NAME, version, version, state.segmentInfo.getId(), state.segmentSuffix);
             indexMetaIn = termsMetaIn = metaIn;
             postingsReader.init(metaIn, state);
           } else {
-            seekDir(termsIn);
+            seekDir(termsIn);// 跳转到正式开始记录所有域的地方：可见BlockTreeTermsWriter.close()函数
             seekDir(indexIn);
             indexMetaIn = indexIn;
             termsMetaIn = termsIn;
           }
 
-          final int numFields = termsMetaIn.readVInt();
+          final int numFields = termsMetaIn.readVInt();// tim中多少个字段
           if (numFields < 0) {
             throw new CorruptIndexException("invalid numFields: " + numFields, termsMetaIn);
           }
           fieldMap = new HashMap<>((int) (numFields / 0.75f) + 1);
-          for (int i = 0; i < numFields; ++i) {
-            final int field = termsMetaIn.readVInt();
-            final long numTerms = termsMetaIn.readVLong();
+          for (int i = 0; i < numFields; ++i) { // 可参考BlockTreeTermsWriter.close()
+            final int field = termsMetaIn.readVInt();// 字段编号
+            final long numTerms = termsMetaIn.readVLong();// tim中有多少个词
             if (numTerms <= 0) {
               throw new CorruptIndexException("Illegal numTerms for field number: " + field, termsMetaIn);
             }
             final BytesRef rootCode = readBytesRef(termsMetaIn);
-            final FieldInfo fieldInfo = state.fieldInfos.fieldInfo(field);
+            final FieldInfo fieldInfo = state.fieldInfos.fieldInfo(field); // 域类型
             if (fieldInfo == null) {
               throw new CorruptIndexException("invalid field number: " + field, termsMetaIn);
             }
-            final long sumTotalTermFreq = termsMetaIn.readVLong();
+            final long sumTotalTermFreq = termsMetaIn.readVLong();// 总共词频
             // when frequencies are omitted, sumDocFreq=sumTotalTermFreq and only one value is written.
             final long sumDocFreq = fieldInfo.getIndexOptions() == IndexOptions.DOCS ? sumTotalTermFreq : termsMetaIn.readVLong();
             final int docCount = termsMetaIn.readVInt();
@@ -213,8 +213,8 @@ public final class BlockTreeTermsReader extends FieldsProducer {
               throw new CorruptIndexException("invalid sumTotalTermFreq: " + sumTotalTermFreq + " sumDocFreq: " + sumDocFreq, termsMetaIn);
             }
             final long indexStartFP = indexMetaIn.readVLong();
-            FieldReader previous = fieldMap.put(fieldInfo.name,
-                new FieldReader(this, fieldInfo, numTerms, rootCode, sumTotalTermFreq, sumDocFreq, docCount,
+            FieldReader previous = fieldMap.put(fieldInfo.name, // 获取了单个field的fst句柄
+                new FieldReader(this, fieldInfo, numTerms, rootCode, sumTotalTermFreq, sumDocFreq, docCount, // 读取fst时候，使用了OffHeapFSTStore
                     indexStartFP, indexMetaIn, indexIn, minTerm, maxTerm));
             if (previous != null) {
               throw new CorruptIndexException("duplicate field: " + fieldInfo.name, termsMetaIn);
@@ -256,7 +256,7 @@ public final class BlockTreeTermsReader extends FieldsProducer {
   }
 
   private static BytesRef readBytesRef(IndexInput in) throws IOException {
-    int numBytes = in.readVInt();
+    int numBytes = in.readVInt(); // 多少个byte
     if (numBytes < 0) {
       throw new CorruptIndexException("invalid bytes length: " + numBytes, in);
     }
@@ -271,9 +271,9 @@ public final class BlockTreeTermsReader extends FieldsProducer {
 
   /** Seek {@code input} to the directory offset. */
   private static void seekDir(IndexInput input) throws IOException {
-    input.seek(input.length() - CodecUtil.footerLength() - 8);
-    long offset = input.readLong();
-    input.seek(offset);
+    input.seek(input.length() - CodecUtil.footerLength() - 8); // 读取这个文件倒数第8个位置
+    long offset = input.readLong();//读取这个值
+    input.seek(offset); // 直接跳转过去
   }
 
   // for debugging
@@ -300,7 +300,7 @@ public final class BlockTreeTermsReader extends FieldsProducer {
   @Override
   public Terms terms(String field) throws IOException {
     assert field != null;
-    return fieldMap.get(field);
+    return fieldMap.get(field); // 返回FieldReader
   }
 
   @Override
@@ -326,8 +326,8 @@ public final class BlockTreeTermsReader extends FieldsProducer {
 
   @Override
   public long ramBytesUsed() {
-    long sizeInBytes = postingsReader.ramBytesUsed();
-    for(FieldReader reader : fieldMap.values()) {
+    long sizeInBytes = postingsReader.ramBytesUsed();// doc,pos文件读取值
+    for(FieldReader reader : fieldMap.values()) {// 有几个域，每个域加载FST的内存结构，是从tip文件中加载的
       sizeInBytes += reader.ramBytesUsed();
     }
     return sizeInBytes;

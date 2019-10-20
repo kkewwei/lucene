@@ -135,10 +135,10 @@ public abstract class DirectoryReader extends BaseCompositeReader<LeafReader> {
    * @throws IOException if there is a low-level IO error
    * @return null if there are no changes; else, a new
    * DirectoryReader instance which you must eventually close
-   */  
+   */   // 如果改变了，就产生新的(// es refresh时会进来)
   public static DirectoryReader openIfChanged(DirectoryReader oldReader) throws IOException {
-    final DirectoryReader newReader = oldReader.doOpenIfChanged();
-    assert newReader != oldReader;
+    final DirectoryReader newReader = oldReader.doOpenIfChanged(); // StandardDirectoryReader，会触发主动merge操作
+    assert newReader != oldReader; // 若没有变化，就返回null
     return newReader;
   }
 
@@ -150,7 +150,7 @@ public abstract class DirectoryReader extends BaseCompositeReader<LeafReader> {
    * @see #openIfChanged(DirectoryReader)
    */
   public static DirectoryReader openIfChanged(DirectoryReader oldReader, IndexCommit commit) throws IOException {
-    final DirectoryReader newReader = oldReader.doOpenIfChanged(commit);
+    final DirectoryReader newReader = oldReader.doOpenIfChanged(commit); // oldReader = ElasticsearchDirectoryReader
     assert newReader != oldReader;
     return newReader;
   }
@@ -358,7 +358,7 @@ public abstract class DirectoryReader extends BaseCompositeReader<LeafReader> {
    * @throws IOException if there is a low-level IO error
    * @return null if there are no changes; else, a new
    * DirectoryReader instance.
-   */
+   */ // 刷新时进入的是StandardDirectoryReader
   protected abstract DirectoryReader doOpenIfChanged() throws IOException;
 
   /** Implement this method to support {@link #openIfChanged(DirectoryReader,IndexCommit)}.

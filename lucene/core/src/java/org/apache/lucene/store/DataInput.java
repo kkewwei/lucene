@@ -43,7 +43,7 @@ import org.apache.lucene.util.FutureObjects;
  */
 public abstract class DataInput implements Cloneable {
 
-  private static final int SKIP_BUFFER_SIZE = 1024;
+  private static final int SKIP_BUFFER_SIZE = 1024; // 每次从文件读进内存的文件大小
 
   /* This buffer is used to skip over bytes with the default implementation of
    * skipBytes. The reason why we need to use an instance member instead of
@@ -255,7 +255,7 @@ public abstract class DataInput implements Cloneable {
   public String readString() throws IOException {
     int length = readVInt();
     final byte[] bytes = new byte[length];
-    readBytes(bytes, 0, length);
+    readBytes(bytes, 0, length);// 若是DirectByteBuffer的话，则使用UNSAFE直接读取堆外内存实现的
     return new String(bytes, 0, length, StandardCharsets.UTF_8);
   }
 
@@ -324,18 +324,18 @@ public abstract class DataInput implements Cloneable {
    * should have the same behavior as reading the same number of bytes into a
    * buffer and discarding its content. Negative values of <code>numBytes</code>
    * are not supported.
-   */
+   */ // 这个方法实在看不出来有啥好的，读取出来，再丢弃了
   public void skipBytes(final long numBytes) throws IOException {
     if (numBytes < 0) {
       throw new IllegalArgumentException("numBytes must be >= 0, got " + numBytes);
     }
     if (skipBuffer == null) {
-      skipBuffer = new byte[SKIP_BUFFER_SIZE];
+      skipBuffer = new byte[SKIP_BUFFER_SIZE]; // 跳过，那么就是读取并丢弃？
     }
     assert skipBuffer.length == SKIP_BUFFER_SIZE;
     for (long skipped = 0; skipped < numBytes; ) {
-      final int step = (int) Math.min(SKIP_BUFFER_SIZE, numBytes - skipped);
-      readBytes(skipBuffer, 0, step, false);
+      final int step = (int) Math.min(SKIP_BUFFER_SIZE, numBytes - skipped); // 每次最多读取1kb的文件数据
+      readBytes(skipBuffer, 0, step, false); // 会跑到ByteBufferIndexInput.readBytes。很恶心，skip就是读取并丢弃？
       skipped += step;
     }
   }

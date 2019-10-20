@@ -43,7 +43,7 @@ public abstract class PushPostingsWriterBase extends PostingsWriterBase {
 
   // Reused in writeTerm
   private PostingsEnum postingsEnum;
-  private int enumFlags;
+  private int enumFlags; // freq/position/offset
 
   /** {@link FieldInfo} of current field being written. */
   protected FieldInfo fieldInfo;
@@ -74,7 +74,7 @@ public abstract class PushPostingsWriterBase extends PostingsWriterBase {
 
   /** Start a new term.  Note that a matching call to {@link
    *  #finishTerm(BlockTermState)} is done, only if the term has at least one
-   *  document. */
+   *  document. */  // 还没有开始读取每个词词频时候调用的
   public abstract void startTerm(NumericDocValues norms) throws IOException;
 
   /** Finishes the current term.  The provided {@link
@@ -87,7 +87,7 @@ public abstract class PushPostingsWriterBase extends PostingsWriterBase {
    * fixed length of long[] metadata (which is fixed per
    * field), called when the writing switches to another field. */
   @Override
-  public void setField(FieldInfo fieldInfo) {
+  public void setField(FieldInfo fieldInfo) {// 当前正在写的域
     this.fieldInfo = fieldInfo;
     indexOptions = fieldInfo.getIndexOptions();
 
@@ -110,11 +110,11 @@ public abstract class PushPostingsWriterBase extends PostingsWriterBase {
       if (writePayloads) {
         enumFlags = PostingsEnum.PAYLOADS | PostingsEnum.OFFSETS;
       } else {
-        enumFlags = PostingsEnum.OFFSETS;
+        enumFlags = PostingsEnum.OFFSETS; // 将跑到这里，全部都有
       }
     }
   }
-
+  // 处理的是该词在每个文档中的词频及startOffset&endOffset
   @Override
   public final BlockTermState writeTerm(BytesRef term, TermsEnum termsEnum, FixedBitSet docsSeen, NormsProducer norms) throws IOException {
     NumericDocValues normValues;
@@ -123,31 +123,31 @@ public abstract class PushPostingsWriterBase extends PostingsWriterBase {
     } else {
       normValues = norms.getNorms(fieldInfo);
     }
-    startTerm(normValues);
-    postingsEnum = termsEnum.postings(postingsEnum, enumFlags);
+    startTerm(normValues); // 设置doc,pos等文件的起始位置
+    postingsEnum = termsEnum.postings(postingsEnum, enumFlags); // 读取了该词的stream1,stream2   FreqProxTermsEnum
     assert postingsEnum != null;
 
     int docFreq = 0;
-    long totalTermFreq = 0;
-    while (true) {
-      int docID = postingsEnum.nextDoc();
+    long totalTermFreq = 0; //该文档总的词频
+    while (true) { // 从内存中的倒排索引获取此term的所有数据，按doc的维度遍历处理该词所在的每个doc的词频及offset
+      int docID = postingsEnum.nextDoc();// 读取这个term的第一个docID。每次读取一批文档
       if (docID == PostingsEnum.NO_MORE_DOCS) {
         break;
       }
-      docFreq++;
-      docsSeen.set(docID);
+      docFreq++; // 该词在多少个文档中出现过
+      docsSeen.set(docID); // 在这个文档中可见
       int freq;
       if (writeFreqs) {
-        freq = postingsEnum.freq();
+        freq = postingsEnum.freq(); // 该文档该词的词频。已经在postingsEnum.nextDoc()中给解析出来了
         totalTermFreq += freq;
       } else {
         freq = -1;
-      }
-      startDoc(docID, freq);
+      } // 首先检查上一批block是否处理完了，处理完了则建立调表节点。然后检查是否达到一个block，达到了，则将DocId、freq压缩到doc文件中
+      startDoc(docID, freq); // 会检查上批block是否已经处理完成了。保存freq。
 
       if (writePositions) {
-        for(int i=0;i<freq;i++) {
-          int pos = postingsEnum.nextPosition();
+        for(int i=0;i<freq;i++) { // 对每个词的每个position都读取出来
+          int pos = postingsEnum.nextPosition(); // 第几个position，将startOffset和endOffset都解析出来了
           BytesRef payload = writePayloads ? postingsEnum.getPayload() : null;
           int startOffset;
           int endOffset;
@@ -157,21 +157,21 @@ public abstract class PushPostingsWriterBase extends PostingsWriterBase {
           } else {
             startOffset = -1;
             endOffset = -1;
-          }
-          addPosition(pos, payload, startOffset, endOffset);
+          } // 检查是否达到一个block的词个数，达到就开始存储DeltaPostion、DeltaStartOffset、length
+          addPosition(pos, payload, startOffset, endOffset); // 保存增量的freq。
         }
       }
-
-      finishDoc();
+      //
+      finishDoc(); // 检查文档个数是否达到block，写到后，更新本地保存的FilePointer，清空缓存的文档数。
     }
 
-    if (docFreq == 0) {
+    if (docFreq == 0) { // 总文档数
       return null;
-    } else {
-      BlockTermState state = newTermState();
-      state.docFreq = docFreq;
-      state.totalTermFreq = writeFreqs ? totalTermFreq : -1;
-      finishTerm(state);
+    } else { // 开始落文件
+      BlockTermState state = newTermState(); // 给这个block赋予一些元数据
+      state.docFreq = docFreq; // 存在多少个文档中
+      state.totalTermFreq = writeFreqs ? totalTermFreq : -1; // 该词总共出现的次数
+      finishTerm(state); // 当前term读取完了。将跳表信息填入doc
       return state;
     }
   }

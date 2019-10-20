@@ -28,18 +28,18 @@ final class DocsWithFieldSet extends DocIdSet {
 
   private static long BASE_RAM_BYTES_USED = RamUsageEstimator.shallowSizeOfInstance(DocsWithFieldSet.class);
 
-  private FixedBitSet set;
-  private int cost = 0;
+  private FixedBitSet set; // 存放的是每个目前文档ID
+  private int cost = 0; //存储的个数
   private int lastDocId = -1;
 
   void add(int docID) {
     if (docID <= lastDocId) {
       throw new IllegalArgumentException("Out of order doc ids: last=" + lastDocId + ", next=" + docID);
     }
-    if (set != null) {
+    if (set != null) { // 默认不进入
       set = FixedBitSet.ensureCapacity(set, docID);
       set.set(docID);
-    } else if (docID != cost) {
+    } else if (docID != cost) {// 默认不进入
       // migrate to a sparse encoding using a bit set
       set = new FixedBitSet(docID + 1);
       set.set(0, cost);
@@ -56,7 +56,7 @@ final class DocsWithFieldSet extends DocIdSet {
 
   @Override
   public DocIdSetIterator iterator() {
-    return set != null ? new BitSetIterator(set, cost) : DocIdSetIterator.all(cost);
+    return set != null ? new BitSetIterator(set, cost) : DocIdSetIterator.all(cost); // 是后面这个
   }
 
 }

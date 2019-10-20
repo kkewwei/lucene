@@ -87,7 +87,7 @@ public class Lucene86SegmentInfoFormat extends SegmentInfoFormat {
 
   @Override
   public SegmentInfo read(Directory dir, String segment, byte[] segmentID, IOContext context) throws IOException {
-    final String fileName = IndexFileNames.segmentFileName(segment, "", SI_EXTENSION);
+    final String fileName = IndexFileNames.segmentFileName(segment, "", SI_EXTENSION); // 读取_n.si
     try (ChecksumIndexInput input = dir.openChecksumInput(fileName, context)) {
       Throwable priorE = null;
       SegmentInfo si = null;
@@ -97,7 +97,7 @@ public class Lucene86SegmentInfoFormat extends SegmentInfoFormat {
             VERSION_CURRENT,
             segmentID, "");
         final Version version = Version.fromBits(input.readInt(), input.readInt(), input.readInt());
-        byte hasMinVersion = input.readByte();
+        byte hasMinVersion = input.readByte(); // 最小支持的版本号
         final Version minVersion;
         switch (hasMinVersion) {
           case 0:
@@ -110,21 +110,21 @@ public class Lucene86SegmentInfoFormat extends SegmentInfoFormat {
             throw new CorruptIndexException("Illegal boolean value " + hasMinVersion, input);
         }
 
-        final int docCount = input.readInt();
+        final int docCount = input.readInt(); // 文档个数
         if (docCount < 0) {
           throw new CorruptIndexException("invalid docCount: " + docCount, input);
         }
-        final boolean isCompoundFile = input.readByte() == SegmentInfo.YES;
+        final boolean isCompoundFile = input.readByte() == SegmentInfo.YES; // 是否复合文件
 
-        final Map<String,String> diagnostics = input.readMapOfStrings();
-        final Set<String> files = input.readSetOfStrings();
-        final Map<String,String> attributes = input.readMapOfStrings();
+        final Map<String,String> diagnostics = input.readMapOfStrings(); // 读取segment的生成环境信息
+        final Set<String> files = input.readSetOfStrings(); // 对应的一系列文件
+        final Map<String,String> attributes = input.readMapOfStrings(); // 属性只有一个：Lucene50StoredFieldsFastData.mode=BEST_SPEED
 
-        int numSortFields = input.readVInt();
+        int numSortFields = input.readVInt(); // 几个字段
         Sort indexSort;
         if (numSortFields > 0) {
           SortField[] sortFields = new SortField[numSortFields];
-          for(int i=0;i<numSortFields;i++) {
+          for(int i=0;i<numSortFields;i++) { // 读取每个字段
             String name = input.readString();
             sortFields[i] = SortFieldProvider.forName(name).readSortField(input);
           }
@@ -145,7 +145,7 @@ public class Lucene86SegmentInfoFormat extends SegmentInfoFormat {
       return si;
     }
   }
-
+   // 开始写入_n.si文件（属于单个segment的，和cfs和cfe并列的文件）
   @Override
   public void write(Directory dir, SegmentInfo si, IOContext ioContext) throws IOException {
     final String fileName = IndexFileNames.segmentFileName(si.name, "", SI_EXTENSION);

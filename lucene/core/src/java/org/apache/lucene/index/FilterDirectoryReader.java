@@ -63,7 +63,7 @@ public abstract class FilterDirectoryReader extends DirectoryReader {
         assert wrap != null;
         wrapped[i++] = wrap;
       }
-      return wrapped;
+      return wrapped; //
     }
 
     /** Constructor */
@@ -79,7 +79,7 @@ public abstract class FilterDirectoryReader extends DirectoryReader {
   }
 
   /** The filtered DirectoryReader */
-  protected final DirectoryReader in;
+  protected final DirectoryReader in; // refresh时可以是StandardDirectoryReader
 
   /**
    * Create a new FilterDirectoryReader that filters a passed in DirectoryReader,
@@ -88,7 +88,7 @@ public abstract class FilterDirectoryReader extends DirectoryReader {
    * @param wrapper the SubReaderWrapper to use to wrap subreaders
    */
   public FilterDirectoryReader(DirectoryReader in, SubReaderWrapper wrapper) throws IOException {
-    super(in.directory(), wrapper.wrap(in.getSequentialSubReaders()));
+    super(in.directory(), wrapper.wrap(in.getSequentialSubReaders())); //  仅仅这里封装下
     this.in = in;
   }
 
@@ -107,12 +107,12 @@ public abstract class FilterDirectoryReader extends DirectoryReader {
     return in == null ? null : doWrapDirectoryReader(in);
   }
 
-  @Override
+  @Override // 刷新时进来
   protected final DirectoryReader doOpenIfChanged() throws IOException {
-    return wrapDirectoryReader(in.doOpenIfChanged());
+    return wrapDirectoryReader(in.doOpenIfChanged()); // in=StandardDirectoryReader
   }
 
-  @Override
+  @Override // in = StandardDirectoryReader
   protected final DirectoryReader doOpenIfChanged(IndexCommit commit) throws IOException {
     return wrapDirectoryReader(in.doOpenIfChanged(commit));
   }

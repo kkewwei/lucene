@@ -119,10 +119,10 @@ public abstract class IndexInput extends DataInput implements Cloneable,Closeabl
    * it implements absolute reads as seek+read.
    */
   public RandomAccessInput randomAccessSlice(long offset, long length) throws IOException {
-    final IndexInput slice = slice("randomaccess", offset, length);
+    final IndexInput slice = slice("randomaccess", offset, length); // 就是一个slice
     if (slice instanceof RandomAccessInput) {
       // slice() already supports random access
-      return (RandomAccessInput) slice;
+      return (RandomAccessInput) slice; // 进入了这
     } else {
       // return default impl
       return new RandomAccessInput() {

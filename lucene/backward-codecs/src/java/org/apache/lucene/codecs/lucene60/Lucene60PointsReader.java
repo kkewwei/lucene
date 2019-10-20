@@ -35,22 +35,22 @@ import org.apache.lucene.util.bkd.BKDReader;
 
 /** Reads point values previously written with Lucene60PointsWriter */
 public class Lucene60PointsReader extends PointsReader implements Closeable {
-  final IndexInput dataIn;
+  final IndexInput dataIn;  // dim文件
   final SegmentReadState readState;
-  final Map<Integer,BKDReader> readers = new HashMap<>();
+  final Map<Integer,BKDReader> readers = new HashMap<>(); // 域id及对应的BKDReader
 
   /** Sole constructor */
   public Lucene60PointsReader(SegmentReadState readState) throws IOException {
     this.readState = readState;
 
-
+    // _7.dii文件
     String indexFileName = IndexFileNames.segmentFileName(readState.segmentInfo.name,
                                                           readState.segmentSuffix,
                                                           Lucene60PointsFormat.INDEX_EXTENSION);
 
     Map<Integer,Long> fieldToFileOffset = new HashMap<>();
 
-    // Read index file
+    // Read index file  // 仅仅是给映射号
     try (ChecksumIndexInput indexIn = readState.directory.openChecksumInput(indexFileName, readState.context)) {
       Throwable priorE = null;
       try {
@@ -72,11 +72,11 @@ public class Lucene60PointsReader extends PointsReader implements Closeable {
         CodecUtil.checkFooter(indexIn, priorE);
       }
     }
-
+    // dim文件
     String dataFileName = IndexFileNames.segmentFileName(readState.segmentInfo.name,
                                                          readState.segmentSuffix,
                                                          Lucene60PointsFormat.DATA_EXTENSION);
-    boolean success = false;
+    boolean success = false; // 读取的是dim
     dataIn = readState.directory.openInput(dataFileName, readState.context);
     try {
 
@@ -97,7 +97,7 @@ public class Lucene60PointsReader extends PointsReader implements Closeable {
         int fieldNumber = ent.getKey();
         long fp = ent.getValue();
         dataIn.seek(fp);
-        BKDReader reader = new BKDReader(dataIn, dataIn, dataIn);
+        BKDReader reader = new BKDReader(dataIn, dataIn, dataIn);// BKDReader读取，主要是从dim中读取，
         readers.put(fieldNumber, reader);
       }
 
@@ -122,7 +122,7 @@ public class Lucene60PointsReader extends PointsReader implements Closeable {
       throw new IllegalArgumentException("field=\"" + fieldName + "\" did not index point values");
     }
 
-    return readers.get(fieldInfo.number);
+    return readers.get(fieldInfo.number); // 得到这个域名->域id
   }
 
   @Override

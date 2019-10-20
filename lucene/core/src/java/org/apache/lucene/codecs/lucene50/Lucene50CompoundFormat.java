@@ -68,33 +68,33 @@ public final class Lucene50CompoundFormat extends CompoundFormat {
   
   @Override
   public CompoundDirectory getCompoundReader(Directory dir, SegmentInfo si, IOContext context) throws IOException {
-    return new Lucene50CompoundReader(dir, si, context);
+    return new Lucene50CompoundReader(dir, si, context);// 仅仅是从当前segment的符合文件的cfe中获取每个文件在数据文件cfs中位置信息。若是集群元数据读取，使用nio。
   }
-
+   //建立_n.cfs和_n.cfe文件，并写入必要的前缀。然后从每个索引文件中读取数据，组装成复合文件
   @Override
   public void write(Directory dir, SegmentInfo si, IOContext context) throws IOException {
-    String dataFile = IndexFileNames.segmentFileName(si.name, "", DATA_EXTENSION);
-    String entriesFile = IndexFileNames.segmentFileName(si.name, "", ENTRIES_EXTENSION);
-
+    String dataFile = IndexFileNames.segmentFileName(si.name, "", DATA_EXTENSION); //产生_n.cfs文件名
+    String entriesFile = IndexFileNames.segmentFileName(si.name, "", ENTRIES_EXTENSION);//产生_n.cfe文件名
+   //
     try (IndexOutput data =    dir.createOutput(dataFile, context);
          IndexOutput entries = dir.createOutput(entriesFile, context)) {
       CodecUtil.writeIndexHeader(data,    DATA_CODEC, VERSION_CURRENT, si.getId(), "");
       CodecUtil.writeIndexHeader(entries, ENTRY_CODEC, VERSION_CURRENT, si.getId(), "");
       
       // write number of files
-      entries.writeVInt(si.files().size());
-      for (String file : si.files()) {
+      entries.writeVInt(si.files().size()); // 向cfe中写入文件个数
+      for (String file : si.files()) { // 会遍历15个文件：fdx/fdt/dvd/dvm/pos/doc/tim/tip/dim/dii/nvm/nvd/fnm
         
         // write bytes for file
         long startOffset = data.getFilePointer();
-        try (ChecksumIndexInput in = dir.openChecksumInput(file, IOContext.READONCE)) {
+        try (ChecksumIndexInput in = dir.openChecksumInput(file, IOContext.READONCE)) { // 这里文件打开，使用的mmap打开产生的15个文件
 
           // just copies the index header, verifying that its id matches what we expect
           CodecUtil.verifyAndCopyIndexHeader(in, data, si.getId());
           
           // copy all bytes except the footer
-          long numBytesToCopy = in.length() - CodecUtil.footerLength() - in.getFilePointer();
-          data.copyBytes(in, numBytesToCopy);
+          long numBytesToCopy = in.length() - CodecUtil.footerLength() - in.getFilePointer(); // 索引文件正式的数据部分，一次读取16kb
+          data.copyBytes(in, numBytesToCopy); // 会去检查是merge中断检查， data是cfs文件。这里会去限速
 
           // verify footer (checksum) matches for the incoming file we are copying
           long checksum = CodecUtil.checkFooter(in);
@@ -107,23 +107,23 @@ public final class Lucene50CompoundFormat extends CompoundFormat {
         }
         long endOffset = data.getFilePointer();
         
-        long length = endOffset - startOffset;
+        long length = endOffset - startOffset; // 整个文件的长度
         
         // write entry for file
-        entries.writeString(IndexFileNames.stripSegmentName(file));
+        entries.writeString(IndexFileNames.stripSegmentName(file)); // 向cfe文件中写入每个文件名
         entries.writeLong(startOffset);
         entries.writeLong(length);
       }
       
-      CodecUtil.writeFooter(data);
+      CodecUtil.writeFooter(data); // 分别向cfs和cfe文件写入footer
       CodecUtil.writeFooter(entries);
     }
   }
 
-  /** Extension of compound file */
+  /** Extension of compound file */ // 存放具体数据的复合文件
   static final String DATA_EXTENSION = "cfs";
   /** Extension of compound file entries */
-  static final String ENTRIES_EXTENSION = "cfe";
+  static final String ENTRIES_EXTENSION = "cfe"; // 存放复合文件中每个文件名、长度这样的元数据
   static final String DATA_CODEC = "Lucene50CompoundData";
   static final String ENTRY_CODEC = "Lucene50CompoundEntries";
   static final int VERSION_START = 0;

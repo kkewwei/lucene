@@ -72,7 +72,7 @@ public class Field implements IndexableField {
   protected final String name;
 
   /** Field's value */
-  protected Object fieldsData;
+  protected Object fieldsData;// 里面存放着编码后的数据
 
   /** Pre-analyzed tokenStream for indexed fields; this is
    * separate from fieldsData because you are allowed to
@@ -256,7 +256,7 @@ public class Field implements IndexableField {
    */
   @Override
   public String stringValue() {
-    if (fieldsData instanceof CharSequence || fieldsData instanceof Number) {
+    if (fieldsData instanceof CharSequence || fieldsData instanceof Number) { // 字符串或数字
       return fieldsData.toString();
     } else {
       return null;
@@ -504,13 +504,13 @@ public class Field implements IndexableField {
         throw new IllegalArgumentException("Non-Tokenized Fields must have a String value");
       }
     }
-
+    // 会跑到这里
     if (tokenStream != null) {
       return tokenStream;
-    } else if (readerValue() != null) {
+    } else if (readerValue() != null) { // 值是Reader
       return analyzer.tokenStream(name(), readerValue());
-    } else if (stringValue() != null) {
-      return analyzer.tokenStream(name(), stringValue());
+    } else if (stringValue() != null) { // 值就是string
+      return analyzer.tokenStream(name(), stringValue()); // 这里就是开始进行的分词
     }
 
     throw new IllegalArgumentException("Field must have either TokenStream, String, Reader or Number value; got " + this);

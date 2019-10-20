@@ -53,25 +53,25 @@ public final class SegmentInfo {
   public static final int YES = 1;          // e.g. have norms; have deletes;
 
   /** Unique segment name in the directory. */
-  public final String name;
+  public final String name; // segment编号
 
-  private int maxDoc;         // number of docs in seg
+  private int maxDoc;         // number of docs in seg 这个segment里面的文档docId最大的那个编号(包含待删除的doc）
 
   /** Where this segment resides. */
   public final Directory dir;
 
-  private boolean isCompoundFile;
+  private boolean isCompoundFile; // 默认为false
 
   /** Id that uniquely identifies this segment. */
   private final byte[] id;
 
-  private Codec codec;
+  private Codec codec; // Lucene84Codec
 
-  private Map<String,String> diagnostics;
+  private Map<String,String> diagnostics; // segment产生时的机器环境背景
   
   private Map<String,String> attributes;
 
-  private final Sort indexSort;
+  private final Sort indexSort; // 默认为空
 
   // Tracks the Lucene version this segment was created with, since 3.1. Null
   // indicates an older than 3.0 index, and it's used to detect a too old index.
@@ -100,7 +100,7 @@ public final class SegmentInfo {
    * Construct a new complete SegmentInfo instance from input.
    * <p>Note: this is public only to allow access from
    * the codecs package.</p>
-   */
+   */ // 会在Lucene86SegmentInfoFormat.read()里面初始化构建，从n._si文件中读取出来的
   public SegmentInfo(Directory dir, Version version, Version minVersion, String name, int maxDoc,
                      boolean isCompoundFile, Codec codec, Map<String,String> diagnostics,
                      byte[] id, Map<String,String> attributes, Sort indexSort) {
@@ -138,7 +138,7 @@ public final class SegmentInfo {
   public boolean getUseCompoundFile() {
     return isCompoundFile;
   }
-
+  // 会在Lucene86SegmentInfoFormat.read()里面初始化构建
   /** Can only be called once. */
   public void setCodec(Codec codec) {
     assert this.codec == null;
@@ -150,7 +150,7 @@ public final class SegmentInfo {
 
   /** Return {@link Codec} that wrote this segment. */
   public Codec getCodec() {
-    return codec;
+    return codec; // Lucene86Codec
   }
 
   /** Returns number of documents in this segment (deletions
@@ -159,7 +159,7 @@ public final class SegmentInfo {
     if (this.maxDoc == -1) {
       throw new IllegalStateException("maxDoc isn't set yet");
     }
-    return maxDoc;
+    return maxDoc; // 前面设置了
   }
 
   // NOTE: leave package private
@@ -261,14 +261,14 @@ public final class SegmentInfo {
 
   /** Return the id that uniquely identifies this segment. */
   public byte[] getId() {
-    return id.clone();
+    return id.clone(); // segment唯一标识符号
   }
 
-  private Set<String> setFiles;
+  private Set<String> setFiles; //本次flush产生的16个索引文件。当复合文件合并后，这里会被代替成2个复合文件
 
   /** Sets the files written for this segment. */
-  public void setFiles(Collection<String> files) {
-    setFiles = new HashSet<>();
+  public void setFiles(Collection<String> files) { // 在初始化的时候，会调用。在Lucene86SegmentInfoFormat.read()里面赋值
+    setFiles = new HashSet<>();  //清空，置换成2个复合文件
     addFiles(files);
   }
 
@@ -277,7 +277,7 @@ public final class SegmentInfo {
   public void addFiles(Collection<String> files) {
     checkFileNames(files);
     for (String f : files) {
-      setFiles.add(namedForThisSegment(f));
+      setFiles.add(namedForThisSegment(f)); // 给每个索引问价那加上本segment的编号
     }
   }
 
@@ -350,7 +350,7 @@ public final class SegmentInfo {
 
   /** Return the sort order of this segment, or null if the index has no sort. */
   public Sort getIndexSort() {
-    return indexSort;
+    return indexSort; // 默认为null
   }
 }
 

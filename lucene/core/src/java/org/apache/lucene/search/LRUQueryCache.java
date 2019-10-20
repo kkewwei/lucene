@@ -87,11 +87,11 @@ import static org.apache.lucene.util.RamUsageEstimator.QUERY_DEFAULT_RAM_BYTES_U
  *
  * @see QueryCachingPolicy
  * @lucene.experimental
- */
+ */ //  LRUQueryCache用来对一个Query查询的结果进行缓存，缓存的内容仅仅是文档号集，由于不会缓存文档的打分（Score），所以只有不需要打分的收集器（Collector）才可以使用LRUQueryCache，比如说TotalHitCountCollector收集器，另外缓存的文档号集使用BitDocIdSet对象进行存储，在BitDocIdSet中实际使用了FixedBitSet对象进行存储。
 public class LRUQueryCache implements QueryCache, Accountable {
-
+  // 用来对一个Query查询的结果进行缓存，缓存的内容仅仅是文档号集，由于不会缓存文档的打分
   private final int maxSize;
-  private final long maxRamBytesUsed;
+  private final long maxRamBytesUsed; // 缓存占用的内存量，默认值32MB或可分配内存的5%中的较小值
   private final Predicate<LeafReaderContext> leavesToCache;
   // maps queries that are contained in the cache to a singleton so that this
   // cache does not store several copies of the same query

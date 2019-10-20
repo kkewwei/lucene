@@ -49,9 +49,9 @@ public final class BooleanClause {
 
   /** The query whose matching documents are combined by the boolean query.
    */
-  private final Query query;
+  private final Query query; // 这个是查询条件
 
-  private final Occur occur;
+  private final Occur occur; // 规定了查询条件类型，是must/filter/should/must_not
 
 
   /** Constructs a BooleanClause.
@@ -77,7 +77,7 @@ public final class BooleanClause {
   public boolean isRequired() {
     return occur == Occur.MUST || occur == Occur.FILTER;
   }
-
+  // 如果是must或者should，就要打分
   public boolean isScoring() {
     return occur == Occur.MUST || occur == Occur.SHOULD;
   }

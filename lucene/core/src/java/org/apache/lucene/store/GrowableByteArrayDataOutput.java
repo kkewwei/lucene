@@ -36,14 +36,14 @@ public final class GrowableByteArrayDataOutput extends DataOutput {
   private byte[] bytes;
 
   /** The length */
-  private int length;
+  private int length; //已经写到的位数,可以用来修改这个bytes占用情况
 
   // scratch for utf8 encoding of small strings
   private byte[] scratchBytes;
 
   /** Create a {@link GrowableByteArrayDataOutput} with the given initial capacity. */
   public GrowableByteArrayDataOutput(int cp) {
-    this.bytes = new byte[ArrayUtil.oversize(cp, 1)];
+    this.bytes = new byte[ArrayUtil.oversize(cp, 1)]; // 初始化就立马扩容1//8，
     this.length = 0;
   }
 
@@ -77,9 +77,9 @@ public final class GrowableByteArrayDataOutput extends DataOutput {
         scratchBytes = ArrayUtil.grow(scratchBytes, maxLen);
       }
       int len = UnicodeUtil.UTF16toUTF8(string, 0, string.length(), scratchBytes);
-      writeVInt(len);
-      writeBytes(scratchBytes, len);
-    } else  {
+      writeVInt(len); //
+      writeBytes(scratchBytes, len); // 写入的是bytes
+    } else  { // 单个value若大于65536
       // use a double pass approach to avoid allocating a large intermediate buffer for string encoding
       int numBytes = UnicodeUtil.calcUTF16toUTF8Length(string, 0, string.length());
       writeVInt(numBytes);

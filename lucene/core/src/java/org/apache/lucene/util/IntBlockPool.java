@@ -25,7 +25,7 @@ import java.util.Arrays;
  */
 public final class IntBlockPool {
   public final static int INT_BLOCK_SHIFT = 13;
-  public final static int INT_BLOCK_SIZE = 1 << INT_BLOCK_SHIFT;
+  public final static int INT_BLOCK_SIZE = 1 << INT_BLOCK_SHIFT; //  一个block   8K
   public final static int INT_BLOCK_MASK = INT_BLOCK_SIZE - 1;
   
   /** Abstract class for allocating and freeing int
@@ -65,11 +65,11 @@ public final class IntBlockPool {
   /** index into the buffers array pointing to the current buffer used as the head */
   private int bufferUpto = -1;   
   /** Pointer to the current position in head buffer */
-  public int intUpto = INT_BLOCK_SIZE;
+  public int intUpto = INT_BLOCK_SIZE; //buffer内的偏移量，当前buffer可分配的起始位置
   /** Current head buffer */
   public int[] buffer;
   /** Current head offset */
-  public int intOffset = -INT_BLOCK_SIZE;
+  public int intOffset = -INT_BLOCK_SIZE;  // 当前buffer的绝对起始位置
 
   private final Allocator allocator;
 

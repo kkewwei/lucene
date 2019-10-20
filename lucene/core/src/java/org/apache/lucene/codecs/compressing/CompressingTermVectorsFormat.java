@@ -91,7 +91,7 @@ public class CompressingTermVectorsFormat extends TermVectorsFormat {
     return new CompressingTermVectorsReader(directory, segmentInfo, segmentSuffix,
         fieldInfos, context, formatName, compressionMode);
   }
-
+  //整个segment共享一个，写完一个segment就被置空了
   @Override
   public final TermVectorsWriter vectorsWriter(Directory directory,
       SegmentInfo segmentInfo, IOContext context) throws IOException {

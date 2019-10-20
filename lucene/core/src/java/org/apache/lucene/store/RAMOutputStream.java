@@ -38,14 +38,14 @@ import org.apache.lucene.util.Accountables;
 public class RAMOutputStream extends IndexOutput implements Accountable {
   static final int BUFFER_SIZE = 1024;
 
-  private final RAMFile file;
+  private final RAMFile file; // 真正存放数据的
 
-  private byte[] currentBuffer;
-  private int currentBufferIndex;
+  private byte[] currentBuffer; // file中的哪个buffers。由currentBufferIndex指向
+  private int currentBufferIndex; // 指向的是file中的哪个buffers。
   
-  private int bufferPosition;
-  private long bufferStart;
-  private int bufferLength;
+  private int bufferPosition; // 当前currentBuffer里面写入位置
+  private long bufferStart;// 当前buffer在file的buffers[]里面的绝对位置
+  private int bufferLength; //currentBuffer的长度
   
   private final Checksum crc;
 
@@ -74,7 +74,7 @@ public class RAMOutputStream extends IndexOutput implements Accountable {
       crc = null;
     }
   }
-
+  // 把数据写入out中
   /** Copy the current contents of this buffer to the provided {@link DataOutput}. */
   public void writeTo(DataOutput out) throws IOException {
     flush();
@@ -162,15 +162,15 @@ public class RAMOutputStream extends IndexOutput implements Accountable {
       bufferPosition += bytesToCopy;
     }
   }
-
+  // RAMOutputStream使用file里面的buffers[]真正存储数据，每次使用时，从中选择一个buffer作为当前buffer
   private final void switchCurrentBuffer() {
     if (currentBufferIndex == file.numBuffers()) {
-      currentBuffer = file.addBuffer(BUFFER_SIZE);
+      currentBuffer = file.addBuffer(BUFFER_SIZE); // 扩容file里面的buffers
     } else {
       currentBuffer = file.getBuffer(currentBufferIndex);
     }
     bufferPosition = 0;
-    bufferStart = (long) BUFFER_SIZE * (long) currentBufferIndex;
+    bufferStart = (long) BUFFER_SIZE * (long) currentBufferIndex; // 当前buffer在file里面的绝对位置
     bufferLength = currentBuffer.length;
   }
 

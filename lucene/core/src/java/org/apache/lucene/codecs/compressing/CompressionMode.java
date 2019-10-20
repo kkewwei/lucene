@@ -162,7 +162,7 @@ public abstract class CompressionMode {
     @Override
     public void compress(byte[] bytes, int off, int len, DataOutput out)
         throws IOException {
-      LZ4.compress(bytes, off, len, out, ht);
+      LZ4.compress(bytes, off, len, out, ht); // 使用LZ4进行压缩
     }
 
     @Override

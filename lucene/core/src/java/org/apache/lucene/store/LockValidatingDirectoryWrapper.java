@@ -59,7 +59,7 @@ public final class LockValidatingDirectoryWrapper extends FilterDirectory {
   @Override
   public void syncMetaData() throws IOException {
     writeLock.ensureValid();
-    in.syncMetaData();
+    in.syncMetaData(); // 将文件元数据也一同刷到磁盘里面
   }
 
   @Override

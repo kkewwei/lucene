@@ -32,7 +32,7 @@ import org.apache.lucene.util.Accountable;
  */
 @Deprecated
 public class RAMFile implements Accountable {
-  protected final ArrayList<byte[]> buffers = new ArrayList<>();
+  protected final ArrayList<byte[]> buffers = new ArrayList<>(); ///一个数组list
   long length;
   RAMDirectory directory;
   protected long sizeInBytes;

@@ -89,16 +89,16 @@ public class NIOFSDirectory extends FSDirectory {
     /**
      * The maximum chunk size for reads of 16384 bytes.
      */
-    private static final int CHUNK_SIZE = 16384;
+    private static final int CHUNK_SIZE = 16384; //一次最多读取16k的数据
     
     /** the file channel we will read from */
-    protected final FileChannel channel;
+    protected final FileChannel channel; // FileChannelImpl
     /** is this instance a clone and hence does not own the file to close it */
     boolean isClone = false;
     /** start offset: non-zero in the slice case */
     protected final long off;
     /** end offset (start+length) */
-    protected final long end;
+    protected final long end;// 文件大小
 
     public NIOFSIndexInput(String resourceDesc, FileChannel fc, IOContext context) throws IOException {
       super(resourceDesc, context);
@@ -151,12 +151,12 @@ public class NIOFSDirectory extends FSDirectory {
       }
 
       try {
-        int readLength = b.remaining();
+        int readLength = b.remaining(); // 需要读取的长度
         while (readLength > 0) {
-          final int toRead = Math.min(CHUNK_SIZE, readLength);
+          final int toRead = Math.min(CHUNK_SIZE, readLength); // 一次最多读取16K数据
           b.limit(b.position() + toRead);
           assert b.remaining() == toRead;
-          final int i = channel.read(b, pos);
+          final int i = channel.read(b, pos);// 首先使用临时DirtctByteBuffer，从文件中读取出来放入这个直接内存中，然后将数据从直接内存拷贝到HeapByteBuffer中
           if (i < 0) { // be defensive here, even though we checked before hand, something could have changed
             throw new EOFException("read past EOF: " + this + " buffer: " + b + " chunkLen: " + toRead + " end: " + end);
           }

@@ -162,7 +162,7 @@ public abstract class StoredFieldsWriter implements Closeable {
       // if field numbers are aligned, we can save hash lookups
       // on every field access. Otherwise, we need to lookup
       // fieldname each time, and remap to a new number.
-      for (FieldInfo fi : mergeState.fieldInfos[readerIndex]) {
+      for (FieldInfo fi : mergeState.fieldInfos[readerIndex]) { // 对某个待合并的段，遍历每一个字段
         FieldInfo other = mergeState.mergeFieldInfos.fieldInfo(fi.number);
         if (other == null || !other.name.equals(fi.name)) {
           remapper = mergeState.mergeFieldInfos;

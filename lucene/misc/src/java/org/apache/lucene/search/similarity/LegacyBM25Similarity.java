@@ -60,7 +60,7 @@ public final class LegacyBM25Similarity extends Similarity {
   public long computeNorm(FieldInvertState state) {
     return bm25Similarity.computeNorm(state);
   }
-
+  // 这里是打分规则
   @Override
   public SimScorer scorer(float boost, CollectionStatistics collectionStats, TermStatistics... termStats) {
     return bm25Similarity.scorer(boost * (1 + bm25Similarity.getK1()), collectionStats, termStats);

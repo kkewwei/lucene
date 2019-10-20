@@ -65,7 +65,7 @@ abstract class HitsThresholdChecker {
    * Default implementation of HitsThresholdChecker to be used for single threaded execution
    */
   private static class LocalHitsThresholdChecker extends HitsThresholdChecker {
-    private final int totalHitsThreshold;
+    private final int totalHitsThreshold; //最多找多少个：默认为10000
     private int hitCount;
 
     public LocalHitsThresholdChecker(int totalHitsThreshold) {
@@ -87,7 +87,7 @@ abstract class HitsThresholdChecker {
       return hitCount > totalHitsThreshold;
     }
 
-    @Override
+    @Override // 若不是全部的数据，则不需要
     public ScoreMode scoreMode() {
       return totalHitsThreshold == Integer.MAX_VALUE ? ScoreMode.COMPLETE : ScoreMode.TOP_SCORES;
     }

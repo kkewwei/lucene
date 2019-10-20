@@ -58,7 +58,7 @@ public abstract class MSBRadixSorter extends Sorter {
   protected abstract int byteAt(int i, int k);
 
   /** Get a fall-back sorter which may assume that the first k bytes of all compared strings are equal. */
-  protected Sorter getFallbackSorter(int k) {
+  protected Sorter getFallbackSorter(int k) { // 前k个byte是相等的
     return new IntroSorter() {
       @Override
       protected void swap(int i, int j) {
@@ -123,9 +123,9 @@ public abstract class MSBRadixSorter extends Sorter {
 
   private void sort(int from, int to, int k, int l) {
     if (to - from <= LENGTH_THRESHOLD || l >= LEVEL_THRESHOLD) {
-      introSort(from, to, k);
+      introSort(from, to, k); // 还会退化
     } else {
-      radixSort(from, to, k, l);
+      radixSort(from, to, k, l);  //
     }
   }
 

@@ -41,7 +41,7 @@ final class ByteBufferGuard {
     void freeBuffer(String resourceDescription, ByteBuffer b) throws IOException;
   }
   
-  private final String resourceDescription;
+  private final String resourceDescription; //就是普通描述介绍
   private final BufferCleaner cleaner;
   
   /** Not volatile; see comments on visibility below! */
@@ -96,7 +96,7 @@ final class ByteBufferGuard {
   
   public byte getByte(ByteBuffer receiver) {
     ensureValid();
-    return receiver.get();
+    return receiver.get();  // receiver = DirectByteBufferR
   }
   
   public short getShort(ByteBuffer receiver) {

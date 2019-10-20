@@ -49,7 +49,7 @@ public final class CodecUtil {
   /**
    * Constant to identify the start of a codec header.
    */
-  public final static int CODEC_MAGIC = 0x3fd76c17;
+  public final static int CODEC_MAGIC = 0x3fd76c17;  //  cfe  cfs文件magic
   /**
    * Constant to identify the start of a codec footer.
    */
@@ -87,9 +87,9 @@ public final class CodecUtil {
     if (bytes.length != codec.length() || bytes.length >= 128) {
       throw new IllegalArgumentException("codec must be simple ASCII, less than 128 characters in length [got " + codec + "]");
     }
-    out.writeInt(CODEC_MAGIC);
-    out.writeString(codec);
-    out.writeInt(version);
+    out.writeInt(CODEC_MAGIC); //魔术
+    out.writeString(codec);  //文件的标志
+    out.writeInt(version); // 版本号
   }
   
   /**
@@ -130,13 +130,13 @@ public final class CodecUtil {
     if (id.length != StringHelper.ID_LENGTH) {
       throw new IllegalArgumentException("Invalid id: " + StringHelper.idToString(id));
     }
-    writeHeader(out, codec, version);
-    out.writeBytes(id, 0, id.length);
+    writeHeader(out, codec, version);  // 魔术，标志，版本号
+    out.writeBytes(id, 0, id.length);  // id
     BytesRef suffixBytes = new BytesRef(suffix);
     if (suffixBytes.length != suffix.length() || suffixBytes.length >= 256) {
       throw new IllegalArgumentException("suffix must be simple ASCII, less than 256 characters in length [got " + suffix + "]");
     }
-    out.writeByte((byte) suffixBytes.length);
+    out.writeByte((byte) suffixBytes.length); // 前缀
     out.writeBytes(suffixBytes.bytes, suffixBytes.offset, suffixBytes.length);
   }
 
@@ -160,7 +160,7 @@ public final class CodecUtil {
    */
   public static int indexHeaderLength(String codec, String suffix) {
     return headerLength(codec) + StringHelper.ID_LENGTH + 1 + suffix.length();
-  }
+  }  // 复合数据文件的header大小
 
   /**
    * Reads and validates a header previously written with 
@@ -188,10 +188,10 @@ public final class CodecUtil {
    *         than <code>maxVersion</code>.
    * @throws IOException If there is an I/O error reading from the underlying medium.
    * @see #writeHeader(DataOutput, String, int)
-   */
+   */  // 主要校验： magic   文件名    版本
   public static int checkHeader(DataInput in, String codec, int minVersion, int maxVersion) throws IOException {
     // Safety to guard against reading a bogus string:
-    final int actualHeader = in.readInt();
+    final int actualHeader = in.readInt(); // 校验header部分
     if (actualHeader != CODEC_MAGIC) {
       throw new CorruptIndexException("codec header mismatch: actual header=" + actualHeader + " vs expected header=" + CODEC_MAGIC, in);
     }
@@ -203,12 +203,12 @@ public final class CodecUtil {
    *  version assumes the first int has already been read
    *  and validated from the input. */
   public static int checkHeaderNoMagic(DataInput in, String codec, int minVersion, int maxVersion) throws IOException {
-    final String actualCodec = in.readString();
+    final String actualCodec = in.readString(); // 对文件名称进行校验， Lucene50CompoundEntries
     if (!actualCodec.equals(codec)) {
       throw new CorruptIndexException("codec mismatch: actual codec=" + actualCodec + " vs expected codec=" + codec, in);
     }
 
-    final int actualVersion = in.readInt();
+    final int actualVersion = in.readInt(); //版本进行校验
     if (actualVersion < minVersion) {
       throw new IndexFormatTooOldException(in, actualVersion, minVersion, maxVersion);
     }
@@ -252,9 +252,9 @@ public final class CodecUtil {
    * @see #writeIndexHeader(DataOutput, String, int, byte[],String)
    */
   public static int checkIndexHeader(DataInput in, String codec, int minVersion, int maxVersion, byte[] expectedID, String expectedSuffix) throws IOException {
-    int version = checkHeader(in, codec, minVersion, maxVersion);
-    checkIndexHeaderID(in, expectedID);
-    checkIndexHeaderSuffix(in, expectedSuffix);
+    int version = checkHeader(in, codec, minVersion, maxVersion); // 主要校验： magic   文件名    版本
+    checkIndexHeaderID(in, expectedID);  // 校验  segment_id
+    checkIndexHeaderSuffix(in, expectedSuffix);  // 校验前缀
     return version;
   }
 
@@ -292,15 +292,15 @@ public final class CodecUtil {
     int version = in.readInt();
 
     // verify id:
-    checkIndexHeaderID(in, expectedID);
+    checkIndexHeaderID(in, expectedID); // 校验具体索引id和全局id是否一直
 
     // we can't verify extension either, so we pass-through:
     int suffixLength = in.readByte() & 0xFF;
     byte[] suffixBytes = new byte[suffixLength];
-    in.readBytes(suffixBytes, 0, suffixLength);
+    in.readBytes(suffixBytes, 0, suffixLength); //读取文件后缀
 
     // now write the header we just verified
-    out.writeInt(CodecUtil.CODEC_MAGIC);
+    out.writeInt(CodecUtil.CODEC_MAGIC); // 向cfs中写入单个索引文件的数据
     out.writeString(codec);
     out.writeInt(version);
     out.writeBytes(expectedID, 0, expectedID.length);
@@ -344,7 +344,7 @@ public final class CodecUtil {
   
   /** Expert: just reads and verifies the object ID of an index header */
   public static byte[] checkIndexHeaderID(DataInput in, byte[] expectedID) throws IOException {
-    byte id[] = new byte[StringHelper.ID_LENGTH];
+    byte id[] = new byte[StringHelper.ID_LENGTH]; // segment id进行校验，拿从semgent元数据中获取的和某个segment符合文件名称中的做对比
     in.readBytes(id, 0, id.length);
     if (!Arrays.equals(id, expectedID)) {
       throw new CorruptIndexException("file mismatch, expected id=" + StringHelper.idToString(expectedID) 
@@ -400,7 +400,7 @@ public final class CodecUtil {
    * @see #writeFooter(IndexOutput)
    */
   public static int footerLength() {
-    return 16;
+    return 16;   // 对cfs文件来说，是 magic（int）+ algorithmID(int)
   }
   
   /** 
@@ -487,7 +487,7 @@ public final class CodecUtil {
       throw new CorruptIndexException("misplaced codec footer (file truncated?): length=" + in.length() + " but footerLength==" + footerLength(), in);
     }
     in.seek(in.length() - footerLength());
-    validateFooter(in);
+    validateFooter(in); // 校验尾部
     return readCRC(in);
   }
 
@@ -511,7 +511,7 @@ public final class CodecUtil {
 
   private static void validateFooter(IndexInput in) throws IOException {
     long remaining = in.length() - in.getFilePointer();
-    long expected = footerLength();
+    long expected = footerLength();  // 尾部长，16
     if (remaining < expected) {
       throw new CorruptIndexException("misplaced codec footer (file truncated?): remaining=" + remaining + ", expected=" + expected + ", fp=" + in.getFilePointer(), in);
     } else if (remaining > expected) {
@@ -534,16 +534,16 @@ public final class CodecUtil {
    * <p>
    * Note that this method may be slow, as it must process the entire file.
    * If you just need to extract the checksum value, call {@link #retrieveChecksum}.
-   */
+   */ // check末尾长度
   public static long checksumEntireFile(IndexInput input) throws IOException {
-    IndexInput clone = input.clone();
-    clone.seek(0);
+    IndexInput clone = input.clone(); // copy一份ByteBufferIndexInput$SingleBufferImpl
+    clone.seek(0); // 设置其中的position
     ChecksumIndexInput in = new BufferedChecksumIndexInput(clone);
     assert in.getFilePointer() == 0;
     if (in.length() < footerLength()) {
       throw new CorruptIndexException("misplaced codec footer (file truncated?): length=" + in.length() + " but footerLength==" + footerLength(), input);
-    }
-    in.seek(in.length() - footerLength());
+    } // 然后直接定位到
+    in.seek(in.length() - footerLength()); // seek会调用skip,而skip就是读取并丢弃？很恶心，是否存在可优化空间。会跑到ByteBufferIndexInput.readBytes,
     return checkFooter(in);
   }
   

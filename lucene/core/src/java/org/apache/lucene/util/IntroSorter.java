@@ -37,11 +37,11 @@ public abstract class IntroSorter extends Sorter {
   }
 
   void quicksort(int from, int to, int maxDepth) {
-    if (to - from < BINARY_SORT_THRESHOLD) {
+    if (to - from < BINARY_SORT_THRESHOLD) { //二进制排序
       binarySort(from, to);
       return;
     } else if (--maxDepth < 0) {
-      heapSort(from, to);
+      heapSort(from, to);  // 大点了用堆排序
       return;
     }
 

@@ -60,7 +60,7 @@ public abstract class IndexOutput extends DataOutput implements Closeable {
   /** Returns the current position in this file, where the next write will
    * occur.
    */
-  public abstract long getFilePointer();
+  public abstract long getFilePointer(); //
 
   /** Returns the current checksum of bytes written so far */
   public abstract long getChecksum() throws IOException;

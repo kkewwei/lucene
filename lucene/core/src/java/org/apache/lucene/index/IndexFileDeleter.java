@@ -81,15 +81,15 @@ final class IndexFileDeleter implements Closeable {
 
   /* Reference count for all files in the index.
    * Counts how many existing commits reference a file.
-   **/
+   **/ // 构建的某个文件被reference的次数
   private Map<String, RefCount> refCounts = new HashMap<>();
 
   /* Holds all commits (segments_N) currently in the index.
    * This will have just 1 commit if you are using the
    * default delete policy (KeepOnlyLastCommitDeletionPolicy).
    * Other policies may leave commit points live for longer
-   * in which case this list would be longer than 1: */
-  private List<CommitPoint> commits = new ArrayList<>();
+   * in which case this list would be longer than 1: */// 在IndexWriter中，已经记录了存在的commit
+  private List<CommitPoint> commits = new ArrayList<>(); // 存储的这个索引结构所有的commit。若是KeepOnlyLastCommitDeletionPolicy，只会保留最后一个
 
   /* Holds files we had incref'd from the previous
    * non-commit checkpoint: */
@@ -161,7 +161,7 @@ final class IndexFileDeleter implements Closeable {
             // incref all files it refers to:
             if (infoStream.isEnabled("IFD")) {
               infoStream.message("IFD", "init: load commit \"" + fileName + "\"");
-            }
+            }//发现
             SegmentInfos sis = SegmentInfos.readCommit(directoryOrig, fileName);
 
             final CommitPoint commitPoint = new CommitPoint(commitsToDelete, directoryOrig, sis);
@@ -379,7 +379,7 @@ final class IndexFileDeleter implements Closeable {
           infoStream.message("IFD", "deleteCommits: now decRef commit \"" + commit.getSegmentsFileName() + "\"");
         }
         try {
-          decRef(commit.files);
+          decRef(commit.files); // 删除旧文件
         } catch (Throwable t) {
           firstThrowable = IOUtils.useOrSuppress(firstThrowable, t);
         }
@@ -512,7 +512,7 @@ final class IndexFileDeleter implements Closeable {
     if (infoStream.isEnabled("IFD")) {
       infoStream.message("IFD", "now checkpoint \"" + writer.segString(writer.toLiveInfos(segmentInfos)) + "\" [" + segmentInfos.size() + " segments " + "; isCommit = " + isCommit + "]");
     }
-
+    // 所有文件引用全部+1
     // Incref the files:
     incRef(segmentInfos, isCommit);
 
@@ -521,10 +521,10 @@ final class IndexFileDeleter implements Closeable {
       commits.add(new CommitPoint(commitsToDelete, directoryOrig, segmentInfos));
 
       // Tell policy so it can remove commits:
-      policy.onCommit(commits);
+      policy.onCommit(commits); // KeepOnlyLastCommitDeletionPolicy告诉可以删除commit了
 
       // Decref files for commits that were deleted by the policy:
-      deleteCommits();
+      deleteCommits(); // 会删除旧提交的相关的文档
     } else {
       // DecRef old files from the last checkpoint, if any:
       try {
@@ -534,7 +534,7 @@ final class IndexFileDeleter implements Closeable {
       }
 
       // Save files so we can decr on next checkpoint/commit:
-      lastFiles.addAll(segmentInfos.files(false));
+      lastFiles.addAll(segmentInfos.files(false));  // 去掉segments_n文件
     }
 
     if (infoStream.isEnabled("IFD")) {
@@ -577,7 +577,7 @@ final class IndexFileDeleter implements Closeable {
     Throwable firstThrowable = null;
     for(final String file : files) {
       try {
-        if (decRef(file)) {
+        if (decRef(file)) { // 若引用次数为0，就可以删除了
           toDelete.add(file);
         }
       } catch (Throwable t) {
@@ -586,7 +586,7 @@ final class IndexFileDeleter implements Closeable {
     }
 
     try {
-      deleteFiles(toDelete);
+      deleteFiles(toDelete); // 这里会发生删除文件操作（若文件引用次数为0）
     } catch (Throwable t) {
       firstThrowable = IOUtils.useOrSuppress(firstThrowable, t);
     }
@@ -673,11 +673,11 @@ final class IndexFileDeleter implements Closeable {
         infoStream.message("IFD", "delete " + names + "");
       }
     }
-
+    //删除分为2步骤
     // We make two passes, first deleting any segments_N files, second deleting the rest.  We do this so that if we throw exc or JVM
     // crashes during deletions, even when not on Windows, we don't leave the index in an "apparently corrupt" state:
     for(String name : names) {
-      if (name.startsWith(IndexFileNames.SEGMENTS) == false) {
+      if (name.startsWith(IndexFileNames.SEGMENTS) == false) { // 先删除segments开头的文件
         continue;
       }
       deleteFile(name);
@@ -746,7 +746,7 @@ final class IndexFileDeleter implements Closeable {
 
     Collection<String> files;
     String segmentsFileName;
-    boolean deleted;
+    boolean deleted; // 默认没有删除
     Directory directoryOrig;
     Collection<CommitPoint> commitsToDelete;
     long generation;

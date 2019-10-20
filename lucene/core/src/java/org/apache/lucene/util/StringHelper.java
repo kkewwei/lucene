@@ -39,7 +39,7 @@ public abstract class StringHelper {
    * @param priorTerm The first {@link BytesRef} to compare
    * @param currentTerm The second {@link BytesRef} to compare
    * @return The number of common elements (from the start of each).
-   */
+   */  // 获取两个term相同的前缀长度
   public static int bytesDifference(BytesRef priorTerm, BytesRef currentTerm) {
     int mismatch = FutureArrays.mismatch(priorTerm.bytes, priorTerm.offset, priorTerm.offset + priorTerm.length, 
                                          currentTerm.bytes, currentTerm.offset, currentTerm.offset + currentTerm.length);
@@ -53,7 +53,7 @@ public abstract class StringHelper {
    * Returns the length of {@code currentTerm} needed for use as a sort key.
    * so that {@link BytesRef#compareTo(BytesRef)} still returns the same result.
    * This method assumes currentTerm comes after priorTerm.
-   */
+   */// 获取两个term相同的前缀长度
   public static int sortKeyLength(final BytesRef priorTerm, final BytesRef currentTerm) {
     return bytesDifference(priorTerm, currentTerm) + 1;
   }

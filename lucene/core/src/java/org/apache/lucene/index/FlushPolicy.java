@@ -96,7 +96,7 @@ abstract class FlushPolicy {
    * at least one indexed document.
    * <p>
    * This method will never return <code>null</code>
-   */
+   */ // 找到正在写入数据是，还没有被置为刷新状态的、内存使用最多的那个DocumentsWriterPerThread
   protected DocumentsWriterPerThread findLargestNonPendingWriter(
       DocumentsWriterFlushControl control, DocumentsWriterPerThread perThread) {
     assert perThread.getNumDocsInRAM() > 0;

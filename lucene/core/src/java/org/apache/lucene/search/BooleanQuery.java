@@ -137,7 +137,7 @@ public class BooleanQuery extends Query implements Iterable<BooleanClause> {
 
   private final int minimumNumberShouldMatch;
   private final List<BooleanClause> clauses;              // used for toString() and getClauses()
-  private final Map<Occur, Collection<Query>> clauseSets; // used for equals/hashcode
+  private final Map<Occur, Collection<Query>> clauseSets; // used for equals/hashcode Occur代表是MUST，FILTER,should,must_not ,所有的查询条件
 
   private BooleanQuery(int minimumNumberShouldMatch,
       BooleanClause[] clauses) {
@@ -231,17 +231,17 @@ public class BooleanQuery extends Query implements Iterable<BooleanClause> {
     return new BooleanWeight(query, searcher, scoreMode, boost);
   }
 
-  @Override
+  @Override // 读取的时候是ExitableDirectoryReader
   public Query rewrite(IndexReader reader) throws IOException {
     if (clauses.size() == 0) {
       return new MatchNoDocsQuery("empty BooleanQuery");
     }
     
     // optimize 1-clause queries
-    if (clauses.size() == 1) {
+    if (clauses.size() == 1) { // 若bool 里面must只有一个
       BooleanClause c = clauses.get(0);
       Query query = c.getQuery();
-      if (minimumNumberShouldMatch == 1 && c.getOccur() == Occur.SHOULD) {
+      if (minimumNumberShouldMatch == 1 && c.getOccur() == Occur.SHOULD) { // 若至少有一个还是should，则是must
         return query;
       } else if (minimumNumberShouldMatch == 0) {
         switch (c.getOccur()) {
@@ -260,14 +260,14 @@ public class BooleanQuery extends Query implements Iterable<BooleanClause> {
       }
     }
 
-    // recursively rewrite
+    // recursively rewrite  递归式
     {
       BooleanQuery.Builder builder = new BooleanQuery.Builder();
       builder.setMinimumNumberShouldMatch(getMinimumNumberShouldMatch());
       boolean actuallyRewritten = false;
-      for (BooleanClause clause : this) {
-        Query query = clause.getQuery();
-        Query rewritten = query.rewrite(reader);
+      for (BooleanClause clause : this) { // 遍历
+        Query query = clause.getQuery(); // clause就是BooleanClause。
+        Query rewritten = query.rewrite(reader);// query可以使TermQuery，LongPoint，那么就不需要任何优化
         if (rewritten != query) {
           // rewrite clause
           actuallyRewritten = true;
@@ -277,7 +277,7 @@ public class BooleanQuery extends Query implements Iterable<BooleanClause> {
           builder.add(clause);
         }
       }
-      if (actuallyRewritten) {
+      if (actuallyRewritten) { // 有发生过rewrite操作
         return builder.build();
       }
     }
@@ -288,7 +288,7 @@ public class BooleanQuery extends Query implements Iterable<BooleanClause> {
       for (Collection<Query> queries : clauseSets.values()) {
         clauseCount += queries.size();
       }
-      if (clauseCount != clauses.size()) {
+      if (clauseCount != clauses.size()) { // 条件有重复
         // since clauseSets implicitly deduplicates FILTER and MUST_NOT
         // clauses, this means there were duplicates
         BooleanQuery.Builder rewritten = new BooleanQuery.Builder();
@@ -302,7 +302,7 @@ public class BooleanQuery extends Query implements Iterable<BooleanClause> {
         return rewritten.build();
       }
     }
-
+    // 检查是否有条件同时在must和must_not中，会抛异常
     // Check whether some clauses are both required and excluded
     final Collection<Query> mustNotClauses = clauseSets.get(Occur.MUST_NOT);
     if (!mustNotClauses.isEmpty()) {
@@ -314,7 +314,7 @@ public class BooleanQuery extends Query implements Iterable<BooleanClause> {
         return new MatchNoDocsQuery("MUST_NOT clause is MatchAllDocsQuery");
       }
     }
-
+     //
     // remove FILTER clauses that are also MUST clauses
     // or that match all documents
     if (clauseSets.get(Occur.MUST).size() > 0 && clauseSets.get(Occur.FILTER).size() > 0) {
@@ -335,16 +335,16 @@ public class BooleanQuery extends Query implements Iterable<BooleanClause> {
         return builder.build();
       }
     }
-
+    // 把同时在should和filter里面的相同条件，转变为must
     // convert FILTER clauses that are also SHOULD clauses to MUST clauses
-    if (clauseSets.get(Occur.SHOULD).size() > 0 && clauseSets.get(Occur.FILTER).size() > 0) {
+    if (clauseSets.get(Occur.SHOULD).size() > 0 && clauseSets.get(Occur.FILTER).size() > 0) { // 有should，并且有filter,则
       final Collection<Query> filters = clauseSets.get(Occur.FILTER);
       final Collection<Query> shoulds = clauseSets.get(Occur.SHOULD);
 
       Set<Query> intersection = new HashSet<>(filters);
-      intersection.retainAll(shoulds);
+      intersection.retainAll(shoulds); // 取交集
 
-      if (intersection.isEmpty() == false) {
+      if (intersection.isEmpty() == false) { // 如果有交集
         BooleanQuery.Builder builder = new BooleanQuery.Builder();
         int minShouldMatch = getMinimumNumberShouldMatch();
 
@@ -363,11 +363,11 @@ public class BooleanQuery extends Query implements Iterable<BooleanClause> {
         return builder.build();
       }
     }
-
+    //
     // Deduplicate SHOULD clauses by summing up their boosts
     if (clauseSets.get(Occur.SHOULD).size() > 0 && minimumNumberShouldMatch <= 1) {
       Map<Query, Double> shouldClauses = new HashMap<>();
-      for (Query query : clauseSets.get(Occur.SHOULD)) {
+      for (Query query : clauseSets.get(Occur.SHOULD)) { // 遍历should
         double boost = 1;
         while (query instanceof BoostQuery) {
           BoostQuery bq = (BoostQuery) query;
@@ -430,7 +430,7 @@ public class BooleanQuery extends Query implements Iterable<BooleanClause> {
 
     // Rewrite queries whose single scoring clause is a MUST clause on a
     // MatchAllDocsQuery to a ConstantScoreQuery
-    {
+    { // 若只有一个must，且是match_all，那么
       final Collection<Query> musts = clauseSets.get(Occur.MUST);
       final Collection<Query> filters = clauseSets.get(Occur.FILTER);
       if (musts.size() == 1
@@ -447,7 +447,7 @@ public class BooleanQuery extends Query implements Iterable<BooleanClause> {
           // ignore SHOULD clause for now
           BooleanQuery.Builder builder = new BooleanQuery.Builder();
           for (BooleanClause clause : clauses) {
-            switch (clause.getOccur()) {
+            switch (clause.getOccur()) { // 仅将filter和must_not存起来
               case FILTER:
               case MUST_NOT:
                 builder.add(clause);
@@ -504,7 +504,7 @@ public class BooleanQuery extends Query implements Iterable<BooleanClause> {
         // No-op : Do not flatten when the new query will violate max clause count
       }
     }
-
+    //返回的是自己
     return super.rewrite(reader);
   }
 

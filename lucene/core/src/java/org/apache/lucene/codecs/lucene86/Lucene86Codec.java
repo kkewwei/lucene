@@ -98,7 +98,7 @@ public class Lucene86Codec extends Codec {
 
   @Override
   public final StoredFieldsFormat storedFieldsFormat() {
-    return storedFieldsFormat;
+    return storedFieldsFormat; // 为Lucene50StoredFieldsFormat
   }
 
   @Override
@@ -118,12 +118,12 @@ public class Lucene86Codec extends Codec {
 
   @Override
   public final SegmentInfoFormat segmentInfoFormat() {
-    return segmentInfosFormat;
+    return segmentInfosFormat; // Lucene86SegmentInfoFormat
   }
 
   @Override
   public final LiveDocsFormat liveDocsFormat() {
-    return liveDocsFormat;
+    return liveDocsFormat; // Lucene50LiveDocsFormat
   }
 
   @Override

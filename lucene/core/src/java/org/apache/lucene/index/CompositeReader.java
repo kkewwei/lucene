@@ -49,10 +49,10 @@ import org.apache.lucene.store.*;
  synchronization, you should <b>not</b> synchronize on the
  <code>IndexReader</code> instance; use your own
  (non-Lucene) objects instead.
-*/
+*/ // 仅仅为了从LeafReaders中获取storedFields,而不能获取post信息。
 public abstract class CompositeReader extends IndexReader {
-
-  private volatile CompositeReaderContext readerContext = null; // lazy init
+  // 真正保存每个Segment读取的地方
+  private volatile CompositeReaderContext readerContext = null; // lazy init, CompositeReaderContext
 
   /** Sole constructor. (For invocation by subclass 
    *  constructors, typically implicit.) */
@@ -102,6 +102,6 @@ public abstract class CompositeReader extends IndexReader {
       assert getSequentialSubReaders() != null;
       readerContext = CompositeReaderContext.create(this);
     }
-    return readerContext;
+    return readerContext; //CompositeReaderContext，一个Shard下面所有的segment。会进来
   }
 }

@@ -215,17 +215,17 @@ import static org.apache.lucene.search.DocIdSetIterator.NO_MORE_DOCS;
  * keeps track of the last non commit checkpoint.
  */
 public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
-    MergePolicy.MergeContext {
-
+    MergePolicy.MergeContext { // 一个shard,只有一个IndexWriter
+  //IndexWriter通过调用DocumentWriter的方法，来操作写索引。初始化时，只是加载了segment元数据，索引内容并没有被Reader
   /** Hard limit on maximum number of documents that may be added to the
    *  index.  If you try to add more than this you'll hit {@code IllegalArgumentException}. */
   // We defensively subtract 128 to be well below the lowest
   // ArrayUtil.MAX_ARRAY_LENGTH on "typical" JVMs.  We don't just use
   // ArrayUtil.MAX_ARRAY_LENGTH here because this can vary across JVMs:
-  public static final int MAX_DOCS = Integer.MAX_VALUE - 128;
+  public static final int MAX_DOCS = Integer.MAX_VALUE - 128; // 2147483519
 
   /** Maximum value of the token position in an indexed field. */
-  public static final int MAX_POSITION = Integer.MAX_VALUE - 128;
+  public static final int MAX_POSITION = Integer.MAX_VALUE - 128; // 最大偏移量
 
   // Use package-private instance var to enforce the limit so testing
   // can use less electricity:
@@ -259,7 +259,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
   /** Source of a segment which results from a merge of other segments. */
   public static final String SOURCE_MERGE = "merge";
   /** Source of a segment which results from a flush. */
-  public static final String SOURCE_FLUSH = "flush";
+  public static final String SOURCE_FLUSH = "flush"; //
   /** Source of a segment which results from a call to {@link #addIndexes(CodecReader...)}. */
   public static final String SOURCE_ADDINDEXES_READERS = "addIndexes(CodecReader...)";
 
@@ -282,8 +282,8 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
   private final AtomicReference<Throwable> tragedy = new AtomicReference<>(null);
 
   private final Directory directoryOrig;       // original user directory
-  private final Directory directory;           // wrapped with additional checks
-
+  private final Directory directory;           // wrapped with additional checks   指向索引文件夹
+  // 当前lucene写入数据的段就是changeCount变量维护的
   private final AtomicLong changeCount = new AtomicLong(); // increments every time a change is completed
   private volatile long lastCommitChangeCount; // last changeCount that was committed
 
@@ -294,12 +294,12 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
   private volatile long pendingCommitChangeCount;
 
   private Collection<String> filesToCommit;
-
-  private final SegmentInfos segmentInfos;
+  // 在类初始话的时候，会去检查是否直接使用之前存在的段。shard恢复时会用之前的
+  private final SegmentInfos segmentInfos; // 目前这个shard维持的所有的段信息。ES中Refresh产生的字段会首先加入到这里面，加入了就代表将段公开可以查询了
   final FieldNumbers globalFieldNumberMap;
 
-  final DocumentsWriter docWriter;
-  private final EventQueue eventQueue = new EventQueue(this);
+  final DocumentsWriter docWriter;// DocumentsWriter， 一个shard，也只有一个DocumentsWriter
+  private final EventQueue eventQueue = new EventQueue(this);// 定义的一个事件queue，刷盘过程中的的一些必要操作会被封装为Event并放入eventQueue中国，这些事件会在刷盘完成之后进行处理。比如合并成复合文件后，需要删掉单个的文件。
   private final MergeScheduler.MergeSource mergeSource = new IndexWriterMergeSource(this);
 
   private final ReentrantLock writeDocValuesLock = new ReentrantLock();
@@ -349,9 +349,9 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
       assert Integer.MAX_VALUE - permits.availablePermits() > 0 : "must acquire a permit before processing events";
       Event event;
       while ((event = queue.poll()) != null) {
-        event.process(writer);
-      }
-    }
+        event.process(writer); // 1.会有segment通过mmap可查，靠这里。实际会进入FrozenBufferedUpdates.publishFrozenUpdates()里面的tryApply
+      } // 当refresh时第二次过来时候的才会对新的segment进行mmap操作
+    } //e1:删除废弃不是couple的文件。2.对存量segment进行删除操作
 
     @Override
     public synchronized void close() throws IOException { // synced to prevent double closing
@@ -383,7 +383,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
   private final Map<SegmentCommitInfo,Boolean> segmentsToMerge = new HashMap<>();
   private int mergeMaxNumSegments;
 
-  private Lock writeLock;
+  private Lock writeLock; // NativeFSLock  每一个索引文件夹只能打开一个 IndexWriter,所以需要锁
 
   private volatile boolean closed;
   private volatile boolean closing;
@@ -394,10 +394,10 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
 
   // Holds all SegmentInfo instances currently involved in
   // merges
-  private final HashSet<SegmentCommitInfo> mergingSegments = new HashSet<>();
-  private final MergeScheduler mergeScheduler;
+  private final HashSet<SegmentCommitInfo> mergingSegments = new HashSet<>(); // 正在合并的segment
+  private final MergeScheduler mergeScheduler; // InternalEngine$EngineMergeScheduler
   private final Set<SegmentMerger> runningAddIndexesMerges = new HashSet<>();
-  private final LinkedList<MergePolicy.OneMerge> pendingMerges = new LinkedList<>();
+  private final LinkedList<MergePolicy.OneMerge> pendingMerges = new LinkedList<>(); // 合并时从这里取，放入runningMerges中
   private final Set<MergePolicy.OneMerge> runningMerges = new HashSet<>();
   private final List<MergePolicy.OneMerge> mergeExceptions = new ArrayList<>();
   private long mergeGen;
@@ -406,7 +406,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
   private final AtomicInteger flushCount = new AtomicInteger();
   private final AtomicInteger flushDeletesCount = new AtomicInteger();
   private final ReaderPool readerPool;
-  private final BufferedUpdatesStream bufferedUpdatesStream;
+  private final BufferedUpdatesStream bufferedUpdatesStream; // 也是全局惟一的
 
   /** Counts how many merges have completed; this is used by {@link #forceApply(FrozenBufferedUpdates)}
    *  to handle concurrently apply deletes/updates with merges completing. */
@@ -431,7 +431,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
   private final DocumentsWriter.FlushNotifications flushNotifications = new DocumentsWriter.FlushNotifications() {
     @Override
     public void deleteUnusedFiles(Collection<String> files) {
-      eventQueue.add(w -> w.deleteNewFiles(files));
+      eventQueue.add(w -> w.deleteNewFiles(files)); // 删除掉单独的segent文件
     }
 
     @Override
@@ -460,10 +460,10 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
         }
       );
     }
-
-    @Override
+    // 这个会作为IndexWriter.eventQueue里面第2个event,在刷新完所有flush时会调用（见IndexWriter.doFlush()里面的processEvents）
+    @Override//会在
     public void onTicketBacklog() {
-      eventQueue.add(w -> w.publishFlushedSegments(true));
+      eventQueue.add(w -> w.publishFlushedSegments(true)); // w=IndexWriter
     }
   };
 
@@ -479,15 +479,15 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
    * quickly made available for searching without closing
    * the writer nor calling {@link #commit}.
    *
-   * <p>Note that this is functionally equivalent to calling
+   * <p>Note that this is functionally equivalent to calling  这个函数等价于调用flush，然后打开一个新的reader
    * {#flush} and then opening a new reader.  But the turnaround time of this
    * method should be faster since it avoids the potentially
    * costly {@link #commit}.</p>
    *
    * <p>You must close the {@link IndexReader} returned by
-   * this method once you are done using it.</p>
+   * this method once you are done using it.</p> // 当用完时必须主动调用close函数
    *
-   * <p>It's <i>near</i> real-time because there is no hard
+   * <p>It's <i>near</i> real-time because there is no hard 接近近实时搜索，是因为没有强制保存非常快的得到新的reader
    * guarantee on how quickly you can get a new reader after
    * making changes with IndexWriter.  You'll have to
    * experiment in your situation to determine if it's
@@ -545,8 +545,8 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
     // obtained during this flush are pooled, the first time
     // this method is called:
     readerPool.enableReaderPooling();
-    DirectoryReader r = null;
-    doBeforeFlush();
+    DirectoryReader r = null; // StandardDirectoryReader，近实时搜索
+    doBeforeFlush(); //啥都不做
     boolean anyChanges = false;
     /*
      * for releasing a NRT reader we must ensure that 
@@ -558,19 +558,19 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
     boolean success2 = false;
     try {
       boolean success = false;
-      synchronized (fullFlushLock) {
+      synchronized (fullFlushLock) { // 全部锁住了，es refresh时，只有一个节点会进来
         try {
           // TODO: should we somehow make the seqNo available in the returned NRT reader?
-          anyChanges = docWriter.flushAllThreads() < 0;
+          anyChanges = docWriter.flushAllThreads() < 0;// 会去刷新所有Thread,产生segment。仅仅是产生新的segment复合文件，并放入
           if (anyChanges == false) {
             // prevent double increment since docWriter#doFlush increments the flushcount
             // if we flushed anything.
             flushCount.incrementAndGet();
           }
-          publishFlushedSegments(true);
-          processEvents(false);
+          publishFlushedSegments(true); // 再调用一次刷新操作，基本没啥用
+          processEvents(false); // 接着把事件处理完，包括删除14个单个类型索引文件。通过mmap将新的文件打开，以供实时查询
 
-          if (applyAllDeletes) {
+          if (applyAllDeletes) { // 开始更新删除的文档
             applyAllDeletesAndUpdates();
           }
 
@@ -581,12 +581,12 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
 
             // TODO: we could instead just clone SIS and pull/incref readers in sync'd block, and then do this w/o IW's lock?
             // Must do this sync'd on IW to prevent a merge from completing at the last second and failing to write its DV updates:
-           writeReaderPool(writeAllDeletes);
+           writeReaderPool(writeAllDeletes); // 来将更新的文档写入DocValue
 
             // Prevent segmentInfos from changing while opening the
             // reader; in theory we could instead do similar retry logic,
             // just like we do when loading segments_N
-            
+            // 又重新打开了
             r = StandardDirectoryReader.open(this, segmentInfos, applyAllDeletes, writeAllDeletes);
             if (infoStream.isEnabled("IW")) {
               infoStream.message("IW", "return reader version=" + r.getVersion() + " reader=" + r);
@@ -596,10 +596,10 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
         } finally {
           // Done: finish the full flush!
           assert Thread.holdsLock(fullFlushLock);
-          docWriter.finishFullFlush(success);
+          docWriter.finishFullFlush(success); // 会将blockedFlushes里的DWPT转到flushQueue中
           if (success) {
             processEvents(false);
-            doAfterFlush();
+            doAfterFlush(); // 啥都不干
           } else {
             if (infoStream.isEnabled("IW")) {
               infoStream.message("IW", "hit exception during NRT reader");
@@ -607,8 +607,8 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
           }
         }
       }
-      anyChanges |= maybeMerge.getAndSet(false);
-      if (anyChanges) {
+      anyChanges |= maybeMerge.getAndSet(false); //
+      if (anyChanges) { // 这里会触发merge线程，比较重要的操作
         maybeMerge(config.getMergePolicy(), MergeTrigger.FULL_FLUSH, UNBOUNDED_MAX_MERGE_SEGMENTS);
       }
       if (infoStream.isEnabled("IW")) {
@@ -782,36 +782,36 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
     softDeletesEnabled = config.getSoftDeletesField() != null;
     // obtain the write.lock. If the user configured a timeout,
     // we wrap with a sleeper and this might take some time.
-    writeLock = d.obtainLock(WRITE_LOCK_NAME);
+    writeLock = d.obtainLock(WRITE_LOCK_NAME);  // NativeFSLock
     
     boolean success = false;
     try {
-      directoryOrig = d;
+      directoryOrig = d; // MMapDirectory
       directory = new LockValidatingDirectoryWrapper(d, writeLock);
       mergeScheduler = config.getMergeScheduler();
       mergeScheduler.initialize(infoStream, directoryOrig);
-      OpenMode mode = config.getOpenMode();
-      final boolean indexExists;
+      OpenMode mode = config.getOpenMode();//CREATE_OR_APPEND
+      final boolean indexExists;//是否存在段信息
       final boolean create;
       if (mode == OpenMode.CREATE) {
         indexExists = DirectoryReader.indexExists(directory);
         create = true;
-      } else if (mode == OpenMode.APPEND) {
+      } else if (mode == OpenMode.APPEND) { // ES一般跑这里
         indexExists = true;
         create = false;
       } else {
         // CREATE_OR_APPEND - create only if an index does not exist
-        indexExists = DirectoryReader.indexExists(directory);
-        create = !indexExists;
+        indexExists = DirectoryReader.indexExists(directory); // 找segments_N文件
+        create = !indexExists; // 若segments_N索引文件不在，那么就创建这个索引文件
       }
 
       // If index is too old, reading the segments will throw
       // IndexFormatTooOldException.
 
-      String[] files = directory.listAll();
+      String[] files = directory.listAll(); // 列举index_name/index里面的所有文件
 
       // Set up our initial SegmentInfos:
-      IndexCommit commit = config.getIndexCommit();
+      IndexCommit commit = config.getIndexCommit(); // 默认为null
 
       // Set up our initial SegmentInfos:
       StandardDirectoryReader reader;
@@ -820,8 +820,8 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
       } else {
         reader = commit.getReader();
       }
-
-      if (create) {
+      // 若Segments_N不存在，就创建
+      if (create) {// 节点重启，集群元数据恢复跑到这里
 
         if (config.getIndexCommit() != null) {
           // We cannot both open from a commit point and create:
@@ -836,12 +836,12 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
         // against an index that's currently open for
         // searching.  In this case we write the next
         // segments_N file with no segments:
-        final SegmentInfos sis = new SegmentInfos(config.getIndexCreatedVersionMajor());
-        if (indexExists) {
-          final SegmentInfos previous = SegmentInfos.readLatestCommit(directory);
-          sis.updateGenerationVersionAndCounter(previous);
+        final SegmentInfos sis = new SegmentInfos(config.getIndexCreatedVersionMajor()); // 仅仅确定了segment使用的版本号
+        if (indexExists) { // 这个文件是否有段信息
+          final SegmentInfos previous = SegmentInfos.readLatestCommit(directory);// 这个是之前的，读取出来没啥用呀
+          sis.updateGenerationVersionAndCounter(previous); // 初始化了本轮的generation
         }
-        segmentInfos = sis;
+        segmentInfos = sis; // 并没有把旧的semgents_1给用上，基本直接把旧的segments_1给丢弃了。
         rollbackSegments = segmentInfos.createBackupSegmentInfos();
 
         // Record that we have a change (zero out all
@@ -886,9 +886,9 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
         }
 
         rollbackSegments = lastCommit.createBackupSegmentInfos();
-      } else {
+      } else { // 节点重启，shard恢复跑到这里
         // Init from either the latest commit point, or an explicit prior commit point:
-
+        //读取Segments_n文件的数据
         String lastSegmentsFile = SegmentInfos.getLastCommitSegmentsFileName(files);
         if (lastSegmentsFile == null) {
           throw new IndexNotFoundException("no segments* file found in " + directory + ": files: " + Arrays.toString(files));
@@ -896,7 +896,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
 
         // Do not use SegmentInfos.read(Directory) since the spooky
         // retrying it does is not necessary here (we hold the write lock):
-        segmentInfos = SegmentInfos.readCommit(directoryOrig, lastSegmentsFile);
+        segmentInfos = SegmentInfos.readCommit(directoryOrig, lastSegmentsFile); // 从segments_1中读取所有存量的segment
 
         if (commit != null) {
           // Swap out all segments, but, keep metadata in
@@ -928,7 +928,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
 
       // start with previous field numbers, but new FieldInfos
       // NOTE: this is correct even for an NRT reader because we'll pull FieldInfos even for the un-committed segments:
-      globalFieldNumberMap = getFieldNumberMap();
+      globalFieldNumberMap = getFieldNumberMap(); // 读取每个存量字段的配置信息
 
       validateIndexSort();
 
@@ -946,7 +946,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
       // KeepOnlyLastCommitDeleter:
 
       // Sync'd is silly here, but IFD asserts we sync'd on the IW instance:
-      synchronized(this) {
+      synchronized(this) { // 这里也挺重要的，最终通过该类删除旧的segments_n
         deleter = new IndexFileDeleter(files, directoryOrig, directory,
                                        config.getIndexDeletionPolicy(),
                                        segmentInfos, infoStream, this,
@@ -1012,13 +1012,13 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
     }
     return Arrays.asList(fields1).equals(Arrays.asList(fields2).subList(0, fields1.length));
   }
-
+   // 读取字段配置信息
   // reads latest field infos for the commit
   // this is used on IW init and addIndexes(Dir) to create/update the global field map.
   // TODO: fix tests abusing this method!
   static FieldInfos readFieldInfos(SegmentCommitInfo si) throws IOException {
     Codec codec = si.info.getCodec();
-    FieldInfosFormat reader = codec.fieldInfosFormat();
+    FieldInfosFormat reader = codec.fieldInfosFormat();  //Lucene60FieldInfosFormat
     
     if (si.hasFieldUpdates()) {
       // there are updates, we read latest (always outside of CFS)
@@ -1042,9 +1042,9 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
   private FieldNumbers getFieldNumberMap() throws IOException {
     final FieldNumbers map = new FieldNumbers(config.softDeletesField);
 
-    for(SegmentCommitInfo info : segmentInfos) {
+    for(SegmentCommitInfo info : segmentInfos) { // 每个segment遍历
       FieldInfos fis = readFieldInfos(info);
-      for(FieldInfo fi : fis) {
+      for(FieldInfo fi : fis) {// 每个域过滤，获取全局的字段类型信息
         map.addOrGet(fi.name, fi.number, fi.getIndexOptions(), fi.getDocValuesType(), fi.getPointDimensionCount(), fi.getPointIndexDimensionCount(), fi.getPointNumBytes(), fi.isSoftDeletesField());
       }
     }
@@ -1257,7 +1257,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
    *
    * @throws CorruptIndexException if the index is corrupt
    * @throws IOException if there is a low-level IO error
-   */
+   */ // 比较纯粹的一个API，就是向Lucene内新增一个文档。Lucene内部没有主键索引，所有新增文档都会被认为一个新的文档，分配一个独立的docId。
   public long addDocument(Iterable<? extends IndexableField> doc) throws IOException {
     return updateDocument(null, doc);
   }
@@ -1325,7 +1325,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
   public long updateDocuments(Term delTerm, Iterable<? extends Iterable<? extends IndexableField>> docs) throws IOException {
     return updateDocuments(delTerm == null ? null : DocumentsWriterDeleteQueue.newNode(delTerm), docs);
   }
-
+  // 更新文档，但是和数据库的更新不太一样。数据库的更新是查询后更新，Lucene的更新是查询后删除再新增。流程是先delete by term，后add document。但是这个流程又和直接先调用delete后调用add效果不一样，只有update能够保证在Thread内部删除和新增保证原子性，详细流程在下一章节会细说。
   private long updateDocuments(final DocumentsWriterDeleteQueue.Node<?> delNode, Iterable<? extends Iterable<? extends IndexableField>> docs) throws IOException {
     ensureOpen();
     boolean success = false;
@@ -1558,7 +1558,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
    * to be deleted
    * @throws CorruptIndexException if the index is corrupt
    * @throws IOException if there is a low-level IO error
-   */
+   */ // 删除文档，支持两种类型删除，by term和by query。在IndexWriter内部这两种删除的流程不太一样，
   public long deleteDocuments(Term... terms) throws IOException {
     ensureOpen();
     try {
@@ -1614,7 +1614,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
    * @param doc the document to be added
    * @throws CorruptIndexException if the index is corrupt
    * @throws IOException if there is a low-level IO error
-   */
+   */ // 删除包含term的文档，使用新的代理
   public long updateDocument(Term term, Iterable<? extends IndexableField> doc) throws IOException {
     return updateDocuments(term == null ? null : DocumentsWriterDeleteQueue.newNode(term), Collections.singletonList(doc));
   }
@@ -1849,7 +1849,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
   public Set<String> getFieldNames() {
     return globalFieldNumberMap.getFieldNames(); // FieldNumbers#getFieldNames() returns an unmodifiableSet
   }
-
+  // 获取新的segment名称
   private String newSegmentName() {
     // Cannot synchronize on IndexWriter because that causes
     // deadlock
@@ -1860,7 +1860,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
       // name that was previously returned which can cause
       // problems at least with ConcurrentMergeScheduler.
       changeCount.incrementAndGet();
-      segmentInfos.changed();
+      segmentInfos.changed(); // 这里也会导致
       return "_" + Long.toString(segmentInfos.counter++, Character.MAX_RADIX);
     }
   }
@@ -2140,18 +2140,18 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
    * 
    * This method will call the {@link MergePolicy} with
    * {@link MergeTrigger#EXPLICIT}.
-   */
+   */ // 一切开始的地方
   public final void maybeMerge() throws IOException {
     maybeMerge(config.getMergePolicy(), MergeTrigger.EXPLICIT, UNBOUNDED_MAX_MERGE_SEGMENTS);
   }
-
+  // fluhs会触发，mergePolicy=ElasticsearchMergePolicy， MergeTrigger=FULL_FLUSH
   private final void maybeMerge(MergePolicy mergePolicy, MergeTrigger trigger, int maxNumSegments) throws IOException {
     ensureOpen(false);
-    if (updatePendingMerges(mergePolicy, trigger, maxNumSegments) != null) {
-      mergeScheduler.merge(mergeSource, trigger);
+    if (updatePendingMerges(mergePolicy, trigger, maxNumSegments) != null) { // 更新
+      mergeScheduler.merge(mergeSource, trigger); //mergeScheduler=InternalEngine$EngineMergeScheduler
     }
   }
-
+  // EsTieredMergePolicy
   private synchronized MergePolicy.MergeSpecification updatePendingMerges(MergePolicy mergePolicy, MergeTrigger trigger, int maxNumSegments)
     throws IOException {
 
@@ -2171,7 +2171,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
     }
 
     final MergePolicy.MergeSpecification spec;
-    if (maxNumSegments != UNBOUNDED_MAX_MERGE_SEGMENTS) {
+    if (maxNumSegments != UNBOUNDED_MAX_MERGE_SEGMENTS) { // 是强制合并merge
       assert trigger == MergeTrigger.EXPLICIT || trigger == MergeTrigger.MERGE_FINISHED :
       "Expected EXPLICT or MERGE_FINISHED as trigger even with maxNumSegments set but was: " + trigger.name();
 
@@ -2183,19 +2183,19 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
           merge.maxNumSegments = maxNumSegments;
         }
       }
-    } else {
+    } else {// 是主动merge, 那么就去选择
       switch (trigger) {
-        case COMMIT:
-          spec = mergePolicy.findFullFlushMerges(trigger, segmentInfos, this);
+        case COMMIT: // 当主动commit时，会跑这里
+          spec = mergePolicy.findFullFlushMerges(trigger, segmentInfos, this); // ElasticsearchMergePolicy，实际进入的实际
           break;
-        default:
+        default: // 首先跑到的是FilterMergePolicy(类是ElasticsearchMergePolicy)
           spec = mergePolicy.findMerges(trigger, segmentInfos, this);
       }
     }
     if (spec != null) {
-      final int numMerges = spec.merges.size();
+      final int numMerges = spec.merges.size();  // 从中选出的一组
       for(int i=0;i<numMerges;i++) {
-        registerMerge(spec.merges.get(i));
+        registerMerge(spec.merges.get(i)); // 把需要merge的段放带merge的段中
       }
     }
     return spec;
@@ -2447,7 +2447,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
               abortMerges();
               adjustPendingNumDocs(-segmentInfos.totalMaxDoc());
               // Remove all segments
-              segmentInfos.clear();
+              segmentInfos.clear(); // 清空该segment下所有segment
               // Ask deleter to locate unreferenced files & remove them:
               deleter.checkpoint(segmentInfos, false);
 
@@ -2574,16 +2574,16 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
   }
 
   /** Called internally if any index state has changed. */
-  private synchronized void changed() {
+  private synchronized void changed() { // 任何写入删除，都会调用
     changeCount.incrementAndGet();
-    segmentInfos.changed();
+    segmentInfos.changed(); // segementInfos version总体+1
   }
 
   private synchronized long publishFrozenUpdates(FrozenBufferedUpdates packet) {
     assert packet != null && packet.any();
     long nextGen = bufferedUpdatesStream.push(packet);
     // Do this as an event so it applies higher in the stack when we are not holding DocumentsWriterFlushQueue.purgeLock:
-    eventQueue.add(w -> {
+    eventQueue.add(w -> { // 放入一个event,将调用FrozenBufferedUpdates.apply(IndexWriter)方法。最终会在IndexWriter.doFlush结束docWriter.flushAllThreads()之后调用processEvents(false)进行处理：
       try {
         // we call tryApply here since we don't want to block if a refresh or a flush is already applying the
         // packet. The flush will retry this packet anyway to ensure all of them are applied
@@ -2604,7 +2604,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
   /**
    * Atomically adds the segment private delete packet and publishes the flushed
    * segments SegmentInfo to the index writer.
-   */
+   */ // flush里面，将新增产生的段加入IndexWriter中，
   private synchronized void publishFlushedSegment(SegmentCommitInfo newSegment, FieldInfos fieldInfos,
                                                   FrozenBufferedUpdates packet, FrozenBufferedUpdates globalPacket,
                                                   Sorter.DocMap sortMap) throws IOException {
@@ -2616,17 +2616,17 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
       if (infoStream.isEnabled("IW")) {
         infoStream.message("IW", "publishFlushedSegment " + newSegment);
       }
-
+      // 有删除时的更新操作
       if (globalPacket != null && globalPacket.any()) {
-        publishFrozenUpdates(globalPacket);
+        publishFrozenUpdates(globalPacket); //         //这里处理DWPT刷新时冻结的globalBufferedUpdates
       }
 
       // Publishing the segment must be sync'd on IW -> BDS to make the sure
       // that no merge prunes away the seg. private delete packet
       final long nextGen;
-      if (packet != null && packet.any()) {
+      if (packet != null && packet.any()) { // 有删除，就跑这里
         nextGen = publishFrozenUpdates(packet);
-      } else {
+      } else { // 跑这里
         // Since we don't have a delete packet to apply we can get a new
         // generation right away
         nextGen = bufferedUpdatesStream.getNextGen();
@@ -2635,8 +2635,8 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
       }
       if (infoStream.isEnabled("IW")) {
         infoStream.message("IW", "publish sets newSegment delGen=" + nextGen + " seg=" + segString(newSegment));
-      }
-      newSegment.setBufferedDeletesGen(nextGen);
+      } // 详见https://www.jianshu.com/p/dc8e8f3c0d29的解释
+      newSegment.setBufferedDeletesGen(nextGen); //根据上面的注释也发现了globalBufferedUpdates优先级要小于pendingUpdates
       segmentInfos.add(newSegment);
       published = true;
       checkpoint();
@@ -2646,15 +2646,15 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
         ReadersAndUpdates rld = getPooledInstance(newSegment, true);
         rld.sortMap = sortMap;
         // DON't release this ReadersAndUpdates we need to stick with that sortMap
-      }
+      } // 没有需要删除的文档
       FieldInfo fieldInfo = fieldInfos.fieldInfo(config.softDeletesField); // will return null if no soft deletes are present
       // this is a corner case where documents delete them-self with soft deletes. This is used to
       // build delete tombstones etc. in this case we haven't seen any updates to the DV in this fresh flushed segment.
       // if we have seen updates the update code checks if the segment is fully deleted.
-      boolean hasInitialSoftDeleted = (fieldInfo != null
+      boolean hasInitialSoftDeleted = (fieldInfo != null // 默认为null
           && fieldInfo.getDocValuesGen() == -1
           && fieldInfo.getDocValuesType() != DocValuesType.NONE);
-      final boolean isFullyHardDeleted = newSegment.getDelCount() == newSegment.info.maxDoc();
+      final boolean isFullyHardDeleted = newSegment.getDelCount() == newSegment.info.maxDoc(); // 新segment是否全部删除
       // we either have a fully hard-deleted segment or one or more docs are soft-deleted. In both cases we need
       // to go and check if they are fully deleted. This has the nice side-effect that we now have accurate numbers
       // for the soft delete right after we flushed to disk.
@@ -2677,7 +2677,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
         adjustPendingNumDocs(-newSegment.info.maxDoc());
       }
       flushCount.incrementAndGet();
-      doAfterFlush();
+      doAfterFlush(); // 啥都不做
     }
 
   }
@@ -3135,7 +3135,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
    * of the last operation in the commit.  All sequence numbers &lt;= this value
    * will be reflected in the commit, and all others will not.
    */
-  @Override
+  @Override  // commit后数据才可被搜索，commit是一个二阶段操作，prepareCommit是二阶段操作的第一个阶段，也可以通过调用commit一步完成，rollback提供了回滚到last commit的操作。
   public final long prepareCommit() throws IOException {
     ensureOpen();
     pendingSeqNo = prepareCommitInternal();
@@ -3173,7 +3173,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
       maybeCloseOnTragicEvent();
     }
   }
-
+  // flush和commit，每个commit都有个Id
   private long prepareCommitInternal() throws IOException {
     startCommitTime = System.nanoTime();
     synchronized(commitLock) {
@@ -3191,7 +3191,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
         throw new IllegalStateException("prepareCommit was already called with no corresponding call to commit");
       }
 
-      doBeforeFlush();
+      doBeforeFlush(); // 啥都没做
       testPoint("startDoFlush");
       SegmentInfos toCommit = null;
       boolean anyChanges = false;
@@ -3242,7 +3242,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
                 for(Map.Entry<String,String> ent : commitUserData) {
                   userData.put(ent.getKey(), ent.getValue());
                 }
-                segmentInfos.setUserData(userData, false);
+                segmentInfos.setUserData(userData, false); // 添加segmentInfos
               }
 
               // Must clone the segmentInfos while we still
@@ -3274,7 +3274,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
             assert Thread.holdsLock(fullFlushLock);
             // Done: finish the full flush!
             docWriter.finishFullFlush(flushSuccess);
-            doAfterFlush();
+            doAfterFlush(); // 啥都没做
           }
         }
       } catch (VirtualMachineError tragedy) {
@@ -3303,9 +3303,9 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
       filesToCommit = toCommit.files(false);
       try {
         if (anyChanges) {
-          maybeMerge.set(true);
+          maybeMerge.set(true); // 这里说可能需要合并，后面会去检查
         }
-        startCommit(toCommit);
+        startCommit(toCommit); // 会有文件刷新操作
         if (pendingCommit == null) {
           return -1;
         } else {
@@ -3449,7 +3449,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
   private void writeReaderPool(boolean writeDeletes) throws IOException {
     assert Thread.holdsLock(this);
     if (writeDeletes) {
-      if (readerPool.commit(segmentInfos)) {
+      if (readerPool.commit(segmentInfos)) { // 构建_n.liv文件
         checkpointNoSIS();
       }
     } else { // only write the docValues
@@ -3459,15 +3459,15 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
     }
     // now do some best effort to check if a segment is fully deleted
     List<SegmentCommitInfo> toDrop = new ArrayList<>(); // don't modify segmentInfos in-place
-    for (SegmentCommitInfo info : segmentInfos) {
-      ReadersAndUpdates readersAndUpdates = readerPool.get(info, false);
+    for (SegmentCommitInfo info : segmentInfos) { // 两个Segment
+      ReadersAndUpdates readersAndUpdates = readerPool.get(info, false); // 没有会去创建。刚启动的节点
       if (readersAndUpdates != null) {
         if (isFullyDeleted(readersAndUpdates)) {
           toDrop.add(info);
         }
       }
     }
-    for (SegmentCommitInfo info : toDrop) {
+    for (SegmentCommitInfo info : toDrop) { // 删除整个semgent文件
       dropDeletedSegment(info);
     }
     if (toDrop.isEmpty() == false) {
@@ -3512,7 +3512,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
   
   // Used only by commit and prepareCommit, below; lock
   // order is commitLock -> IW
-  private final Object commitLock = new Object();
+  private final Object commitLock = new Object(); // 调用IndexWriter.commit()时会锁起来
 
   /**
    * <p>Commits all pending changes (added and deleted
@@ -3535,7 +3535,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
    * performance.  If you have such a device, and it does
    * not have a battery backup (for example) then on power
    * loss it may still lose data.  Lucene cannot guarantee
-   * consistency on such devices.  </p>
+   * consistency on such devices.  </p> // 若你自己添加了一个磁盘缓存文件，尽管调用刷盘，但是实际还没在盘中
    *
    * <p> If nothing was committed, because there were no
    * pending changes, this returns -1.  Otherwise, it returns
@@ -3548,10 +3548,10 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
    * @return The <a href="#sequence_number">sequence number</a>
    * of the last operation in the commit.  All sequence numbers &lt;= this value
    * will be reflected in the commit, and all others will not.
-   */
-  @Override
+   */ //  commit后数据才可被搜索，commit是一个二阶段操作，prepareCommit是二阶段操作的第一个阶段，也可以通过调用commit一步完成，rollback提供了回滚到last commit的操作。
+  @Override // flush和commit都会将索引落盘，只是提交并没有更新内存中的索引，若不commit, 则永远查询不到
   public final long commit() throws IOException {
-    ensureOpen();
+    ensureOpen(); // es的refresh=lucene的flush，es的flush=lucene的commit
     return commitInternal(config.getMergePolicy());
   }
 
@@ -3574,7 +3574,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
   boolean hasChangesInRam() {
     return docWriter.anyChanges() || bufferedUpdatesStream.any();
   }
-
+  // TieredMergePolicy
   private long commitInternal(MergePolicy mergePolicy) throws IOException {
 
     if (infoStream.isEnabled("IW")) {
@@ -3594,7 +3594,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
         if (infoStream.isEnabled("IW")) {
           infoStream.message("IW", "commit: now prepare");
         }
-        seqNo = prepareCommitInternal();
+        seqNo = prepareCommitInternal(); // 直接电泳需要进来看下
       } else {
         if (infoStream.isEnabled("IW")) {
           infoStream.message("IW", "commit: already prepared");
@@ -3634,7 +3634,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
             if (infoStream.isEnabled("IW")) {
               infoStream.message("IW", "commit: pendingCommit != null");
             }
-
+            // 完成pending_segments_(n+1) ->segments_(n+1)命名转变
             committedSegmentsFileName = pendingCommit.finishCommit(directory);
 
             // we committed, if anything goes wrong after this, we are screwed and it's a tragedy:
@@ -3646,7 +3646,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
 
             // NOTE: don't use this.checkpoint() here, because
             // we do not want to increment changeCount:
-            deleter.checkpoint(pendingCommit, true);
+            deleter.checkpoint(pendingCommit, true); // 会有文件删除操作
 
             // Carry over generation to our master SegmentInfos:
             segmentInfos.updateGeneration(pendingCommit);
@@ -3684,13 +3684,13 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
 
   // Ensures only one flush() is actually flushing segments
   // at a time:
-  private final Object fullFlushLock = new Object();
-  
+  private final Object fullFlushLock = new Object(); // 开始flush时确保只有一个线程在flush
+  // 触发强制flush，将所有Thread的In-memory buffer flush成segment文件，这个动作可以清理内存，强制对数据做持久化
   /** Moves all in-memory segments to the {@link Directory}, but does not commit
    *  (fsync) them (call {@link #commit} for that). */
-  public final void flush() throws IOException {
+  public final void flush() throws IOException {// es的refresh=lucene的flush，es的flush=lucene的commit
     flush(true, true);
-  }
+  }// flush和commit都会将索引落盘，只是提交并没有更新内存中的索引，若不commit, 则永远查询不到
 
   /**
    * Flush all in-memory buffered updates (adds and deletes)
@@ -3698,7 +3698,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
    * @param triggerMerge if true, we may merge segments (if
    *  deletes or docs were flushed) if necessary
    * @param applyAllDeletes whether pending deletes should also
-   */
+   */ // flush
   final void flush(boolean triggerMerge, boolean applyAllDeletes) throws IOException {
 
     // NOTE: this method cannot be sync'd because
@@ -3714,14 +3714,14 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
       maybeMerge(config.getMergePolicy(), MergeTrigger.FULL_FLUSH, UNBOUNDED_MAX_MERGE_SEGMENTS);
     }
   }
-
+  // 当indexWriter.addDocument完文档后，我们主动调动flush
   /** Returns true a segment was flushed or deletes were applied. */
   private boolean doFlush(boolean applyAllDeletes) throws IOException {
     if (tragedy.get() != null) {
       throw new IllegalStateException("this writer hit an unrecoverable error; cannot flush", tragedy.get());
     }
 
-    doBeforeFlush();
+    doBeforeFlush(); // 什么都不做
     testPoint("startDoFlush");
     boolean success = false;
     try {
@@ -3735,8 +3735,8 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
       synchronized (fullFlushLock) {
         boolean flushSuccess = false;
         try {
-          long seqNo = docWriter.flushAllThreads() ;
-          if (seqNo < 0) {
+          long seqNo = docWriter.flushAllThreads() ; // 进去后，会触发所有线程的flush操作
+          if (seqNo < 0) { // 为负数，仅仅是为了标记
             seqNo = -seqNo;
             anyChanges = true;
           } else {
@@ -3750,8 +3750,8 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
           flushSuccess = true;
         } finally {
           assert Thread.holdsLock(fullFlushLock);;
-          docWriter.finishFullFlush(flushSuccess);
-          processEvents(false);
+          docWriter.finishFullFlush(flushSuccess); // 我们主动调用
+          processEvents(false);// 开始处理一些event，比如对新建segment进行mmap打开。对存量segment进行删除操作
         }
       }
 
@@ -3762,7 +3762,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
       anyChanges |= maybeMerge.getAndSet(false);
       
       synchronized(this) {
-        writeReaderPool(applyAllDeletes);
+        writeReaderPool(applyAllDeletes); // 若有删除的话，写入_n.liv文件
         doAfterFlush();
         success = true;
         return anyChanges;
@@ -4187,8 +4187,8 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
           if (infoStream.isEnabled("IW")) {
             infoStream.message("IW", "now merge\n  merge=" + segString(merge.segments) + "\n  index=" + segString());
           }
-          mergeMiddle(merge, mergePolicy);
-          mergeSuccess(merge);
+          mergeMiddle(merge, mergePolicy);// 会发生merge中断
+          mergeSuccess(merge);// 啥都不做
           success = true;
         } catch (Throwable t) {
           handleMergeException(t, merge);
@@ -4210,7 +4210,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
             // This merge (and, generally, any change to the
             // segments) may now enable new merges, so we call
             // merge policy & update pending merges.
-            updatePendingMerges(mergePolicy, MergeTrigger.MERGE_FINISHED, merge.maxNumSegments);
+            updatePendingMerges(mergePolicy, MergeTrigger.MERGE_FINISHED, merge.maxNumSegments); // 重新更新下merge, maxNumSegments=-1
           }
         }
       }
@@ -4256,13 +4256,13 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
 
     boolean isExternal = false;
     for(SegmentCommitInfo info : merge.segments) {
-      if (mergingSegments.contains(info)) {
+      if (mergingSegments.contains(info)) { // 被包含在已经合并中了
         if (infoStream.isEnabled("IW")) {
           infoStream.message("IW", "reject merge " + segString(merge.segments) + ": segment " + segString(info) + " is already marked for merge");
         }
         return false;
       }
-      if (!segmentInfos.contains(info)) {
+      if (!segmentInfos.contains(info)) { // 不存在了
         if (infoStream.isEnabled("IW")) {
           infoStream.message("IW", "reject merge " + segString(merge.segments) + ": segment " + segString(info) + " does not exist in live infos");
         }
@@ -4271,14 +4271,14 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
       if (info.info.dir != directoryOrig) {
         isExternal = true;
       }
-      if (segmentsToMerge.containsKey(info)) {
+      if (segmentsToMerge.containsKey(info)) { // 已经处于待合并中了
         merge.maxNumSegments = mergeMaxNumSegments;
       }
     }
 
     ensureValidMerge(merge);
 
-    pendingMerges.add(merge);
+    pendingMerges.add(merge); // 放入
 
     if (infoStream.isEnabled("IW")) {
       infoStream.message("IW", "add merge to pendingMerges: " + segString(merge.segments) + " [total " + pendingMerges.size() + " pending]");
@@ -4533,7 +4533,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
         return rld.getReaderForMerge(context);
       });
       // Let the merge wrap readers
-      List<CodecReader> mergeReaders = new ArrayList<>();
+      List<CodecReader> mergeReaders = new ArrayList<>(); //SegmentReader
       Counter softDeleteCount = Counter.newCounter(false);
       for (MergePolicy.MergeReader mergeReader : merge.getMergeReader()) {
         SegmentReader reader = mergeReader.reader;
@@ -4583,7 +4583,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
 
       // This is where all the work happens:
       if (merger.shouldMerge()) {
-        merger.merge();
+        merger.merge(); // 这里是真正发生merge的地方，还有merge中断
       }
 
       MergeState mergeState = merger.mergeState;
@@ -4911,7 +4911,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
           // Exception here means nothing is prepared
           // (this method unwinds everything it did on
           // an exception)
-          toSync.prepareCommit(directory);
+          toSync.prepareCommit(directory);  // 创建了临时文件pending_segments_(n+1)
           if (infoStream.isEnabled("IW")) {
             infoStream.message("IW", "startCommit: wrote pending segments file \"" + IndexFileNames.fileNameFromGeneration(IndexFileNames.PENDING_SEGMENTS, "", toSync.getGeneration()) + "\"");
           }
@@ -4925,7 +4925,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
         boolean success = false;
         final Collection<String> filesToSync;
         try {
-          filesToSync = toSync.files(false);
+          filesToSync = toSync.files(false); // 获取这个segment有关的所有文件
           directory.sync(filesToSync);
           success = true;
         } finally {
@@ -5065,13 +5065,13 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
       infoStream.message("TP", message);
     }
   }
-
+  // 这个函数决定是否需要refresh
   synchronized boolean nrtIsCurrent(SegmentInfos infos) {
-    ensureOpen();
-    boolean isCurrent = infos.getVersion() == segmentInfos.getVersion()
-      && docWriter.anyChanges() == false
+    ensureOpen(); // 有两个segmentInfos,一个属于IndexWriter,一个属于StandardDirectoryReader
+    boolean isCurrent = infos.getVersion() == segmentInfos.getVersion() // 存量，版本要一致,只要产生DefaultIndexChain，都会增加版本号
+      && docWriter.anyChanges() == false // 增量
       && bufferedUpdatesStream.any() == false
-      && readerPool.anyDocValuesChanges() == false;
+      && readerPool.anyDocValuesChanges() == false; // 存量segments是否有更新操作
     if (infoStream.isEnabled("IW")) {
       if (isCurrent == false) {
         infoStream.message("IW", "nrtIsCurrent: infoVersion matches: " + (infos.getVersion() == segmentInfos.getVersion()) + "; DW changes: " + docWriter.anyChanges() + "; BD changes: "+ bufferedUpdatesStream.any());
@@ -5138,7 +5138,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
     }
     // Now merge all added files    
     boolean success = false;
-    try {
+    try { // 成功将每个索引文件组合成了复合文件
       info.getCodec().compoundFormat().write(directory, info, context);
       success = true;
     } finally {
@@ -5178,28 +5178,28 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
     }
   }
 
-  /**
+  /** // segment内部的删除
    * Publishes the flushed segment, segment-private deletes (if any) and its
    * associated global delete (if present) to IndexWriter.  The actual
    * publishing operation is synced on {@code IW -> BDS} so that the {@link SegmentInfo}'s
    * delete generation is always GlobalPacket_deleteGeneration + 1
    * @param forced if <code>true</code> this call will block on the ticket queue if the lock is held by another thread.
    *               if <code>false</code> the call will try to acquire the queue lock and exits if it's held by another thread.
-   *
-   */
+   * //发布生成的段的过程描述的是依次从Queue<FlushTicket> queue中取出FlushTicket，将其包含全局删除信息的FrozenBufferedUpdates对象作用到当前索引目录中已有的段的过程，同时还是对FlushedSegment对象进行最终处理的过程，比如找出未处理的删除信息（在文档提交之flush（三）中我们只找出了部分删除的文档）等一些操作
+   */ // 公布这个segment,是将新产生的Segment放入IndexWriter.segmentInfos中罢了，打开是在IndexWriter.getReader()
   private void publishFlushedSegments(boolean forced) throws IOException {
-    docWriter.purgeFlushTickets(forced, ticket -> {
-      DocumentsWriterPerThread.FlushedSegment newSegment = ticket.getFlushedSegment();
-      FrozenBufferedUpdates bufferedUpdates = ticket.getFrozenUpdates();
-      ticket.markPublished();
-      if (newSegment == null) { // this is a flushed global deletes package - not a segments
+    docWriter.purgeFlushTickets(forced, ticket -> { // 清除这个ticket
+      DocumentsWriterPerThread.FlushedSegment newSegment = ticket.getFlushedSegment(); // 获取这个Segment
+      FrozenBufferedUpdates bufferedUpdates = ticket.getFrozenUpdates(); // 这个是全局冻结的bufferedUpdates,这里啥时候添加进来的
+      ticket.markPublished(); // 标记ticket已执行
+      if (newSegment == null) { // this is a flushed global deletes package - not a segments 表示是DocumentsWriter.flushAllThreads在flush完所有DWPT后，使用ticketQueue.addDeletes(flushingDeleteQueue)放入的globalQueue
         if (bufferedUpdates != null && bufferedUpdates.any()) { // TODO why can this be null?
           publishFrozenUpdates(bufferedUpdates);
           if (infoStream.isEnabled("IW")) {
             infoStream.message("IW", "flush: push buffered updates: " + bufferedUpdates);
           }
         }
-      } else {
+      } else {  //每个DWPT刷盘之后放入的FlushedSegment
         assert newSegment.segmentInfo != null;
         if (infoStream.isEnabled("IW")) {
           infoStream.message("IW", "publishFlushedSegment seg-private updates=" + newSegment.segmentUpdates);
@@ -5207,7 +5207,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
         if (newSegment.segmentUpdates != null && infoStream.isEnabled("DW")) {
           infoStream.message("IW", "flush: push buffered seg private updates: " + newSegment.segmentUpdates);
         }
-        // now publish!
+        // now publish!  将这个segment对外可见了(调用子函数)
         publishFlushedSegment(newSegment.segmentInfo, newSegment.fieldInfos, newSegment.segmentUpdates,
             bufferedUpdates, newSegment.sortMap);
       }
@@ -5265,7 +5265,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
    * encoded inside the {@link #process(IndexWriter)} method.
    *
    */
-  @FunctionalInterface
+  @FunctionalInterface// 必须要是函数
   interface Event {
     /**
      * Processes the event. This method is called by the {@link IndexWriter}
@@ -5323,7 +5323,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
   }
 
   final boolean isFullyDeleted(ReadersAndUpdates readersAndUpdates) throws IOException {
-    if (readersAndUpdates.isFullyDeleted()) {
+    if (readersAndUpdates.isFullyDeleted()) { // 若segment文档全部需要删除
       assert Thread.holdsLock(this);
       return readersAndUpdates.keepFullyDeletedSegment(config.getMergePolicy()) == false;
     }
@@ -5366,10 +5366,10 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
       checkpointNoSIS();
     }
   }
-
+  //
   ReadersAndUpdates getPooledInstance(SegmentCommitInfo info, boolean create) {
     ensureOpen(false);
-    return readerPool.get(info, create);
+    return readerPool.get(info, create); // 没有的话，需要创建的话，就创建。refresh刷新时，新segment就没有注册
   }
 
 // FrozenBufferedUpdates
@@ -5398,7 +5398,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
    * Translates a frozen packet of delete term/query, or doc values
    * updates, into their actual docIDs in the index, and applies the change.  This is a heavy
    * operation and is done concurrently by incoming indexing threads.
-   */
+   */ // 将updates转变为真是的docIDs
   final void forceApply(FrozenBufferedUpdates updates) throws IOException {
     updates.lock();
     try {
@@ -5409,7 +5409,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
       long startNS = System.nanoTime();
 
       assert updates.any();
-
+      // 发现没啥用
       Set<SegmentCommitInfo> seenSegments = new HashSet<>();
 
       int iter = 0;
@@ -5424,7 +5424,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
       while (true) {
         String messagePrefix;
         if (iter == 0) {
-          messagePrefix = "";
+          messagePrefix = ""; // 跑到这里了
         } else {
           messagePrefix = "iter " + iter;
         }
@@ -5436,7 +5436,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
         Set<String> delFiles = new HashSet<>();
         BufferedUpdatesStream.SegmentState[] segStates;
 
-        synchronized (this) {
+        synchronized (this) {      //取得IndexWriter里维护的SegmentInfos
           List<SegmentCommitInfo> infos = getInfosToApply(updates);
           if (infos == null) {
             break;
@@ -5445,7 +5445,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
           for (SegmentCommitInfo info : infos) {
             delFiles.addAll(info.files());
           }
-
+          // 还是有点重要，对新建里的segment使用mmap打开了
           // Must open while holding IW lock so that e.g. segments are not merged
           // away, dropped from 100% deletions, etc., before we can open the readers
           segStates = openSegmentStates(infos, seenSegments, updates.delGen());
@@ -5476,7 +5476,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
         try (Closeable finalizer = () -> finishApply(segStates, success.get(), delFiles)) {
           assert finalizer != null; // access the finalizer to prevent a warning
           // don't hold IW monitor lock here so threads are free concurrently resolve deletes/updates:
-          delCount = updates.apply(segStates);
+          delCount = updates.apply(segStates); // 开始进行对存量segment的删除操作
           success.set(true);
         }
 
@@ -5509,7 +5509,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
             // Must do this while still holding IW lock else a merge could finish and skip carrying over our updates:
 
             // Record that this packet is finished:
-            bufferedUpdatesStream.finished(updates);
+            bufferedUpdatesStream.finished(updates); // 就是FrozenBufferedUpdates
 
             finished = true;
 
@@ -5552,7 +5552,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
    *  if the private segment was already merged away. */
   private synchronized List<SegmentCommitInfo> getInfosToApply(FrozenBufferedUpdates updates) {
     final List<SegmentCommitInfo> infos;
-    if (updates.privateSegment != null) {
+    if (updates.privateSegment != null) { // 对refresh的segment,只有跑这里才会进行mmap
       if (segmentInfos.contains(updates.privateSegment)) {
         infos = Collections.singletonList(updates.privateSegment);
       }else {
@@ -5631,10 +5631,10 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
     List<BufferedUpdatesStream.SegmentState> segStates = new ArrayList<>();
     try {
       for (SegmentCommitInfo info : infos) {
-        if (info.getBufferedDeletesGen() <= delGen && alreadySeenSegments.contains(info) == false) {
-          segStates.add(new BufferedUpdatesStream.SegmentState(getPooledInstance(info, true), this::release, info));
+        if (info.getBufferedDeletesGen() <= delGen && alreadySeenSegments.contains(info) == false) { // 打开前提是版本小些
+          segStates.add(new BufferedUpdatesStream.SegmentState(getPooledInstance(info, true), this::release, info)); // new BufferedUpdatesStream.SegmentState对新创建的Segment，若没有reader,那么就创建Reader（使用mmap映射）
           alreadySeenSegments.add(info);
-        }
+        } //
       }
     } catch (Throwable t) {
       try {

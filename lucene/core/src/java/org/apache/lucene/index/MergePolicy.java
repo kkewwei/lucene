@@ -86,9 +86,9 @@ public abstract class MergePolicy {
     /** Reason for pausing the merge thread. */
     public enum PauseReason {
       /** Stopped (because of throughput rate set to 0, typically). */
-      STOPPED,
+      STOPPED,  // 直接限制为0mb
       /** Temporarily paused because of exceeded throughput rate. */
-      PAUSED,
+      PAUSED, // 比如限制5mb，目前是10mb，那么暂停
       /** Other reason. */
       OTHER
     };
@@ -148,7 +148,7 @@ public abstract class MergePolicy {
      *      method is needed. Other threads can wake up any sleeping thread by calling 
      *      {@link #wakeup}, but it'd fall to sleep for the remainder of the requested time if this
      *      condition 
-     */
+     */  // pauseNanos最多暂停250ms，外边写死了
     public void pauseNanos(long pauseNanos, PauseReason reason, BooleanSupplier condition) throws InterruptedException {
       if (Thread.currentThread() != owner) {
         throw new RuntimeException("Only the merge owner thread can call pauseNanos(). This thread: "
@@ -161,7 +161,7 @@ public abstract class MergePolicy {
       pauseLock.lock();
       try {
         while (pauseNanos > 0 && !aborted && condition.getAsBoolean()) {
-          pauseNanos = pausing.awaitNanos(pauseNanos);
+          pauseNanos = pausing.awaitNanos(pauseNanos); // 那么就在这里睡眠多长时间
         }
       } finally {
         pauseLock.unlock();
@@ -206,16 +206,16 @@ public abstract class MergePolicy {
   public static class OneMerge {
     private final CompletableFuture<Boolean> mergeCompleted = new CompletableFuture<>();
     SegmentCommitInfo info;         // used by IndexWriter
-    boolean registerDone;           // used by IndexWriter
+    boolean registerDone;           // used by IndexWriter 完成注册
     long mergeGen;                  // used by IndexWriter
     boolean isExternal;             // used by IndexWriter
     int maxNumSegments = -1;        // used by IndexWriter
 
-    /** Estimated size in bytes of the merged segment. */
+    /** Estimated size in bytes of the merged segment. */ // 预估的去除删除之后的byte
     public volatile long estimatedMergeBytes;       // used by IndexWriter
 
     // Sum of sizeInBytes of all SegmentInfos; set by IW.mergeInit
-    volatile long totalMergeBytes;
+    volatile long totalMergeBytes; // 包含了需要被删除的byte
 
     private List<MergeReader> mergeReaders;        // used by IndexWriter
 
@@ -582,10 +582,10 @@ public abstract class MergePolicy {
    * @param segmentInfos
    *          the total set of segments in the index
    * @param mergeContext the IndexWriter to find the merges on
-   */
+   */ // 第一次跳到MergeSpecification.findMerges()，第二次跳到TieredMergePolicy.findMerges()
   public abstract MergeSpecification findMerges(MergeTrigger mergeTrigger, SegmentInfos segmentInfos, MergeContext mergeContext)
       throws IOException;
-
+  // es中首先进入FilterMergePolicy.findMerges(),第二次进入OneMergeWrappingMergePolicy.findMerges(实际是)
   /**
    * Determine what set of merge operations is necessary in
    * order to merge to {@code <=} the specified segment count. {@link IndexWriter} calls this when its
@@ -674,8 +674,8 @@ public abstract class MergePolicy {
    *  SegmentCommitInfo}, pro-rated by percentage of
    *  non-deleted documents is set. */
   protected long size(SegmentCommitInfo info, MergeContext mergeContext) throws IOException {
-    long byteSize = info.sizeInBytes();
-    int delCount = mergeContext.numDeletesToMerge(info);
+    long byteSize = info.sizeInBytes(); // 总共大小
+    int delCount = mergeContext.numDeletesToMerge(info); // 这个段需要删除的文档葛素
     assert assertDelCount(delCount, info);
     double delRatio = info.info.maxDoc() <= 0 ? 0d : (double) delCount / (double) info.info.maxDoc();
     assert delRatio <= 1.0;

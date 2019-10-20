@@ -43,7 +43,7 @@ public abstract class PostingsEnum extends DocIdSetIterator {
   
   /** Flag to pass to {@link TermsEnum#postings(PostingsEnum, int)}
    *  if you require offsets in the returned enum. */
-  public static final short OFFSETS = POSITIONS | 1 << 5;
+  public static final short OFFSETS = POSITIONS | 1 << 5; //包含 freq、position、offset
 
   /** Flag to pass to  {@link TermsEnum#postings(PostingsEnum, int)}
    *  if you require payloads in the returned enum. */

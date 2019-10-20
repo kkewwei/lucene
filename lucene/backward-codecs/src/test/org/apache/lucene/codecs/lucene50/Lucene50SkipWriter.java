@@ -48,35 +48,35 @@ import org.apache.lucene.store.RAMOutputStream;
  *
  */
 final class Lucene50SkipWriter extends MultiLevelSkipListWriter {
-  private int[] lastSkipDoc;
-  private long[] lastSkipDocPointer;
-  private long[] lastSkipPosPointer;
-  private long[] lastSkipPayPointer;
-  private int[] lastPayloadByteUpto;
+  private int[] lastSkipDoc;  // 长度为10
+  private long[] lastSkipDocPointer; // 长度为10   doc的跳表指针
+  private long[] lastSkipPosPointer;  // 长度为10  // pos的跳表指针
+  private long[] lastSkipPayPointer; // 长度为10   offset/pay的跳表指针
+  private int[] lastPayloadByteUpto; // 长度为10
 
   private final IndexOutput docOut;
   private final IndexOutput posOut;
   private final IndexOutput payOut;
 
   private int curDoc;
-  private long curDocPointer;
+  private long curDocPointer;   // doc文档当前FP。写完一个block 128文件的docId,freq时候的使用
   private long curPosPointer;
-  private long curPayPointer;
-  private int curPosBufferUpto;
+  private long curPayPointer;  // 当前
+  private int curPosBufferUpto; //
   private int curPayloadByteUpto;
   private CompetitiveImpactAccumulator[] curCompetitiveFreqNorms;
-  private boolean fieldHasPositions;
-  private boolean fieldHasOffsets;
-  private boolean fieldHasPayloads;
-
+  private boolean fieldHasPositions; // 为true
+  private boolean fieldHasOffsets; // 为true
+  private boolean fieldHasPayloads;//
+ //
   public Lucene50SkipWriter(int maxSkipLevels, int blockSize, int docCount, IndexOutput docOut, IndexOutput posOut, IndexOutput payOut) {
-    super(blockSize, 8, maxSkipLevels, docCount);
+    super(blockSize, 8, maxSkipLevels, docCount); // 本segment的文档数
     this.docOut = docOut;
     this.posOut = posOut;
     this.payOut = payOut;
     
     lastSkipDoc = new int[maxSkipLevels];
-    lastSkipDocPointer = new long[maxSkipLevels];
+    lastSkipDocPointer = new long[maxSkipLevels]; // 默认数组长度为10
     if (posOut != null) {
       lastSkipPosPointer = new long[maxSkipLevels];
       if (payOut != null) {
@@ -85,7 +85,7 @@ final class Lucene50SkipWriter extends MultiLevelSkipListWriter {
       lastPayloadByteUpto = new int[maxSkipLevels];
     }
     curCompetitiveFreqNorms = new CompetitiveImpactAccumulator[maxSkipLevels];
-    for (int i = 0; i < maxSkipLevels; ++i) {
+    for (int i = 0; i < maxSkipLevels; ++i) { // 默认为10
       curCompetitiveFreqNorms[i] = new CompetitiveImpactAccumulator();
     }
   }
@@ -100,7 +100,7 @@ final class Lucene50SkipWriter extends MultiLevelSkipListWriter {
   // is pretty slow for rare terms in large segments as we have to fill O(log #docs in segment) of junk.
   // this is the vast majority of terms (worst case: ID field or similar).  so in resetSkip() we save 
   // away the previous pointers, and lazy-init only if we need to buffer skip data for the term.
-  private boolean initialized;
+  private boolean initialized; // 延迟初始化，仅需要写入的时候再初始化
   long lastDocFP;
   long lastPosFP;
   long lastPayFP;
@@ -124,12 +124,12 @@ final class Lucene50SkipWriter extends MultiLevelSkipListWriter {
   
   private void initSkip() {
     if (!initialized) {
-      super.resetSkip();
+      super.resetSkip(); // 置位
       Arrays.fill(lastSkipDoc, 0);
-      Arrays.fill(lastSkipDocPointer, lastDocFP);
-      if (fieldHasPositions) {
+      Arrays.fill(lastSkipDocPointer, lastDocFP); // doc的FilePoint。还没有写docId和freq时候的PF
+      if (fieldHasPositions) { // 为true
         Arrays.fill(lastSkipPosPointer, lastPosFP);
-        if (fieldHasPayloads) {
+        if (fieldHasPayloads) { // 跳过
           Arrays.fill(lastPayloadByteUpto, 0);
         }
         if (fieldHasOffsets || fieldHasPayloads) {
@@ -150,42 +150,42 @@ final class Lucene50SkipWriter extends MultiLevelSkipListWriter {
    */
   public void bufferSkip(int doc, CompetitiveImpactAccumulator competitiveFreqNorms,
       int numDocs, long posFP, long payFP, int posBufferUpto, int payloadByteUpto) throws IOException {
-    initSkip();
-    this.curDoc = doc;
+    initSkip(); // 初始化
+    this.curDoc = doc; // 目前处理的文档数，是128的倍数
     this.curDocPointer = docOut.getFilePointer();
     this.curPosPointer = posFP;
     this.curPayPointer = payFP;
     this.curPosBufferUpto = posBufferUpto;
     this.curPayloadByteUpto = payloadByteUpto;
     this.curCompetitiveFreqNorms[0].addAll(competitiveFreqNorms);
-    bufferSkip(numDocs);
+    bufferSkip(numDocs); // 为当前文档建立了跳跃表结构
   }
 
   private final RAMOutputStream freqNormOut = new RAMOutputStream();
 
-  @Override
+  @Override // 在level层建立一个跳表节点放入内存中skipBuffer中。
   protected void writeSkipData(int level, IndexOutput skipBuffer) throws IOException {
 
-    int delta = curDoc - lastSkipDoc[level];
+    int delta = curDoc - lastSkipDoc[level];// 计算当前level层，docId的delta值
 
-    skipBuffer.writeVInt(delta);
-    lastSkipDoc[level] = curDoc;
+    skipBuffer.writeVInt(delta); // 写入deltaDocId
+    lastSkipDoc[level] = curDoc; // 该层级上一次的文档Id
+    // 写入 doc文件的偏移量的 delta值
+    skipBuffer.writeVLong(curDocPointer - lastSkipDocPointer[level]); // 记录下该跳跃点在doc使用的大小
+    lastSkipDocPointer[level] = curDocPointer; // 记录当前doc占用的其实内存
 
-    skipBuffer.writeVLong(curDocPointer - lastSkipDocPointer[level]);
-    lastSkipDocPointer[level] = curDocPointer;
+    if (fieldHasPositions) { // 向skipBuffer写入pos,doc,pay偏移量
 
-    if (fieldHasPositions) {
-
-      skipBuffer.writeVLong(curPosPointer - lastSkipPosPointer[level]);
+      skipBuffer.writeVLong(curPosPointer - lastSkipPosPointer[level]); // 记录下该跳跃点在pos使用的大小
       lastSkipPosPointer[level] = curPosPointer;
-      skipBuffer.writeVInt(curPosBufferUpto);
+      skipBuffer.writeVInt(curPosBufferUpto); // 记录下当前缓存的文档数
 
       if (fieldHasPayloads) {
         skipBuffer.writeVInt(curPayloadByteUpto);
       }
 
-      if (fieldHasOffsets || fieldHasPayloads) {
-        skipBuffer.writeVLong(curPayPointer - lastSkipPayPointer[level]);
+      if (fieldHasOffsets || fieldHasPayloads) { // payload和offset都写入了同一个文档
+        skipBuffer.writeVLong(curPayPointer - lastSkipPayPointer[level]); // 记录下该跳跃点在pay使用的大小
         lastSkipPayPointer[level] = curPayPointer;
       }
     }
@@ -195,13 +195,13 @@ final class Lucene50SkipWriter extends MultiLevelSkipListWriter {
     if (level + 1 < numberOfSkipLevels) {
       curCompetitiveFreqNorms[level + 1].addAll(competitiveFreqNorms);
     }
-    writeImpacts(competitiveFreqNorms, freqNormOut);
+    writeImpacts(competitiveFreqNorms, freqNormOut); // 向freqNormOut中写入影响因子
     skipBuffer.writeVInt(Math.toIntExact(freqNormOut.getFilePointer()));
-    freqNormOut.writeTo(skipBuffer);
+    freqNormOut.writeTo(skipBuffer); // 把freqNormOut数据向skipBuffer中写入
     freqNormOut.reset();
     competitiveFreqNorms.clear();
   }
-
+  // 写入影响因子
   static void writeImpacts(CompetitiveImpactAccumulator acc, IndexOutput out) throws IOException {
     Collection<Impact> impacts = acc.getCompetitiveFreqNormPairs();
     Impact previous = new Impact(0, 0);

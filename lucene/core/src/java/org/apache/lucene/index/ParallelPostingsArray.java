@@ -17,18 +17,18 @@
 package org.apache.lucene.index;
 
 import org.apache.lucene.util.ArrayUtil;
-
+//
 class ParallelPostingsArray {
   final static int BYTES_PER_POSTING = 3 * Integer.BYTES;
 
-  final int size;
-  final int[] textStarts; // maps term ID to the terms's text start in the bytesHash
-  final int[] addressOffset; // maps term ID to current stream address
-  final int[] byteStarts; // maps term ID to stream start offset in the byte pool
-
+  final int size;// Array的长度
+  final int[] textStarts; // maps term ID to the terms's text start in the bytesHash//是不变的, 记录的是整个termId在ByteBlockPool中的起始位置，等于FreqProxTermsWriterPerField.BytesRefHash.bytesStart。
+  final int[] addressOffset; // maps term ID to current stream address// 下标为termId，记录了该term的利用intBoolBuffer中的那两个位置来存放term在byteBuffer中可用位置
+  final int[] byteStarts; // maps term ID to stream start offset in the byte pool // 下标为下标为termId， 记录了该term在的两个byteSlice()中第一个slict的起始位置
+  // 一个termId在byteBufferPool中主要存储了两大部分：termContent, 两个byteSlice。textStarts是从termContent就开始记录了。而byteStarts是从第一个byteSlice开始记录的。termContent记录的更完整。
   ParallelPostingsArray(final int size) {
     this.size = size;
-    textStarts = new int[size];
+    textStarts = new int[size]; // 都是会动态扩容的， 被赋值给了BytesRefHash.bytesStart
     addressOffset = new int[size];
     byteStarts = new int[size];
   }

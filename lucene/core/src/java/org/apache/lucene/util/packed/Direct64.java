@@ -29,7 +29,7 @@ import java.util.Arrays;
  * @lucene.internal
  */
 final class Direct64 extends PackedInts.MutableImpl {
-  final long[] values;
+  final long[] values; // 真正压缩的存储这里
 
   Direct64(int valueCount) {
     super(valueCount, 64);

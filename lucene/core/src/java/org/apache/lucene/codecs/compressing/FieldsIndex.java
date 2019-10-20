@@ -24,7 +24,7 @@ import org.apache.lucene.util.Accountable;
 abstract class FieldsIndex implements Accountable, Cloneable, Closeable {
 
   /** Get the start pointer for the block that contains the given docID. */
-  abstract long getStartPointer(int docID);
+  abstract long getStartPointer(int docID); // 找到这个文档所在chunk在fdt中的起始位置。
 
   /** Check the integrity of the index. */
   abstract void checkIntegrity() throws IOException;

@@ -59,7 +59,7 @@ public final class Lucene86PointsFormat extends PointsFormat {
   /**
    * Filename extension for the meta per field
    */
-  public static final String META_EXTENSION = "kdm";
+  public static final String META_EXTENSION = "kdm";  // 记录的每个域的元信息，
 
   static final int VERSION_START = 0;
   static final int VERSION_CURRENT = VERSION_START;

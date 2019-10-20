@@ -61,12 +61,12 @@ public final class Lucene50LiveDocsFormat extends LiveDocsFormat {
   private static final int VERSION_START = 0;
   private static final int VERSION_CURRENT = VERSION_START;
 
-  @Override
+  @Override // 读取live的docId
   public Bits readLiveDocs(Directory dir, SegmentCommitInfo info, IOContext context) throws IOException {
     long gen = info.getDelGen();
-    String name = IndexFileNames.fileNameFromGeneration(info.info.name, EXTENSION, gen);
+    String name = IndexFileNames.fileNameFromGeneration(info.info.name, EXTENSION, gen); // _n.liv文件
     final int length = info.info.maxDoc();
-    try (ChecksumIndexInput input = dir.openChecksumInput(name, context)) {
+    try (ChecksumIndexInput input = dir.openChecksumInput(name, context)) { // 会跑到mmap函数那里映射文件
       Throwable priorE = null;
       try {
         CodecUtil.checkIndexHeader(input, CODEC_NAME, VERSION_START, VERSION_CURRENT, 
@@ -93,24 +93,24 @@ public final class Lucene50LiveDocsFormat extends LiveDocsFormat {
   @Override
   public void writeLiveDocs(Bits bits, Directory dir, SegmentCommitInfo info, int newDelCount, IOContext context) throws IOException {
     long gen = info.getNextDelGen();
-    String name = IndexFileNames.fileNameFromGeneration(info.info.name, EXTENSION, gen);
-    int delCount = 0;
+    String name = IndexFileNames.fileNameFromGeneration(info.info.name, EXTENSION, gen); // 产生_n.liv文件
+    int delCount = 0; // 为了再次核对
     try (IndexOutput output = dir.createOutput(name, context)) {
       CodecUtil.writeIndexHeader(output, CODEC_NAME, VERSION_CURRENT, info.info.getId(), Long.toString(gen, Character.MAX_RADIX));
-      final int longCount = FixedBitSet.bits2words(bits.length());
+      final int longCount = FixedBitSet.bits2words(bits.length()); // 多少个live的文档
       for (int i = 0; i < longCount; ++i) {
         long currentBits = 0;
         for (int j = i << 6, end = Math.min(j + 63, bits.length() - 1); j <= end; ++j) {
-          if (bits.get(j)) {
+          if (bits.get(j)) { //
             currentBits |= 1L << j; // mod 64
           } else {
-            delCount += 1;
+            delCount += 1; //
           }
         }
         output.writeLong(currentBits);
       }
       CodecUtil.writeFooter(output);
-    }
+    } //再次核对一次
     if (delCount != info.getDelCount() + newDelCount) {
       throw new CorruptIndexException("bits.deleted=" + delCount + 
           " info.delcount=" + info.getDelCount() + " newdelcount=" + newDelCount, name);

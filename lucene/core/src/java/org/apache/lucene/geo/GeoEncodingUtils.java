@@ -38,8 +38,8 @@ public final class GeoEncodingUtils {
   /** number of bits used for quantizing latitude and longitude values */
   public static final short BITS = 32;
 
-  private static final double LAT_SCALE = (0x1L<<BITS)/180.0D;
-  private static final double LAT_DECODE = 1/LAT_SCALE;
+  private static final double LAT_SCALE = (0x1L<<BITS)/180.0D; // 将32位
+  private static final double LAT_DECODE = 1/LAT_SCALE;  // 将180位映射到32位long的长度上，180=2^32长度
   private static final double LON_SCALE = (0x1L<<BITS)/360.0D;
   private static final double LON_DECODE = 1/LON_SCALE;
 
@@ -63,7 +63,7 @@ public final class GeoEncodingUtils {
     if (latitude == 90.0D) {
       latitude = Math.nextDown(latitude);
     }
-    return (int) Math.floor(latitude / LAT_DECODE);
+    return (int) Math.floor(latitude / LAT_DECODE); // 将64位维度数据编码成32位数据，再写入
   }
 
   /**

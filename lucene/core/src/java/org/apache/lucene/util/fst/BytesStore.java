@@ -28,21 +28,21 @@ import org.apache.lucene.util.RamUsageEstimator;
 
 // TODO: merge with PagedBytes, except PagedBytes doesn't
 // let you read while writing which FST needs
-
+ // 大于1G选用这种方式
 class BytesStore extends DataOutput implements Accountable {
 
   private static final long BASE_RAM_BYTES_USED =
         RamUsageEstimator.shallowSizeOfInstance(BytesStore.class)
       + RamUsageEstimator.shallowSizeOfInstance(ArrayList.class);
 
-  private final List<byte[]> blocks = new ArrayList<>();
+  private final List<byte[]> blocks = new ArrayList<>(); // 实际存储数据的地方，
 
-  private final int blockSize;
-  private final int blockBits;
+  private final int blockSize; // blocks里面存放的一个数组大小
+  private final int blockBits; // 个数组的长度
   private final int blockMask;
 
-  private byte[] current;
-  private int nextWrite;
+  private byte[] current;  // 当前正在写入的byte[]。
+  private int nextWrite; //   当前byte[]正写到的地方
 
   public BytesStore(int blockBits) {
     this.blockBits = blockBits;
@@ -85,7 +85,7 @@ class BytesStore extends DataOutput implements Accountable {
 
   @Override
   public void writeByte(byte b) {
-    if (nextWrite == blockSize) {
+    if (nextWrite == blockSize) { // 写到了一个block，则数组扩容
       current = new byte[blockSize];
       blocks.add(current);
       nextWrite = 0;
@@ -277,24 +277,24 @@ class BytesStore extends DataOutput implements Accountable {
       }
     }
   }
-
+  // 将这段的byte收尾颠倒
   /** Reverse from srcPos, inclusive, to destPos, inclusive. */
   public void reverse(long srcPos, long destPos) {
     assert srcPos < destPos;
     assert destPos < getPosition();
     //System.out.println("reverse src=" + srcPos + " dest=" + destPos);
 
-    int srcBlockIndex = (int) (srcPos >> blockBits);
+    int srcBlockIndex = (int) (srcPos >> blockBits); // 在第几个block，一个lock32kb
     int src = (int) (srcPos & blockMask);
-    byte[] srcBlock = blocks.get(srcBlockIndex);
+    byte[] srcBlock = blocks.get(srcBlockIndex); // 源位置所在的那个block
 
     int destBlockIndex = (int) (destPos >> blockBits);
     int dest = (int) (destPos & blockMask);
-    byte[] destBlock = blocks.get(destBlockIndex);
+    byte[] destBlock = blocks.get(destBlockIndex); // 目标位置所在的那个block
     //System.out.println("  srcBlock=" + srcBlockIndex + " destBlock=" + destBlockIndex);
 
     int limit = (int) (destPos - srcPos + 1)/2;
-    for(int i=0;i<limit;i++) {
+    for(int i=0;i<limit;i++) { //
       //System.out.println("  cycle src=" + src + " dest=" + dest);
       byte b = srcBlock[src];
       srcBlock[src] = destBlock[dest];
@@ -360,7 +360,7 @@ class BytesStore extends DataOutput implements Accountable {
     if (current != null) {
       byte[] lastBuffer = new byte[nextWrite];
       System.arraycopy(current, 0, lastBuffer, 0, nextWrite);
-      blocks.set(blocks.size()-1, lastBuffer);
+      blocks.set(blocks.size()-1, lastBuffer);// 调换赋值
       current = null;
     }
   }
@@ -440,14 +440,14 @@ class BytesStore extends DataOutput implements Accountable {
     return getReverseReader(true);
   }
 
-  FST.BytesReader getReverseReader(boolean allowSingle) {
-    if (allowSingle && blocks.size() == 1) {
+  FST.BytesReader getReverseReader(boolean allowSingle) { //
+    if (allowSingle && blocks.size() == 1) { // 默认为false
       return new ReverseBytesReader(blocks.get(0));
     }
     return new FST.BytesReader() {
       private byte[] current = blocks.size() == 0 ? null : blocks.get(0);
       private int nextBuffer = -1;
-      private int nextRead = 0;
+      private int nextRead = 0; // 下一个可读位置
 
       @Override
       public byte readByte() {
@@ -455,7 +455,7 @@ class BytesStore extends DataOutput implements Accountable {
           current = blocks.get(nextBuffer--);
           nextRead = blockSize-1;
         }
-        return current[nextRead--];
+        return current[nextRead--]; // 倒着读
       }
 
       @Override
@@ -481,10 +481,10 @@ class BytesStore extends DataOutput implements Accountable {
         // setPosition(0), the next byte you read is
         // bytes[0] ... but I would expect bytes[-1] (ie,
         // EOF)...?
-        int bufferIndex = (int) (pos >> blockBits);
+        int bufferIndex = (int) (pos >> blockBits); // 第几个buffer
         nextBuffer = bufferIndex-1;
         current = blocks.get(bufferIndex);
-        nextRead = (int) (pos & blockMask);
+        nextRead = (int) (pos & blockMask); // 下一个读取点
         assert getPosition() == pos: "pos=" + pos + " getPos()=" + getPosition();
       }
 

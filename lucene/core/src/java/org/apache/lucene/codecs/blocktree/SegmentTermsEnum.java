@@ -35,17 +35,17 @@ import org.apache.lucene.util.fst.FST;
 import org.apache.lucene.util.fst.Util;
 
 /** Iterates through terms in this field. */
-
+  // 方便在此FST中遍历使用
 final class SegmentTermsEnum extends BaseTermsEnum {
-
-  // Lazy init:
+  // TermsDict由SegmentTermsEnum或者IntersectTermsEnum表示，分别代表两种查询TermsDict的方式，精确查询和近似查询
+  // Lazy init:  TermsDict中的Block部分称之为Frame，Frame的加载过程分为两个步骤：在初始化过程中读取元数据；按需读取索引数据。
   IndexInput in;
 
   private SegmentTermsEnumFrame[] stack;
   private final SegmentTermsEnumFrame staticFrame;
   SegmentTermsEnumFrame currentFrame;
   boolean termExists;
-  final FieldReader fr;
+  final FieldReader fr; // FieldReader，倒排索引结构就放在这里
 
   private int targetBeforeCurrentLength;
 
@@ -62,10 +62,10 @@ final class SegmentTermsEnum extends BaseTermsEnum {
 
   final BytesRefBuilder term = new BytesRefBuilder();
   private final FST.BytesReader fstReader;
-
+  // 什么时候初始化的
   @SuppressWarnings({"rawtypes","unchecked"}) private FST.Arc<BytesRef>[] arcs = new FST.Arc[1];
-
-  public SegmentTermsEnum(FieldReader fr) throws IOException {
+ // 详情可参考http://www.nosqlnotes.com/technotes/searchengine/lucene-search-1/
+  public SegmentTermsEnum(FieldReader fr) throws IOException { //会读取FST结构的第一条边
     this.fr = fr;
 
     // if (DEBUG) {
@@ -79,7 +79,7 @@ final class SegmentTermsEnum extends BaseTermsEnum {
     if (fr.index == null) {
       fstReader = null;
     } else {
-      fstReader = fr.index.getBytesReader();
+      fstReader = fr.index.getBytesReader(); // 就是FST结构
     }
 
     // Init w/ root block; don't use index since it may
@@ -91,7 +91,7 @@ final class SegmentTermsEnum extends BaseTermsEnum {
     currentFrame = staticFrame;
     final FST.Arc<BytesRef> arc;
     if (fr.index != null) {
-      arc = fr.index.getFirstArc(arcs[0]);
+      arc = fr.index.getFirstArc(arcs[0]); // 开始找边，边的内容放在arcs[0]中
       // Empty string prefix must have an output in the index!
       assert arc.isFinal();
     } else {
@@ -209,7 +209,7 @@ final class SegmentTermsEnum extends BaseTermsEnum {
     if (ord >= stack.length) {
       final SegmentTermsEnumFrame[] next = new SegmentTermsEnumFrame[ArrayUtil.oversize(1+ord, RamUsageEstimator.NUM_BYTES_OBJECT_REF)];
       System.arraycopy(stack, 0, next, 0, stack.length);
-      for(int stackOrd=stack.length;stackOrd<next.length;stackOrd++) {
+      for(int stackOrd=stack.length;stackOrd<next.length;stackOrd++) { // 初始化
         next[stackOrd] = new SegmentTermsEnumFrame(this, stackOrd);
       }
       stack = next;
@@ -219,7 +219,7 @@ final class SegmentTermsEnum extends BaseTermsEnum {
   }
 
   private FST.Arc<BytesRef> getArc(int ord) {
-    if (ord >= arcs.length) {
+    if (ord >= arcs.length) { // ord大于最长值，则库容
       @SuppressWarnings({"rawtypes","unchecked"}) final FST.Arc<BytesRef>[] next =
       new FST.Arc[ArrayUtil.oversize(1+ord, RamUsageEstimator.NUM_BYTES_OBJECT_REF)];
       System.arraycopy(arcs, 0, next, 0, arcs.length);
@@ -313,14 +313,14 @@ final class SegmentTermsEnum extends BaseTermsEnum {
     return brToString(b.get());
   }
   */
-
+  // 寻找这个term相关的
   @Override
   public boolean seekExact(BytesRef target) throws IOException {
 
     if (fr.index == null) {
       throw new IllegalStateException("terms index was not loaded");
     }
-
+     // 词小于最小值 || 词大于最大值，每个FST都会记录最大词和最小词
     if (fr.size() > 0 && (target.compareTo(fr.getMin()) < 0 || target.compareTo(fr.getMax()) > 0)) {
         return false;
     }
@@ -340,7 +340,7 @@ final class SegmentTermsEnum extends BaseTermsEnum {
 
     targetBeforeCurrentLength = currentFrame.ord;
 
-    if (currentFrame != staticFrame) {
+    if (currentFrame != staticFrame) { // 会跳过
 
       // We are already seek'd; find the common
       // prefix of new seek term vs current term and
@@ -454,7 +454,7 @@ final class SegmentTermsEnum extends BaseTermsEnum {
     } else {
 
       targetBeforeCurrentLength = -1;
-      arc = fr.index.getFirstArc(arcs[0]);
+      arc = fr.index.getFirstArc(arcs[0]); // 又进来读取了一次，不过参数都没有变化
 
       // Empty string prefix must have an output (block) in the index!
       assert arc.isFinal();
@@ -464,7 +464,7 @@ final class SegmentTermsEnum extends BaseTermsEnum {
       //   System.out.println("    no seek state; push root frame");
       // }
 
-      output = arc.output();
+      output = arc.output();  //
 
       currentFrame = staticFrame;
 
@@ -478,13 +478,13 @@ final class SegmentTermsEnum extends BaseTermsEnum {
     // }
 
     // We are done sharing the common prefix with the incoming target and where we are currently seek'd; now continue walking the index:
-    while (targetUpto < target.length) {
+    while (targetUpto < target.length) { // 遍历FST结构
 
       final int targetLabel = target.bytes[target.offset + targetUpto] & 0xFF;
+      // 找下一条边，里面会有遍历操作
+      final FST.Arc<BytesRef> nextArc = fr.index.findTargetArc(targetLabel, arc, getArc(1+targetUpto), fstReader);// 进来就非常常见了
 
-      final FST.Arc<BytesRef> nextArc = fr.index.findTargetArc(targetLabel, arc, getArc(1+targetUpto), fstReader);
-
-      if (nextArc == null) {
+      if (nextArc == null) { // 跳过
 
         // Index is exhausted
         // if (DEBUG) {
@@ -520,14 +520,14 @@ final class SegmentTermsEnum extends BaseTermsEnum {
           // }
           return false;
         }
-      } else {
+      } else { //进来了
         // Follow this arc
         arc = nextArc;
         term.setByteAt(targetUpto, (byte) targetLabel);
         // Aggregate output as we go:
         assert arc.output() != null;
         if (arc.output() != BlockTreeTermsReader.NO_OUTPUT) {
-          output = BlockTreeTermsReader.FST_OUTPUTS.add(output, arc.output());
+          output = BlockTreeTermsReader.FST_OUTPUTS.add(output, arc.output()); // 把output给组装起来
         }
 
         // if (DEBUG) {
@@ -1042,7 +1042,7 @@ final class SegmentTermsEnum extends BaseTermsEnum {
   public TermState termState() throws IOException {
     assert !eof;
     currentFrame.decodeMetaData();
-    TermState ts = currentFrame.state.clone();
+    TermState ts = currentFrame.state.clone(); // Lucene84PostingsFormat$IntBlockTermState
     //if (DEBUG) System.out.println("BTTR.termState seg=" + segment + " state=" + ts);
     return ts;
   }

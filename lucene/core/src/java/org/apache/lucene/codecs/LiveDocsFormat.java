@@ -36,7 +36,7 @@ public abstract class LiveDocsFormat {
 
   /** Read live docs bits. */
   public abstract Bits readLiveDocs(Directory dir, SegmentCommitInfo info, IOContext context) throws IOException;
-
+  // 一般跑到Lucene50LiveDocsFormat.writeLiveDocs
   /** Persist live docs bits.  Use {@link
    *  SegmentCommitInfo#getNextDelGen} to determine the
    *  generation of the deletes file you should write to. */

@@ -75,7 +75,7 @@ public interface LeafCollector {
    * that need the score of the current document (passed-in to
    * {@link #collect(int)}), should save the passed-in Scorer and call
    * scorer.score() when needed.
-   */
+   */ // 调用此方法通过 Scorer 对象获得一篇文档的打分，对文档集合进行排序时，可以作为排序条件之一，当然 Scorer 对象包含不仅仅是文档的打分值，
   void setScorer(Scorable scorer) throws IOException;
   
   /**
@@ -90,7 +90,7 @@ public interface LeafCollector {
    * implementations of this method should not call {@link IndexSearcher#doc(int)} or
    * {@link org.apache.lucene.index.IndexReader#document(int)} on every hit.
    * Doing so can slow searches by an order of magnitude or more.
-   */
+   */ // 在这个方法中实现了对所有满足查询条件的文档进行排序（sorting）、过滤（filtering）或者用户自定义的操作的具体逻辑。
   void collect(int doc) throws IOException;
 
 }

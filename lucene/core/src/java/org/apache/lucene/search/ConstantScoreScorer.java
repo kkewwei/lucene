@@ -26,7 +26,7 @@ import java.io.IOException;
 public final class ConstantScoreScorer extends Scorer {
 
   private class DocIdSetIteratorWrapper extends DocIdSetIterator {
-    int doc = -1;
+    int doc = -1; // 当前打分时，选取的文档Id
     DocIdSetIterator delegate;
 
     DocIdSetIteratorWrapper(DocIdSetIterator delegate) {
@@ -58,7 +58,7 @@ public final class ConstantScoreScorer extends Scorer {
   private final ScoreMode scoreMode;
   private final DocIdSetIterator approximation;
   private final TwoPhaseIterator twoPhaseIterator;
-  private final DocIdSetIterator disi;
+  private final DocIdSetIterator disi; // 存储的匹配的文档
 
   /** Constructor based on a {@link DocIdSetIterator} which will be used to
    *  drive iteration. Two phase iteration will not be supported.

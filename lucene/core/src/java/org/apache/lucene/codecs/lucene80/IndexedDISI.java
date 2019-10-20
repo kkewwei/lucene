@@ -88,7 +88,7 @@ import org.apache.lucene.util.RoaringDocIdSet;
  * This ensures locality and keeps logistics simple.
  *
  * @lucene.internal
- */
+ */  //DISI是DocIdSetIterator的缩写
 final class IndexedDISI extends DocIdSetIterator {
 
   // jump-table time/space trade-offs to consider:

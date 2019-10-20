@@ -31,7 +31,7 @@ import org.apache.lucene.search.DocIdSetIterator;
  *     the number of one bits on the right of the <code>i-th</code> bit.</li></ul>
  *
  * @lucene.internal
- */
+ */ // 4096一个Block，对应64个long，稀疏矩阵Sparse
 public class SparseFixedBitSet extends BitSet implements Bits, Accountable {
 
   private static final long BASE_RAM_BYTES_USED = RamUsageEstimator.shallowSizeOfInstance(SparseFixedBitSet.class);
@@ -39,7 +39,7 @@ public class SparseFixedBitSet extends BitSet implements Bits, Accountable {
   private static final int MASK_4096 = (1 << 12) - 1;
 
   private static int blockCount(int length) {
-    int blockCount = length >>> 12;
+    int blockCount = length >>> 12; //
     if ((blockCount << 12) < length) {
       ++blockCount;
     }
@@ -84,13 +84,13 @@ public class SparseFixedBitSet extends BitSet implements Bits, Accountable {
     for (long[] bitArray : bits) {
       if (bitArray != null) {
         for (long bits : bitArray) {
-          cardinality += Long.bitCount(bits);
+          cardinality += Long.bitCount(bits); // long
         }
       }
     }
     return cardinality;
   }
-
+  // 大致估算多少个
   @Override
   public int approximateCardinality() {
     // we are assuming that bits are uniformly set and use the linear counting

@@ -22,11 +22,11 @@ import java.io.IOException;
 import org.apache.lucene.codecs.StoredFieldsWriter;
 import org.apache.lucene.store.IOContext;
 import org.apache.lucene.util.IOUtils;
-
+ // 每个segment新产生一个，随着DefaultIndexingChain新产生而产生一个新的
 class StoredFieldsConsumer {
-  final DocumentsWriterPerThread docWriter;
-  StoredFieldsWriter writer;
-  int lastDoc;
+  final DocumentsWriterPerThread docWriter; //   
+  StoredFieldsWriter writer; // 写fdx 和fdt文件的地方   CompressingStoredFieldsWriter。每刷新产生segment一次，则该对象就被置空。下次写入就写到另外一个索引文档
+  int lastDoc; //
 
   StoredFieldsConsumer(DocumentsWriterPerThread docWriter) {
     this.docWriter = docWriter;
@@ -34,8 +34,8 @@ class StoredFieldsConsumer {
   }
 
   protected void initStoredFieldsWriter() throws IOException {
-    if (writer == null) {
-      this.writer =
+    if (writer == null) { // 若已经初始化了就忽略。每次经过writeBlock()之后就被清空了
+      this.writer = // 建立fdx和fdt文件    将跑到Lucene50StoredFieldsFormat.fieldsWriter(es7.9.1时)里面
           docWriter.codec.storedFieldsFormat().fieldsWriter(docWriter.directory, docWriter.getSegmentInfo(),
               IOContext.DEFAULT);
     }
@@ -43,20 +43,20 @@ class StoredFieldsConsumer {
 
   void startDocument(int docID) throws IOException {
     assert lastDoc < docID;
-    initStoredFieldsWriter();
+    initStoredFieldsWriter(); // 初始化了fdt和fdx文件
     while (++lastDoc < docID) {
       writer.startDocument();
       writer.finishDocument();
     }
-    writer.startDocument();
+    writer.startDocument(); // 啥事也不干
   }
 
   void writeField(FieldInfo info, IndexableField field) throws IOException {
-    writer.writeField(info, field);
+    writer.writeField(info, field); // 比较简单，会存储字段编号，类型，字段value
   }
-
+  // 将整个文档所有域在内存中的结束位置给存储起来。若内存大小16k或者文档数128个超过限制了，会刷到磁盘中
   void finishDocument() throws IOException {
-    writer.finishDocument();
+    writer.finishDocument(); // CompressingStoredFieldsWriter，storeField
   }
 
   void finish(int maxDoc) throws IOException {
@@ -66,7 +66,7 @@ class StoredFieldsConsumer {
       ++lastDoc;
     }
   }
-
+   // 刷新成segment时会调用
   void flush(SegmentWriteState state, Sorter.DocMap sortMap) throws IOException {
     try {
       writer.finish(state.fieldInfos, state.segmentInfo.maxDoc());

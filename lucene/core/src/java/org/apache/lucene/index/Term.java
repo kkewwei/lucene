@@ -40,8 +40,8 @@ public final class Term implements Comparable<Term>, Accountable {
   private static final long BASE_RAM_BYTES = RamUsageEstimator.shallowSizeOfInstance(Term.class) +
       RamUsageEstimator.shallowSizeOfInstance(BytesRef.class);
 
-  String field;
-  BytesRef bytes;
+  String field; // 要查询的字段名称
+  BytesRef bytes; // 要查询的那个term
 
   /** Constructs a Term with the given field and bytes.
    * <p>Note that a null field or null bytes value results in undefined

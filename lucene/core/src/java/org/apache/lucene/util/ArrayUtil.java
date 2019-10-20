@@ -25,10 +25,10 @@ import java.util.Comparator;
  * @lucene.internal
  */
 
-public final class ArrayUtil {
-
+public final class ArrayUtil {//数组作为一个对象，需要一定的内存存储对象头信息，对象头信息最大占用内存不可超过8字节。可能数组本身就存了数组长度，
+  // 可参考：https://blog.csdn.net/ChineseYoung/article/details/80787071，为啥要-8
   /** Maximum length for an array (Integer.MAX_VALUE - RamUsageEstimator.NUM_BYTES_ARRAY_HEADER). */
-  public static final int MAX_ARRAY_LENGTH = Integer.MAX_VALUE - RamUsageEstimator.NUM_BYTES_ARRAY_HEADER;
+  public static final int MAX_ARRAY_LENGTH = Integer.MAX_VALUE - RamUsageEstimator.NUM_BYTES_ARRAY_HEADER; // array最大的长度
 
   private ArrayUtil() {} // no instance
 
@@ -137,7 +137,7 @@ public final class ArrayUtil {
    *
    * @lucene.internal
    */
-
+   // 扩容1/8
   public static int oversize(int minTargetSize, int bytesPerElement) {
 
     if (minTargetSize < 0) {
@@ -150,23 +150,23 @@ public final class ArrayUtil {
       return 0;
     }
 
-    if (minTargetSize > MAX_ARRAY_LENGTH) {
+    if (minTargetSize > MAX_ARRAY_LENGTH) { // array最大长度
       throw new IllegalArgumentException("requested array size " + minTargetSize + " exceeds maximum array in java (" + MAX_ARRAY_LENGTH + ")");
     }
 
     // asymptotic exponential growth by 1/8th, favors
     // spending a bit more CPU to not tie up too much wasted
     // RAM:
-    int extra = minTargetSize >> 3;
+    int extra = minTargetSize >> 3; // 扩容1/8
 
-    if (extra < 3) {
+    if (extra < 3) { // 若
       // for very small arrays, where constant overhead of
       // realloc is presumably relatively high, we grow
       // faster
       extra = 3;
     }
 
-    int newSize = minTargetSize + extra;
+    int newSize = minTargetSize + extra; // 新的长度，
 
     // add 7 to allow for worst case byte alignment addition below:
     if (newSize+7 < 0 || newSize+7 > MAX_ARRAY_LENGTH) {
@@ -174,7 +174,7 @@ public final class ArrayUtil {
       return MAX_ARRAY_LENGTH;
     }
 
-    if (Constants.JRE_IS_64BIT) {
+    if (Constants.JRE_IS_64BIT) { // 64位
       // round up to 8 byte alignment in 64bit env
       switch(bytesPerElement) {
       case 4:
@@ -474,7 +474,7 @@ public final class ArrayUtil {
   /**
    * Sorts the given array in natural order. This method uses the Tim sort
    * algorithm, but falls back to binary sort for small arrays.
-   */
+   */ //
   public static <T extends Comparable<? super T>> void timSort(T[] a) {
     timSort(a, 0, a.length);
   }

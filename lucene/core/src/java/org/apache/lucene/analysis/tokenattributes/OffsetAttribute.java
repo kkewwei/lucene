@@ -32,7 +32,7 @@ public interface OffsetAttribute extends Attribute {
    * stemmer or some other filter.
    * @see #setOffset(int, int) 
    */
-  public int startOffset();
+  public int startOffset(); // 词在这个域中的byte偏移量，和position位置还不一致，position是以词为粒度， 这里以byte为了帝都
 
   
   /** 

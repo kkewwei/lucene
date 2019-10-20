@@ -36,10 +36,10 @@ public final class BytesRef implements Comparable<BytesRef>, Cloneable {
   public static final byte[] EMPTY_BYTES = new byte[0];
 
   /** The contents of the BytesRef. Should never be {@code null}. */
-  public byte[] bytes;
+  public byte[] bytes;  // 存储的是16进制
 
   /** Offset of first valid byte. */
-  public int offset;
+  public int offset; // 词的起始位置，默认都是0
 
   /** Length of used bytes. */
   public int length;

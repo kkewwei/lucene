@@ -147,14 +147,14 @@ abstract class BulkOperation implements PackedInts.Decoder, PackedInts.Encoder {
     return blocksOffset;
   }
 
-  /**
+  /**  说白了就是找valueCount与8的最大公约数
    * For every number of bits per value, there is a minimum number of
    * blocks (b) / values (v) you need to write in order to reach the next block
    * boundary:
-   *  - 16 bits per value -&gt; b=2, v=1
-   *  - 24 bits per value -&gt; b=3, v=1
-   *  - 50 bits per value -&gt; b=25, v=4
-   *  - 63 bits per value -&gt; b=63, v=8
+   *  - 16 bits per value -&gt; b=2, v=1    最小公倍数(16，8) = 1个block大小为16，需要2个byte，能够存储1个bitPerValue
+   *  - 24 bits per value -&gt; b=3, v=1    最小公倍数(24，8) = 1个block大小为16，需要2个byte，能够存储1个bitPerValue
+   *  - 50 bits per value -&gt; b=25, v=4   最小公倍数(50，8) = 1个block大小为200， 需要25个byte存储，能够存储4个bitPerValue
+   *  - 63 bits per value -&gt; b=63, v=8   最小公倍数(63，8) = 1个block大小为63*8， 需要63个byte存储，能够存储8个bitPerValue
    *  - ...
    *
    * A bulk read consists in copying <code>iterations*v</code> values that are
@@ -164,15 +164,15 @@ abstract class BulkOperation implements PackedInts.Decoder, PackedInts.Encoder {
    *
    * This method computes <code>iterations</code> as
    * <code>ramBudget / (b + 8v)</code> (since a long is 8 bytes).
-   */
-  public final int computeIterations(int valueCount, int ramBudget) {
-    final int iterations = ramBudget / (byteBlockCount() + 8 * byteValueCount());
-    if (iterations == 0) {
-      // at least 1
+   */ //  就是长度为1的nextBlocks和nextBits的长度对应的bit。可以使用长度为几。
+  public final int computeIterations(int valueCount, int ramBudget) { // 可以一次写入几个block，ramBudget是可用的byte个数
+    final int iterations = ramBudget / (byteBlockCount() + 8 * byteValueCount()); // 一个block需要几个byte存储+8*一个block可以存储几个bitsPerValue
+    if (iterations == 0) { // 与nextBlocks和nextValues有关，临时将long数据存放在nextValues，然后通过压缩编码放入nextBlocks。n个block需要n个byteBlockCount和n个byteValueCount和
+      // at least 1  而一个byteValueCount占用8个byte。
       return 1;
-    } else if ((iterations - 1) * byteValueCount() >= valueCount) {
+    } else if ((iterations - 1) * byteValueCount() >= valueCount) { //
       // don't allocate for more than the size of the reader
-      return (int) Math.ceil((double) valueCount / byteValueCount());
+      return (int) Math.ceil((double) valueCount / byteValueCount()); // 需要几个block
     } else {
       return iterations;
     }

@@ -31,7 +31,7 @@ import org.apache.lucene.util.StringHelper;
 
 /** Embeds a [read-only] SegmentInfo and adds per-commit
  *  fields.
- *
+ * 一个只读的segmentInfo
  *  @lucene.experimental */
 public class SegmentCommitInfo {
   
@@ -49,7 +49,7 @@ public class SegmentCommitInfo {
 
   // Generation number of the live docs file (-1 if there
   // are no deletes yet):
-  private long delGen;
+  private long delGen; //  不为-1，则说明这个segment有删除
 
   // Normally 1+delGen, unless an exception was hit on last
   // attempt to write:
@@ -404,7 +404,7 @@ public class SegmentCommitInfo {
 
   private void generationAdvanced() {
     sizeInBytes = -1;
-    id = StringHelper.randomId();
+    id = StringHelper.randomId();//针对该segment，随机产生一个
   }
 
   /**

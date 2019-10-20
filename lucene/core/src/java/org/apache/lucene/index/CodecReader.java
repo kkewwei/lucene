@@ -45,7 +45,7 @@ public abstract class CodecReader extends LeafReader implements Accountable {
   /** 
    * Expert: retrieve thread-private StoredFieldsReader
    * @lucene.internal 
-   */
+   */ // 为啥是线程私有的,将跑到SegmentReader.getFieldsReader()
   public abstract StoredFieldsReader getFieldsReader();
   
   /** 
@@ -81,7 +81,7 @@ public abstract class CodecReader extends LeafReader implements Accountable {
   @Override
   public final void document(int docID, StoredFieldVisitor visitor) throws IOException {
     checkBounds(docID);
-    getFieldsReader().visitDocument(docID, visitor);
+    getFieldsReader().visitDocument(docID, visitor);// get source部分
   }
   
   @Override
@@ -99,11 +99,11 @@ public abstract class CodecReader extends LeafReader implements Accountable {
   }
 
   @Override
-  public final Terms terms(String field) throws IOException {
+  public final Terms terms(String field) throws IOException { // 返回FieldReader
     //ensureOpen(); no; getPostingsReader calls this
     // We could check the FieldInfo IndexOptions but there's no point since
     //   PostingsReader will simply return null for fields that don't exist or that have no terms index.
-    return getPostingsReader().terms(field);
+    return getPostingsReader().terms(field); // 将进入SetmentReader.terms()函数，返回的是PerFieldPostingsFormat$FieldsReader
   }
 
   // returns the FieldInfo that corresponds to the given field and type, or
@@ -194,7 +194,7 @@ public abstract class CodecReader extends LeafReader implements Accountable {
   public final PointValues getPointValues(String field) throws IOException {
     ensureOpen();
     FieldInfo fi = getFieldInfos().fieldInfo(field);
-    if (fi == null || fi.getPointDimensionCount() == 0) {
+    if (fi == null || fi.getPointDimensionCount() == 0) {// 检查这个字段是否有问题
       // Field does not exist or does not index points
       return null;
     }
@@ -205,13 +205,13 @@ public abstract class CodecReader extends LeafReader implements Accountable {
   @Override
   protected void doClose() throws IOException {
   }
-  
+  // 这个函数在多个地方被加载进来
   @Override
   public long ramBytesUsed() {
     ensureOpen();
     
     // terms/postings
-    long ramBytesUsed = getPostingsReader().ramBytesUsed();
+    long ramBytesUsed = getPostingsReader().ramBytesUsed(); // 从每个域的FST结构中加载内存，也就是FST结构
     
     // norms
     if (getNormsReader() != null) {
@@ -220,7 +220,7 @@ public abstract class CodecReader extends LeafReader implements Accountable {
     
     // docvalues
     if (getDocValuesReader() != null) {
-      ramBytesUsed += getDocValuesReader().ramBytesUsed();
+      ramBytesUsed += getDocValuesReader().ramBytesUsed(); // 会进入PerFieldDocValuesFormat
     }
     
     // stored fields
@@ -235,7 +235,7 @@ public abstract class CodecReader extends LeafReader implements Accountable {
 
     // points
     if (getPointsReader() != null) {
-      ramBytesUsed += getPointsReader().ramBytesUsed();
+      ramBytesUsed += getPointsReader().ramBytesUsed(); //Lucene60PointsReader
     }
     
     return ramBytesUsed;

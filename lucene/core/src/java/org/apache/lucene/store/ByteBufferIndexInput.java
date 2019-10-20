@@ -34,22 +34,22 @@ import java.nio.LongBuffer;
  * <p>
  * For efficiency, this class requires that the buffers
  * are a power-of-two (<code>chunkSizePower</code>).
- */
+ */ // 使用
 public abstract class ByteBufferIndexInput extends IndexInput implements RandomAccessInput {
   private static final LongBuffer EMPTY_LONGBUFFER = LongBuffer.allocate(0);
 
-  protected final long length;
+  protected final long length; // 这个文件的最终长度（可以不止1G）
   protected final long chunkSizeMask;
-  protected final int chunkSizePower;
+  protected final int chunkSizePower; // chunkSizePower=30，2^30=1G
   protected final ByteBufferGuard guard;
   
   protected ByteBuffer[] buffers;
-  protected int curBufIndex = -1;
-  protected ByteBuffer curBuf; // redundant for speed: buffers[curBufIndex]
+  protected int curBufIndex = -1; // 当前buffer是buffers中的哪个
+  protected ByteBuffer curBuf; // redundant for speed: buffers[curBufIndex]，DirectByteBufferR，表示当前buffers中的哪个
   private LongBuffer[] curLongBufferViews;
 
   protected boolean isClone = false;
-  
+  // guard = ByteBufferGuard
   public static ByteBufferIndexInput newInstance(String resourceDescription, ByteBuffer[] buffers, long length, int chunkSizePower, ByteBufferGuard guard) {
     if (buffers.length == 1) {
       return new SingleBufferImpl(resourceDescription, buffers[0], length, chunkSizePower, guard);
@@ -77,10 +77,10 @@ public abstract class ByteBufferIndexInput extends IndexInput implements RandomA
   @Override
   public final byte readByte() throws IOException {
     try {
-      return guard.getByte(curBuf);
+      return guard.getByte(curBuf); // 始终只读取当前的buffer，若抛异常了，再找下一个buffer
     } catch (BufferUnderflowException e) {
       do {
-        curBufIndex++;
+        curBufIndex++; // 当前正在读取的buffer
         if (curBufIndex >= buffers.length) {
           throw new EOFException("read past EOF: " + this);
         }
@@ -322,7 +322,7 @@ public abstract class ByteBufferIndexInput extends IndexInput implements RandomA
       throw new AlreadyClosedException("Already closed: " + this);
     }
 
-    final ByteBuffer newBuffers[] = buildSlice(buffers, offset, length);
+    final ByteBuffer newBuffers[] = buildSlice(buffers, offset, length); // 实际存放
     final int ofs = (int) (offset & chunkSizeMask);
     
     final ByteBufferIndexInput clone = newCloneInstance(getFullSliceDescription(sliceDescription), newBuffers, ofs, length);
@@ -335,29 +335,29 @@ public abstract class ByteBufferIndexInput extends IndexInput implements RandomA
   @SuppressWarnings("resource")
   protected ByteBufferIndexInput newCloneInstance(String newResourceDescription, ByteBuffer[] newBuffers, int offset, long length) {
     if (newBuffers.length == 1) {
-      newBuffers[0].position(offset);
+      newBuffers[0].position(offset); // 设置开始读取的位置
       return new SingleBufferImpl(newResourceDescription, newBuffers[0].slice(), length, chunkSizePower, this.guard);
     } else {
       return new MultiBufferImpl(newResourceDescription, newBuffers, offset, length, chunkSizePower, guard);
     }
   }
-  
+  // buildSlice仅仅是将之前映射好的对象拿来用就好了
   /** Returns a sliced view from a set of already-existing buffers: 
    *  the last buffer's limit() will be correct, but
    *  you must deal with offset separately (the first buffer will not be adjusted) */
   private ByteBuffer[] buildSlice(ByteBuffer[] buffers, long offset, long length) {
     final long sliceEnd = offset + length;
     
-    final int startIndex = (int) (offset >>> chunkSizePower);
-    final int endIndex = (int) (sliceEnd >>> chunkSizePower);
+    final int startIndex = (int) (offset >>> chunkSizePower); // 以1G为单位
+    final int endIndex = (int) (sliceEnd >>> chunkSizePower); // 涉及到哪些DirectByteBufferR[]
 
     // we always allocate one more slice, the last one may be a 0 byte one
     final ByteBuffer slices[] = new ByteBuffer[endIndex - startIndex + 1];
-    
+    // copy一份映射
     for (int i = 0; i < slices.length; i++) {
-      slices[i] = buffers[startIndex + i].duplicate();
+      slices[i] = buffers[startIndex + i].duplicate(); // DirectByteBufferR，仅仅是把地址、偏移量信息放入DirectByteBufferR中，仅仅产生一个对象，并没有别的开销
     }
-
+    // 设置上限，但是下限看起来没有设置
     // set the last buffer's limit for the sliced view.
     slices[slices.length - 1].limit((int) (sliceEnd & chunkSizeMask));
     
@@ -398,7 +398,7 @@ public abstract class ByteBufferIndexInput extends IndexInput implements RandomA
     SingleBufferImpl(String resourceDescription, ByteBuffer buffer, long length, int chunkSizePower, ByteBufferGuard guard) {
       super(resourceDescription, new ByteBuffer[] { buffer }, length, chunkSizePower, guard);
       this.curBufIndex = 0;
-      setCurBuf(buffer);
+      setCurBuf(buffer); // 设置当前正在读的位置
       buffer.position(0);
     }
     
@@ -407,7 +407,7 @@ public abstract class ByteBufferIndexInput extends IndexInput implements RandomA
     @Override
     public void seek(long pos) throws IOException {
       try {
-        curBuf.position((int) pos);
+        curBuf.position((int) pos); // DirectByteBufferR
       } catch (IllegalArgumentException e) {
         if (pos < 0) {
           throw new IllegalArgumentException("Seeking to negative position: " + this, e);
@@ -492,7 +492,7 @@ public abstract class ByteBufferIndexInput extends IndexInput implements RandomA
   
   /** This class adds offset support to ByteBufferIndexInput, which is needed for slices. */
   static final class MultiBufferImpl extends ByteBufferIndexInput {
-    private final int offset;
+    private final int offset;   // 设置起始读取位置
     
     MultiBufferImpl(String resourceDescription, ByteBuffer[] buffers, int offset, long length, int chunkSizePower,
         ByteBufferGuard guard) {

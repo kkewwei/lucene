@@ -26,12 +26,12 @@ public final class BitUtil {
   // The pop methods used to rely on bit-manipulation tricks for speed but it
   // turns out that it is faster to use the Long.bitCount method (which is an
   // intrinsic since Java 6u18) in a naive loop, see LUCENE-2221
-
+  //
   /** Returns the number of set bits in an array of longs. */
   public static long pop_array(long[] arr, int wordOffset, int numWords) {
     long popCount = 0;
     for (int i = wordOffset, end = wordOffset + numWords; i < end; ++i) {
-      popCount += Long.bitCount(arr[i]);
+      popCount += Long.bitCount(arr[i]); //bitCount实现的功能是计算一个（byte,short,char,int统一按照int方法计算）int,long类型的数值在二进制下“1”的数量。
     }
     return popCount;
   }
@@ -160,8 +160,8 @@ public final class BitUtil {
   }
 
    /** Same as {@link #zigZagEncode(long)} but on integers. */
-   public static int zigZagEncode(int i) {
-     return (i >> 31) ^ (i << 1);
+   public static int zigZagEncode(int i) { //  ZigZag是将有符号数统一映射到无符号数的一种编码方案，对于无符号数0 1 2 3 4，映射前的有符号数分别为0 -1 1 -2 2，负数以及对应的正数来回映射到从0变大的数字序列里，这也是”zig-zag”的名字来源。
+     return (i >> 31) ^ (i << 1); // int编码方式
    }
 
    /**
@@ -176,7 +176,7 @@ public final class BitUtil {
 
    /** Decode an int previously encoded with {@link #zigZagEncode(int)}. */
    public static int zigZagDecode(int i) {
-     return ((i >>> 1) ^ -(i & 1));
+     return ((i >>> 1) ^ -(i & 1));// int解码方式
    }
 
    /** Decode a long previously encoded with {@link #zigZagEncode(long)}. */

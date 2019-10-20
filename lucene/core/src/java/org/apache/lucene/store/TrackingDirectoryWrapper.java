@@ -25,9 +25,9 @@ import java.util.Set;
 /** A delegating Directory that records which files were
  *  written to and deleted. */
 public final class TrackingDirectoryWrapper extends FilterDirectory {
-
+  // 已经创建的文件(_0.fdx, _o.fdt, _0.tvx, _0.tvd, _1_Lucene50_0.doc, _1_Lucene50_0.pay, _1_Lucene50_0.pos, _12_dim，_12.dii)
   private final Set<String> createdFileNames = Collections.synchronizedSet(new HashSet<String>());
-
+  // 会产生16个文件：_0.fdm,_0.kdi,_0.kdd,_0.kdm,_0_Lucene.tip,_0_Lucene.tim,_0_Lucene.doc,_0_Lucene.pos,_0_Lucene.tmd,_0.fdt,_0.fdx,_0.nvm,_0.nvd
   public TrackingDirectoryWrapper(Directory in) {
     super(in);
   }
@@ -40,8 +40,8 @@ public final class TrackingDirectoryWrapper extends FilterDirectory {
 
   @Override
   public IndexOutput createOutput(String name, IOContext context) throws IOException {
-    IndexOutput output = in.createOutput(name, context);
-    createdFileNames.add(name);
+    IndexOutput output = in.createOutput(name, context); // 产生_c.si文件
+    createdFileNames.add(name); // 记录已经创建的文件，包括fdt和si
     return output;
   }
 
@@ -70,7 +70,7 @@ public final class TrackingDirectoryWrapper extends FilterDirectory {
 
   /** NOTE: returns a copy of the created files. */
   public Set<String> getCreatedFiles() {
-    return new HashSet<>(createdFileNames);
+    return new HashSet<>(createdFileNames); // 本次flush产生的segment里面包含的16个
   }
 
   public void clearCreatedFiles() {

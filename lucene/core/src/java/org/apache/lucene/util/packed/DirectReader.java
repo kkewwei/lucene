@@ -163,7 +163,7 @@ public class DirectReader {
       try {
         long offset = (index * 12) >>> 3;
         int shift = (int) ((index + 1) & 1) << 2;
-        return (in.readShort(this.offset + offset) >>> shift) & 0xFFF;
+        return (in.readShort(this.offset + offset) >>> shift) & 0xFFF; // in=fdx
       } catch (IOException e) {
         throw new RuntimeException(e);
       }

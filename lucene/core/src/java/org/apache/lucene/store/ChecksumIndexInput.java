@@ -49,6 +49,6 @@ public abstract class ChecksumIndexInput extends IndexInput {
     if (skip < 0) {
       throw new IllegalStateException(getClass() + " cannot seek backwards (pos=" + pos + " getFilePointer()=" + curFP + ")");
     }
-    skipBytes(skip);
+    skipBytes(skip);// 很恶心，skip就是读取并丢弃？会跑到ByteBufferIndexInput.readBytes,
   }
 }

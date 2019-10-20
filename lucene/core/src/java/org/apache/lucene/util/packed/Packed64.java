@@ -70,7 +70,7 @@ class Packed64 extends PackedInts.MutableImpl {
     super(valueCount, bitsPerValue);
     final PackedInts.Format format = PackedInts.Format.PACKED;
     final int longCount = format.longCount(PackedInts.VERSION_CURRENT, valueCount, bitsPerValue);
-    this.blocks = new long[longCount];
+    this.blocks = new long[longCount]; //将这些termId以long存储，需要多少个logn来存储
     maskRight = ~0L << (BLOCK_SIZE-bitsPerValue) >>> (BLOCK_SIZE-bitsPerValue);
     bpvMinusBlockSize = bitsPerValue - BLOCK_SIZE;
   }
@@ -194,24 +194,24 @@ class Packed64 extends PackedInts.MutableImpl {
   }
 
   @Override
-  public int set(int index, long[] arr, int off, int len) {
+  public int set(int index, long[] arr, int off, int len) {// index: 开始存第几个词。
     assert len > 0 : "len must be > 0 (got " + len + ")";
     assert index >= 0 && index < valueCount;
     len = Math.min(len, valueCount - index);
     assert off + len <= arr.length;
 
     final int originalIndex = index;
-    final PackedInts.Encoder encoder = BulkOperation.of(PackedInts.Format.PACKED, bitsPerValue);
+    final PackedInts.Encoder encoder = BulkOperation.of(PackedInts.Format.PACKED, bitsPerValue); // BulkOperationPacked11
 
     // go to the next block where the value does not span across two blocks
-    final int offsetInBlocks = index % encoder.longValueCount();
+    final int offsetInBlocks = index % encoder.longValueCount(); //放在高位
     if (offsetInBlocks != 0) {
       for (int i = offsetInBlocks; i < encoder.longValueCount() && len > 0; ++i) {
         set(index++, arr[off++]);
         --len;
       }
       if (len == 0) {
-        return index - originalIndex;
+        return index - originalIndex;// kw_bug
       }
     }
 
@@ -219,14 +219,14 @@ class Packed64 extends PackedInts.MutableImpl {
     assert index % encoder.longValueCount() == 0;
     int blockIndex = (int) (((long) index * bitsPerValue) >>> BLOCK_BITS);
     assert (((long)index * bitsPerValue) & MOD_MASK) == 0;
-    final int iterations = len / encoder.longValueCount();
+    final int iterations = len / encoder.longValueCount(); // 先存储整体部分
     encoder.encode(arr, off, blocks, blockIndex, iterations);
     final int setValues = iterations * encoder.longValueCount();
     index += setValues;
     len -= setValues;
     assert len >= 0;
 
-    if (index > originalIndex) {
+    if (index > originalIndex) { // 还剩余多少
       // stay at the block boundary
       return index - originalIndex;
     } else {

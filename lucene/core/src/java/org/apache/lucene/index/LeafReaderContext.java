@@ -22,14 +22,14 @@ import java.util.List;
 
 /**
  * {@link IndexReaderContext} for {@link LeafReader} instances.
- */
+ */ //LeafReaderContext 即用来描述某一个段的信息，并且通过它能获得一个 LeafCollector 对象
 public final class LeafReaderContext extends IndexReaderContext {
   /** The reader's ord in the top-level's leaves array */
-  public final int ord;
+  public final int ord; //
   /** The reader's absolute doc base */
-  public final int docBase;
-  
-  private final LeafReader reader;
+  public final int docBase; // 这个segment的文档起点，为啥需要对同一个shard的所有segment都要分配一个起始绝对Id呢，是为了保证唯一性，分片节点向协调节点返回的是docId， 这个DocId是Lucene上里面每个semgment的Id,并不是ES层面的Id
+  // 当协调节点向shard请求这些Id时，绝对Id就是为了区分这个id是哪个Semgent的
+  private final LeafReader reader;// shard粒度的，es查询时，可以是ExitableLeafReader。es别的地方可以使:ElasticsearchLeafReader
   private final List<LeafReaderContext> leaves;
   
   /**
@@ -39,13 +39,13 @@ public final class LeafReaderContext extends IndexReaderContext {
                     int ord, int docBase, int leafOrd, int leafDocBase) {
     super(parent, ord, docBase);
     this.ord = leafOrd;
-    this.docBase = leafDocBase;
+    this.docBase = leafDocBase; // 这个segment的文档起点,在CompositeReaderContext中构建IndexReaderContext时，对每个segment都分配一个起始docId
     this.reader = reader;
     this.leaves = isTopLevel ? Collections.singletonList(this) : null;
   }
   
   LeafReaderContext(LeafReader leafReader) {
-    this(null, leafReader, 0, 0, 0, 0);
+    this(null, leafReader, 0, 0, 0, 0); // order是0
   }
   
   @Override
@@ -64,7 +64,7 @@ public final class LeafReaderContext extends IndexReaderContext {
   
   @Override
   public LeafReader reader() {
-    return reader;
+    return reader; // SegmentReader，查询时可以是ExitableLeafReader，refresh时候可以是ElasticsearchLeafReader
   }
 
   @Override

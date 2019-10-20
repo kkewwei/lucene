@@ -27,19 +27,19 @@ import java.io.IOException;
  *  using underlying index input instead of byte store on heap
  *
  * @lucene.experimental
- */
+ */  // 在启动的时候，作为segment基本内容给初始化了
 public final class OffHeapFSTStore implements FSTStore {
 
-    private static final long BASE_RAM_BYTES_USED = RamUsageEstimator.shallowSizeOfInstance(OffHeapFSTStore.class);
+    private static final long BASE_RAM_BYTES_USED = RamUsageEstimator.shallowSizeOfInstance(OffHeapFSTStore.class); // 32
 
-    private IndexInput in;
+    private IndexInput in; // MMAPIndexInput
     private long offset;
     private long numBytes;
 
     @Override
     public void init(DataInput in, long numBytes) throws IOException {
-        if (in instanceof IndexInput) {
-            this.in = (IndexInput) in;
+        if (in instanceof IndexInput) { // 默认跑这里
+            this.in = (IndexInput) in; // ByteBufferIndexInput$SingleBufferImpl,里面buffer使用的DirestByteBufferR
             this.numBytes = numBytes;
             this.offset = this.in.getFilePointer();
         } else {
@@ -47,7 +47,7 @@ public final class OffHeapFSTStore implements FSTStore {
                                                + in.getClass().getName());
         }
     }
-
+    //这里就是内存优势，
     @Override
     public long ramBytesUsed() {
         return BASE_RAM_BYTES_USED;
@@ -59,7 +59,7 @@ public final class OffHeapFSTStore implements FSTStore {
     }
 
     @Override
-    public FST.BytesReader getReverseBytesReader() {
+    public FST.BytesReader getReverseBytesReader() { // 从这里读取倒叙的FST结构
         try {
             return new ReverseRandomAccessReader(in.randomAccessSlice(offset, numBytes));
         } catch (IOException e) {

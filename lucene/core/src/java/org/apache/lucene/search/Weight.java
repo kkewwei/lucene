@@ -49,10 +49,10 @@ import org.apache.lucene.util.Bits;
  * </ol>
  * 
  * @since 2.9
- */
+ */ // 定义了条件
 public abstract class Weight implements SegmentCacheable {
 
-  protected final Query parentQuery;
+  protected final Query parentQuery; // 可以是BooleanQuery，LongPoint$1或者LatLonDocValuesBoxQuery
 
   /** Sole constructor, typically invoked by sub-classes.
    * @param query         the parent query
@@ -115,7 +115,7 @@ public abstract class Weight implements SegmentCacheable {
 
   /** The query that this concerns. */
   public final Query getQuery() {
-    return parentQuery;
+    return parentQuery; // 可以是IndexOrDocValuesQuery
   }
 
   /**
@@ -178,7 +178,7 @@ public abstract class Weight implements SegmentCacheable {
    */
   public BulkScorer bulkScorer(LeafReaderContext context) throws IOException {
 
-    Scorer scorer = scorer(context);
+    Scorer scorer = scorer(context); // 可以返回ConstantScoreScorer
     if (scorer == null) {
       // No docs match
       return null;
@@ -192,7 +192,7 @@ public abstract class Weight implements SegmentCacheable {
   /** Just wraps a Scorer and performs top scoring using it.
    *  @lucene.internal */
   protected static class DefaultBulkScorer extends BulkScorer {
-    private final Scorer scorer;
+    private final Scorer scorer; // 可以是ConstantScoreScorer
     private final DocIdSetIterator iterator;
     private final TwoPhaseIterator twoPhase;
 
@@ -210,36 +210,36 @@ public abstract class Weight implements SegmentCacheable {
     public long cost() {
       return iterator.cost();
     }
-
+    
     @Override
     public int score(LeafCollector collector, Bits acceptDocs, int min, int max) throws IOException {
       collector.setScorer(scorer);
       if (scorer.docID() == -1 && min == 0 && max == DocIdSetIterator.NO_MORE_DOCS) {
         scoreAll(collector, iterator, twoPhase, acceptDocs);
         return DocIdSetIterator.NO_MORE_DOCS;
-      } else {
+      } else { // 进来
         int doc = scorer.docID();
         if (doc < min) {
-          if (twoPhase == null) {
-            doc = iterator.advance(min);
+          if (twoPhase == null) { // 都会跑到这里
+            doc = iterator.advance(min); // 文档Id向后找一个
           } else {
-            doc = twoPhase.approximation().advance(min);
+            doc = twoPhase.approximation().advance(min); // 起始doc
           }
-        }
+        } //一个docId范围打分
         return scoreRange(collector, iterator, twoPhase, acceptDocs, doc, max);
       }
     }
 
     /** Specialized method to bulk-score a range of hits; we
      *  separate this from {@link #scoreAll} to help out
-     *  hotspot.
+     *  hotspot. // 查找docId从currentDoc到end之间的docId
      *  See <a href="https://issues.apache.org/jira/browse/LUCENE-5487">LUCENE-5487</a> */
     static int scoreRange(LeafCollector collector, DocIdSetIterator iterator, TwoPhaseIterator twoPhase,
         Bits acceptDocs, int currentDoc, int end) throws IOException {
-      if (twoPhase == null) {
+      if (twoPhase == null) {// 进来
         while (currentDoc < end) {
           if (acceptDocs == null || acceptDocs.get(currentDoc)) {
-            collector.collect(currentDoc);
+            collector.collect(currentDoc); // 会跑大SimpleTopScoreDocCollector.collect()，进行打分，将保存打分最小的几个
           }
           currentDoc = iterator.nextDoc();
         }

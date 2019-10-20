@@ -59,9 +59,9 @@ final class HitQueue extends PriorityQueue<ScoreDoc> {
    * @param prePopulate
    *          specifies whether to pre-populate the queue with sentinel values.
    */
-  HitQueue(int size, boolean prePopulate) {
+  HitQueue(int size, boolean prePopulate) { // 是一个优先级队里
     super(size, () -> {
-      if (prePopulate) {
+      if (prePopulate) { // 哨兵元素，站位元素
         // Always set the doc Id to MAX_VALUE so that it won't be favored by
         // lessThan. This generally should not happen since if score is not NEG_INF,
         // TopScoreDocCollector will always add the object to the queue.
@@ -72,9 +72,9 @@ final class HitQueue extends PriorityQueue<ScoreDoc> {
     });
   }
 
-  @Override
+  @Override // 打分来决定的
   protected final boolean lessThan(ScoreDoc hitA, ScoreDoc hitB) {
-    if (hitA.score == hitB.score)
+    if (hitA.score == hitB.score)// 再等分一致的情况下，选择docId号
       return hitA.doc > hitB.doc; 
     else
       return hitA.score < hitB.score;

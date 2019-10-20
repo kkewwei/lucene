@@ -77,16 +77,16 @@ public final class CompressingStoredFieldsReader extends StoredFieldsReader {
 
   private final int version;
   private final FieldInfos fieldInfos;
-  private final FieldsIndex indexReader;
-  private final long maxPointer;
-  private final IndexInput fieldsStream;
+  private final FieldsIndex indexReader; // 引用较大内存资源,是FieldsIndexReader，fdx
+  private final long maxPointer; // 所有chunk写完时的fdt中的位置（再后面就是footer部分了）
+  private final IndexInput fieldsStream;// 也是用mmap的打开fdt文件
   private final int chunkSize;
   private final int packedIntsVersion;
   private final CompressionMode compressionMode;
   private final Decompressor decompressor;
-  private final int numDocs;
-  private final boolean merging;
-  private final BlockState state;
+  private final int numDocs; // 这个segment文档个数
+  private final boolean merging; // 是否用于merge
+  private final BlockState state; // 干嘛的
   private final long numChunks; // number of compressed blocks written
   private final long numDirtyChunks; // number of incomplete compressed blocks written
   private boolean closed;
@@ -95,7 +95,7 @@ public final class CompressingStoredFieldsReader extends StoredFieldsReader {
   private CompressingStoredFieldsReader(CompressingStoredFieldsReader reader, boolean merging) {
     this.version = reader.version;
     this.fieldInfos = reader.fieldInfos;
-    this.fieldsStream = reader.fieldsStream.clone();
+    this.fieldsStream = reader.fieldsStream.clone(); // fdt
     this.indexReader = reader.indexReader.clone();
     this.maxPointer = reader.maxPointer;
     this.chunkSize = reader.chunkSize;
@@ -108,8 +108,8 @@ public final class CompressingStoredFieldsReader extends StoredFieldsReader {
     this.merging = merging;
     this.state = new BlockState();
     this.closed = false;
-  }
-
+  } // http://lucene.apache.org/core/8_2_0/core/org/apache/lucene/codecs/lucene50/Lucene50StoredFieldsFormat.html
+  // 分别读取fdx和fdt文件的数据
   /** Sole constructor. */
   public CompressingStoredFieldsReader(Directory d, SegmentInfo si, String segmentSuffix, FieldInfos fn,
       IOContext context, String formatName, CompressionMode compressionMode) throws IOException {
@@ -119,10 +119,10 @@ public final class CompressingStoredFieldsReader extends StoredFieldsReader {
     fieldInfos = fn;
     numDocs = si.maxDoc();
 
-    final String fieldsStreamFN = IndexFileNames.segmentFileName(segment, segmentSuffix, FIELDS_EXTENSION);
+    final String fieldsStreamFN = IndexFileNames.segmentFileName(segment, segmentSuffix, FIELDS_EXTENSION); // 读取的fdt文件
     try {
       // Open the data file and read metadata
-      fieldsStream = d.openInput(fieldsStreamFN, context);
+      fieldsStream = d.openInput(fieldsStreamFN, context);// 会去读取fdt文件
       version = CodecUtil.checkIndexHeader(fieldsStream, formatName, VERSION_START, VERSION_CURRENT, si.getId(), segmentSuffix);
       assert CodecUtil.indexHeaderLength(formatName, segmentSuffix) == fieldsStream.getFilePointer();
 
@@ -207,7 +207,7 @@ public final class CompressingStoredFieldsReader extends StoredFieldsReader {
   }
 
   private static void readField(DataInput in, StoredFieldVisitor visitor, FieldInfo info, int bits) throws IOException {
-    switch (bits & TYPE_MASK) {
+    switch (bits & TYPE_MASK) {// get source部分
       case BYTE_ARR:
         int length = in.readVInt();
         byte[] data = new byte[length];
@@ -362,10 +362,10 @@ public final class CompressingStoredFieldsReader extends StoredFieldsReader {
 
   /**
    * Keeps state about the current block of documents.
-   */
+   */ // 存储当前读取chunk的信息
   private class BlockState {
-
-    private int docBase, chunkDocs;
+    // 当前chunk起始位置
+    private int docBase, chunkDocs; // 这个chunk的起始位置，包含的chunkDocs
 
     // whether the block has been sliced, this happens for large documents
     private boolean sliced;
@@ -374,7 +374,7 @@ public final class CompressingStoredFieldsReader extends StoredFieldsReader {
     private int[] numStoredFields = IntsRef.EMPTY_INTS;
 
     // the start pointer at which you can read the compressed documents
-    private long startPointer;
+    private long startPointer; //保存的是这个chunk存储压缩documents的地方
 
     private final BytesRef spare = new BytesRef();
     private final BytesRef bytes = new BytesRef();
@@ -390,7 +390,7 @@ public final class CompressingStoredFieldsReader extends StoredFieldsReader {
     void reset(int docID) throws IOException {
       boolean success = false;
       try {
-        doReset(docID);
+        doReset(docID); //读取这个docID所在chunk的所有原始数据
         success = true;
       } finally {
         if (success == false) {
@@ -405,7 +405,7 @@ public final class CompressingStoredFieldsReader extends StoredFieldsReader {
     }
 
     private void doReset(int docID) throws IOException {
-      docBase = fieldsStream.readVInt();
+      docBase = fieldsStream.readVInt(); // 获取这个docID所在的chnk在fdt中的起始位置
       final int token = fieldsStream.readVInt();
       chunkDocs = token >>> 1;
       if (contains(docID) == false
@@ -415,7 +415,7 @@ public final class CompressingStoredFieldsReader extends StoredFieldsReader {
             + ", numDocs=" + numDocs, fieldsStream);
       }
 
-      sliced = (token & 1) != 0;
+      sliced = (token & 1) != 0; // 是否压缩了
 
       offsets = ArrayUtil.grow(offsets, chunkDocs + 1);
       numStoredFields = ArrayUtil.grow(numStoredFields, chunkDocs);
@@ -426,7 +426,7 @@ public final class CompressingStoredFieldsReader extends StoredFieldsReader {
       } else {
         // Number of stored fields per document
         final int bitsPerStoredFields = fieldsStream.readVInt();
-        if (bitsPerStoredFields == 0) {
+        if (bitsPerStoredFields == 0) { // 首先读取numDoc个numStoredFields
           Arrays.fill(numStoredFields, 0, chunkDocs, fieldsStream.readVInt());
         } else if (bitsPerStoredFields > 31) {
           throw new CorruptIndexException("bitsPerStoredFields=" + bitsPerStoredFields, fieldsStream);
@@ -438,22 +438,22 @@ public final class CompressingStoredFieldsReader extends StoredFieldsReader {
         }
 
         // The stream encodes the length of each document and we decode
-        // it into a list of monotonically increasing offsets
+        // it into a list of monotonically increasing offsets  其次读取numDoc个docLength
         final int bitsPerLength = fieldsStream.readVInt();
-        if (bitsPerLength == 0) {
+        if (bitsPerLength == 0) { // 长度一致
           final int length = fieldsStream.readVInt();
           for (int i = 0; i < chunkDocs; ++i) {
-            offsets[1 + i] = (1 + i) * length;
+            offsets[1 + i] = (1 + i) * length; //
           }
         } else if (bitsPerStoredFields > 31) {
           throw new CorruptIndexException("bitsPerLength=" + bitsPerLength, fieldsStream);
-        } else {
+        } else { // 一般都跑到这里，计算出这个doc在fdt中的偏移量。
           final PackedInts.ReaderIterator it = PackedInts.getReaderIteratorNoHeader(fieldsStream, PackedInts.Format.PACKED, packedIntsVersion, chunkDocs, bitsPerLength, 1);
           for (int i = 0; i < chunkDocs; ++i) {
             offsets[i + 1] = (int) it.next();
           }
           for (int i = 0; i < chunkDocs; ++i) {
-            offsets[i + 1] += offsets[i];
+            offsets[i + 1] += offsets[i]; // 在fdt中每个doc的偏移量
           }
         }
 
@@ -467,10 +467,10 @@ public final class CompressingStoredFieldsReader extends StoredFieldsReader {
         }
 
       }
-
+     // 读取当前读到的地方
       startPointer = fieldsStream.getFilePointer();
 
-      if (merging) {
+      if (merging) {// 读取真正的doc 原始压缩数据
         final int totalLength = offsets[chunkDocs];
         // decompress eagerly
         if (sliced) {
@@ -515,7 +515,7 @@ public final class CompressingStoredFieldsReader extends StoredFieldsReader {
         // already decompressed
         documentInput = new ByteArrayDataInput(bytes.bytes, bytes.offset + offset, length);
       } else if (sliced) {
-        fieldsStream.seek(startPointer);
+        fieldsStream.seek(startPointer); //将fdt指针指向当前chunk存储原始数据的地方
         decompressor.decompress(fieldsStream, chunkSize, offset, Math.min(length, chunkSize - offset), bytes);
         documentInput = new DataInput() {
 
@@ -565,21 +565,21 @@ public final class CompressingStoredFieldsReader extends StoredFieldsReader {
     }
 
   }
-
+  // 首先加载这个doc所在chunk的原始值，然后第二步骤再去读取原始值
   SerializedDocument document(int docID) throws IOException {
-    if (state.contains(docID) == false) {
-      fieldsStream.seek(indexReader.getStartPointer(docID));
-      state.reset(docID);
+    if (state.contains(docID) == false) { // 若发现docId不在当前block内
+      fieldsStream.seek(indexReader.getStartPointer(docID)); // 首先在fdm中判断这个docId
+      state.reset(docID); // 加载这个chunk的原始数据
     }
     assert state.contains(docID);
-    return state.document(docID);
+    return state.document(docID); // 读取这个docId的原始数据
   }
 
   @Override
   public void visitDocument(int docID, StoredFieldVisitor visitor)
       throws IOException {
 
-    final SerializedDocument doc = document(docID);
+    final SerializedDocument doc = document(docID); // 获取具体文件内容
 
     for (int fieldIDX = 0; fieldIDX < doc.numStoredFields; fieldIDX++) {
       final long infoAndBits = doc.in.readVLong();
@@ -591,7 +591,7 @@ public final class CompressingStoredFieldsReader extends StoredFieldsReader {
 
       switch(visitor.needsField(fieldInfo)) {
         case YES:
-          readField(doc.in, visitor, fieldInfo, bits);
+          readField(doc.in, visitor, fieldInfo, bits);// get source部分
           break;
         case NO:
           if (fieldIDX == doc.numStoredFields - 1) {// don't skipField on last field value; treat like STOP
@@ -634,7 +634,7 @@ public final class CompressingStoredFieldsReader extends StoredFieldsReader {
   }
   
   IndexInput getFieldsStream() {
-    return fieldsStream;
+    return fieldsStream; // 读取fdt文件
   }
 
   int getChunkSize() {
@@ -655,7 +655,7 @@ public final class CompressingStoredFieldsReader extends StoredFieldsReader {
 
   @Override
   public long ramBytesUsed() {
-    return indexReader.ramBytesUsed();
+    return indexReader.ramBytesUsed(); // FieldsIndexReader
   }
   
   @Override
@@ -665,8 +665,8 @@ public final class CompressingStoredFieldsReader extends StoredFieldsReader {
 
   @Override
   public void checkIntegrity() throws IOException {
-    indexReader.checkIntegrity();
-    CodecUtil.checksumEntireFile(fieldsStream);
+    indexReader.checkIntegrity(); //FieldsIndexReader,会去校验fdx
+    CodecUtil.checksumEntireFile(fieldsStream); // 会去校验fdt
   }
 
   @Override

@@ -67,7 +67,7 @@ public final class ReaderUtil {
   /**
    * Returns index of the searcher/reader for document <code>n</code> in the
    * array used to construct this searcher/reader.
-   */
+   */ // 查找这个文档id在哪个segment上
   public static int subIndex(int n, List<LeafReaderContext> leaves) { // find
     // searcher/reader for doc n:
     int size = leaves.size();

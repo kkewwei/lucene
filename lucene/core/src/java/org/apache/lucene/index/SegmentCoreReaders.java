@@ -53,30 +53,30 @@ final class SegmentCoreReaders {
   // closed.  A given instance of SegmentReader may be
   // closed, even though it shares core objects with other
   // SegmentReaders:
-  private final AtomicInteger ref = new AtomicInteger(1);
+  private final AtomicInteger ref = new AtomicInteger(1); // 多少个其余Reader共享这一个
   
-  final FieldsProducer fields;
+  final FieldsProducer fields;  // PerFieldPostingsFormat.$FieldsReader  里面有每个字段的BlockTreeTermsReader
   final NormsProducer normsProducer;
 
-  final StoredFieldsReader fieldsReaderOrig;
+  final StoredFieldsReader fieldsReaderOrig;  // CompressingStoredFieldsReader 映射的fdt
   final TermVectorsReader termVectorsReaderOrig;
-  final PointsReader pointsReader;
-  final CompoundDirectory cfsReader;
-  final String segment;
+  final PointsReader pointsReader;// Lucene60PointsReader
+  final CompoundDirectory cfsReader; // Lucene50CompoundReader，只是检查了文件头，并没有读完
+  final String segment;// _7
   /** 
    * fieldinfos for this core: means gen=-1.
    * this is the exact fieldinfos these codec components saw at write.
    * in the case of DV updates, SR may hold a newer version. */
-  final FieldInfos coreFieldInfos;
+  final FieldInfos coreFieldInfos;  // 每个字段的属性，就是从fnm中读取的
 
   // TODO: make a single thread local w/ a
   // Thingy class holding fieldsReader, termVectorsReader,
   // normsProducer
-
+  // 这里使用了缓存，为啥需要使用缓存呢
   final CloseableThreadLocal<StoredFieldsReader> fieldsReaderLocal = new CloseableThreadLocal<StoredFieldsReader>() {
     @Override
     protected StoredFieldsReader initialValue() {
-      return fieldsReaderOrig.clone();
+      return fieldsReaderOrig.clone(); // CompressingStoredFieldsReader，是上面那个对象的克隆。
     }
   };
   
@@ -87,43 +87,43 @@ final class SegmentCoreReaders {
     }
   };
 
-  private final Set<IndexReader.ClosedListener> coreClosedListeners = 
+  private final Set<IndexReader.ClosedListener> coreClosedListeners = // 当资源关闭时的回调函数 
       Collections.synchronizedSet(new LinkedHashSet<IndexReader.ClosedListener>());
   
   SegmentCoreReaders(Directory dir, SegmentCommitInfo si, IOContext context) throws IOException {
-
-    final Codec codec = si.info.getCodec();
+    // codec=Lucene86Codec
+    final Codec codec = si.info.getCodec();  // PerFieldMappingPostingFormatCodec(Lucene86)
     final Directory cfsDir; // confusing name: if (cfs) it's the cfsdir, otherwise it's the segment's directory.
     boolean success = false;
     
     try {
-      if (si.info.getUseCompoundFile()) {
-        cfsDir = cfsReader = codec.compoundFormat().getCompoundReader(dir, si.info, context);
+      if (si.info.getUseCompoundFile()) { // 是否是复合文件
+        cfsDir = cfsReader = codec.compoundFormat().getCompoundReader(dir, si.info, context); // Lucene50CompoundReader,部分文件使用mmap打开了
       } else {
         cfsReader = null;
         cfsDir = dir;
       }
 
-      segment = si.info.name;
-
+      segment = si.info.name;  //_7
+      //首先从.fnm获取每个字段的属性。   复合文件：_Lucene50_0.tip  .nvm  .fnm   .fdt   _Lucene50_0.pos  .nvd   _Lucene50_0.tim   .fdx   _Lucene50_0.doc
       coreFieldInfos = codec.fieldInfosFormat().read(cfsDir, si.info, "", context);
       
       final SegmentReadState segmentReadState = new SegmentReadState(cfsDir, si.info, coreFieldInfos, context);
       final PostingsFormat format = codec.postingsFormat();
-      // Ask codec for its Fields
-      fields = format.fieldsProducer(segmentReadState);
+      // Ask codec for its Fields 会去读每个字段的fst结构
+      fields = format.fieldsProducer(segmentReadState); // PerFieldPostingsFormat.$FieldsReader，给每个字段分配BlockTreeTermsReader
       assert fields != null;
       // ask codec for its Norms: 
       // TODO: since we don't write any norms file if there are no norms,
       // kinda jaky to assume the codec handles the case of no norms file at all gracefully?!
 
-      if (coreFieldInfos.hasNorms()) {
+      if (coreFieldInfos.hasNorms()) { //
         normsProducer = codec.normsFormat().normsProducer(segmentReadState);
-        assert normsProducer != null;
+        assert normsProducer != null; // 获取的是_7.nvd文件每个字段的属性。
       } else {
         normsProducer = null;
       }
-  
+      // CompressingStoredFieldsFormatReader: 获取的是fdx和fdt文件的数据
       fieldsReaderOrig = si.info.getCodec().storedFieldsFormat().fieldsReader(cfsDir, si.info, coreFieldInfos, context);
 
       if (coreFieldInfos.hasVectors()) { // open term vector files only as needed
@@ -133,7 +133,7 @@ final class SegmentCoreReaders {
       }
 
       if (coreFieldInfos.hasPointValues()) {
-        pointsReader = codec.pointsFormat().fieldsReader(segmentReadState);
+        pointsReader = codec.pointsFormat().fieldsReader(segmentReadState); // 对所有的Point类型数据进行读取
       } else {
         pointsReader = null;
       }
@@ -173,7 +173,7 @@ final class SegmentCoreReaders {
       }
     }
   }
-
+  // 分别都cache的啥
   private final IndexReader.CacheHelper cacheHelper = new IndexReader.CacheHelper() {
     private final IndexReader.CacheKey cacheKey = new IndexReader.CacheKey();
 

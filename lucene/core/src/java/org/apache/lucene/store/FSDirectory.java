@@ -134,7 +134,7 @@ public abstract class FSDirectory extends BaseDirectory {
   private final AtomicInteger opsSinceLastDelete = new AtomicInteger();
 
   /** Used to generate temp file names in {@link #createTempOutput}. */
-  private final AtomicLong nextTempFileCounter = new AtomicLong();
+  private final AtomicLong nextTempFileCounter = new AtomicLong(); // 下一个临时文件编号
 
   /** Create a new FSDirectory for the named location (ctor for subclasses).
    * The directory is created at the named location if it does not yet exist.
@@ -148,14 +148,14 @@ public abstract class FSDirectory extends BaseDirectory {
    * @param lockFactory the lock factory to use, or null for the default
    * ({@link NativeFSLockFactory});
    * @throws IOException if there is a low-level I/O error
-   */
+   */ // 在FSDirectory的构造方法中，主要是初始化了lockFactory和directory对象
   protected FSDirectory(Path path, LockFactory lockFactory) throws IOException {
     super(lockFactory);
     // If only read access is permitted, createDirectories fails even if the directory already exists.
     if (!Files.isDirectory(path)) {
       Files.createDirectories(path);  // create directory, if it doesn't exist
     }
-    directory = path.toRealPath();
+    directory = path.toRealPath(); // UnixPath
   }
 
   /** Creates an FSDirectory instance, trying to pick the
@@ -193,7 +193,7 @@ public abstract class FSDirectory extends BaseDirectory {
    *  also specify a custom {@link LockFactory}. */
   public static FSDirectory open(Path path, LockFactory lockFactory) throws IOException {
     if (Constants.JRE_IS_64BIT && MMapDirectory.UNMAP_SUPPORTED) {
-      return new MMapDirectory(path, lockFactory);
+      return new MMapDirectory(path, lockFactory); // 如果当前jre是64位且支持Unmap（能加载sun.misc.Cleaner类和java.nio.DirectByteBuffer.cleaner()方法），则创建的是MMapDirectory对象
     } else if (Constants.WINDOWS) {
       return new SimpleFSDirectory(path, lockFactory);
     } else {
@@ -413,7 +413,7 @@ public abstract class FSDirectory extends BaseDirectory {
         public void write(byte[] b, int offset, int length) throws IOException {
           while (length > 0) {
             final int chunk = Math.min(length, CHUNK_SIZE);
-            out.write(b, offset, chunk);
+            out.write(b, offset, chunk); // 跑到Channels.newOutputStream
             length -= chunk;
             offset += chunk;
           }

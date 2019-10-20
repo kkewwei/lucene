@@ -51,7 +51,7 @@ public abstract class FilteringTokenFilter extends TokenFilter {
         if (skippedPositions != 0) {
           posIncrAtt.setPositionIncrement(posIncrAtt.getPositionIncrement() + skippedPositions);
         }
-        return true;
+        return true; // 若为true， 还有下游
       }
       skippedPositions += posIncrAtt.getPositionIncrement();
     }

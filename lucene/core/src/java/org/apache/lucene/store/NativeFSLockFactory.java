@@ -89,9 +89,9 @@ public final class NativeFSLockFactory extends FSLockFactory {
     
     // Ensure that lockDir exists and is a directory.
     // note: this will fail if lockDir is a symlink
-    Files.createDirectories(lockDir);
+    Files.createDirectories(lockDir); // 将创建这个目录
     
-    Path lockFile = lockDir.resolve(lockName);
+    Path lockFile = lockDir.resolve(lockName); //获取 write.locl理论路径
 
     IOException creationException = null;
     try {
@@ -99,7 +99,7 @@ public final class NativeFSLockFactory extends FSLockFactory {
     } catch (IOException ignore) {
       // we must create the file to have a truly canonical path.
       // if it's already created, we don't care. if it cant be created, it will fail below.
-      creationException = ignore;
+      creationException = ignore; // 若文件存在，则抛异常，在这里被捕获
     }
     
     // fails if the lock file does not exist

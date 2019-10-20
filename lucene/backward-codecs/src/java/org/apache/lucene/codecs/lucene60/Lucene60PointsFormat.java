@@ -98,7 +98,7 @@ public class Lucene60PointsFormat extends PointsFormat {
   public Lucene60PointsFormat() {
   }
 
-  @Override
+  @Override // 该segment所有域共享这个对象，segment刷新后就关闭了
   public PointsWriter fieldsWriter(SegmentWriteState state) throws IOException {
     throw new UnsupportedOperationException("Old codecs may only be used for reading");
   }

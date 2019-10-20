@@ -42,9 +42,9 @@ import static org.apache.lucene.codecs.lucene80.Lucene80NormsFormat.VERSION_STAR
  */
 final class Lucene80NormsProducer extends NormsProducer implements Cloneable {
   // metadata maps (just file pointers and minimal stuff)
-  private final Map<Integer,NormsEntry> norms = new HashMap<>();
+  private final Map<Integer,NormsEntry> norms = new HashMap<>(); // 读取出来
   private final int maxDoc;
-  private IndexInput data;
+  private IndexInput data; //数据文件读取部分
   private boolean merging;
   private Map<Integer, IndexInput> disiInputs;
   private Map<Integer, RandomAccessInput> disiJumpTables;
@@ -52,11 +52,11 @@ final class Lucene80NormsProducer extends NormsProducer implements Cloneable {
 
   Lucene80NormsProducer(SegmentReadState state, String dataCodec, String dataExtension, String metaCodec, String metaExtension) throws IOException {
     maxDoc = state.segmentInfo.maxDoc();
-    String metaName = IndexFileNames.segmentFileName(state.segmentInfo.name, state.segmentSuffix, metaExtension);
+    String metaName = IndexFileNames.segmentFileName(state.segmentInfo.name, state.segmentSuffix, metaExtension); // _v.nvm
     int version = -1;
 
     // read in the entries from the metadata file.
-    try (ChecksumIndexInput in = state.directory.openChecksumInput(metaName, state.context)) {
+    try (ChecksumIndexInput in = state.directory.openChecksumInput(metaName, state.context)) {//_dk.nvm
       Throwable priorE = null;
       try {
         version = CodecUtil.checkIndexHeader(in, metaCodec, VERSION_START, VERSION_CURRENT, state.segmentInfo.getId(), state.segmentSuffix);
@@ -68,7 +68,7 @@ final class Lucene80NormsProducer extends NormsProducer implements Cloneable {
       }
     }
 
-    String dataName = IndexFileNames.segmentFileName(state.segmentInfo.name, state.segmentSuffix, dataExtension);
+    String dataName = IndexFileNames.segmentFileName(state.segmentInfo.name, state.segmentSuffix, dataExtension); //_dk.nvd
     data = state.directory.openInput(dataName, state.context);
     boolean success = false;
     try {

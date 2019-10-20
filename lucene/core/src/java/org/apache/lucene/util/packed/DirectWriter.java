@@ -44,25 +44,25 @@ import org.apache.lucene.store.DataOutput;
 public final class DirectWriter {
   final int bitsPerValue;
   final long numValues;
-  final DataOutput output;
+  final DataOutput output; // 可能是dvd文件，也可能是ByteBuffer类型的存储
   
   long count;
   boolean finished;
   
   // for now, just use the existing writer under the hood
   int off;
-  final byte[] nextBlocks;
+  final byte[] nextBlocks; // 真正存放压缩
   final long[] nextValues;
   final BulkOperation encoder;
   final int iterations;
-  
+   // 就是普通的长度压缩，找最大数字使用的那个长度
   DirectWriter(DataOutput output, long numValues, int bitsPerValue) {
     this.output = output;
     this.numValues = numValues;
     this.bitsPerValue = bitsPerValue;
-    encoder = BulkOperation.of(PackedInts.Format.PACKED, bitsPerValue);
-    iterations = encoder.computeIterations((int) Math.min(numValues, Integer.MAX_VALUE), PackedInts.DEFAULT_BUFFER_SIZE);
-    nextBlocks = new byte[iterations * encoder.byteBlockCount()];
+    encoder = BulkOperation.of(PackedInts.Format.PACKED, bitsPerValue); // 看下可用使用几个block
+    iterations = encoder.computeIterations((int) Math.min(numValues, Integer.MAX_VALUE), PackedInts.DEFAULT_BUFFER_SIZE); // 可以使用缓存1024
+    nextBlocks = new byte[iterations * encoder.byteBlockCount()]; //都是使用byte来存放数据
     nextValues = new long[iterations * encoder.byteValueCount()];
   }
   
@@ -75,7 +75,7 @@ public final class DirectWriter {
     }
     nextValues[off++] = l;
     if (off == nextValues.length) {
-      flush();
+      flush(); // 已经是一个block了
     }
     count++;
   }
@@ -83,8 +83,8 @@ public final class DirectWriter {
   private void flush() throws IOException {
     encoder.encode(nextValues, 0, nextBlocks, 0, iterations);
     final int blockCount = (int) PackedInts.Format.PACKED.byteCount(PackedInts.VERSION_CURRENT, off, bitsPerValue);
-    output.writeBytes(nextBlocks, blockCount);
-    Arrays.fill(nextValues, 0L);
+    output.writeBytes(nextBlocks, blockCount); // 每个文档的termId压缩存储起来了  dvd
+    Arrays.fill(nextValues, 0L); // 清空
     off = 0;
   }
 
@@ -94,7 +94,7 @@ public final class DirectWriter {
       throw new IllegalStateException("Wrong number of values added, expected: " + numValues + ", got: " + count);
     }
     assert !finished;
-    flush();
+    flush(); // 将每个文档的termId存储到dvd文件中
     // pad for fast io: we actually only need this for certain BPV, but its just 3 bytes...
     for (int i = 0; i < 3; i++) {
       output.writeByte((byte) 0);
@@ -119,7 +119,7 @@ public final class DirectWriter {
    *         and supported by this writer
    */
   private static int roundBits(int bitsRequired) {
-    int index = Arrays.binarySearch(SUPPORTED_BITS_PER_VALUE, bitsRequired);
+    int index = Arrays.binarySearch(SUPPORTED_BITS_PER_VALUE, bitsRequired); // 支持的没有10， 则只能选择每个12
     if (index < 0) {
       return SUPPORTED_BITS_PER_VALUE[-index-1];
     } else {

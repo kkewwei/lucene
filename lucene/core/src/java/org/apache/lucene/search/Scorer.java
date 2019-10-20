@@ -41,7 +41,7 @@ import java.util.Objects;
 public abstract class Scorer extends Scorable {
 
   /** the Scorer's parent Weight */
-  protected final Weight weight;
+  protected final Weight weight; // 可以是BooleanWeight
 
   /**
    * Constructs a Scorer

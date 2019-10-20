@@ -23,24 +23,24 @@ import org.apache.lucene.util.packed.PackedInts;
 import org.apache.lucene.util.packed.PagedGrowableWriter;
 
 // Used to dedup states (lookup already-frozen states)
-final class NodeHash<T> {
+final class NodeHash<T> { // 就是个Node的hash表，在共享后缀Node的时候，如果两个Node的hash值一致，那就只写一次到FST。
 
-  private PagedGrowableWriter table;
+  private PagedGrowableWriter table;  // 通过hash存放该节点
   private long count;
   private long mask;
   private final FST<T> fst;
-  private final FST.Arc<T> scratchArc = new FST.Arc<>();
-  private final FST.BytesReader in;
+  private final FST.Arc<T> scratchArc = new FST.Arc<>(); // 读取这个
+  private final FST.BytesReader in;// Builder类中第165行初始化，读取的是BytesStore中的blocks[]
 
   public NodeHash(FST<T> fst, FST.BytesReader in) {
     table = new PagedGrowableWriter(16, 1<<27, 8, PackedInts.COMPACT);
     mask = 15;
     this.fst = fst;
-    this.in = in;
+    this.in = in; // Builder类中第165行初始化，读取的是BytesStore中的blocks[]
   }
-
+  // address:node在fst中的终点写入位置
   private boolean nodesEqual(Builder.UnCompiledNode<T> node, long address) throws IOException {
-    fst.readFirstRealTargetArc(address, scratchArc, in);
+    fst.readFirstRealTargetArc(address, scratchArc, in);// 从这里in读取该地址address指向的那个边，放入scratchArc
 
     // Fail fast for a node with fixed length arcs.
     if (scratchArc.bytesPerArc() != 0) {
@@ -57,7 +57,7 @@ final class NodeHash<T> {
       }
     }
 
-    for(int arcUpto=0; arcUpto < node.numArcs; arcUpto++) {
+    for(int arcUpto=0; arcUpto < node.numArcs; arcUpto++) {// 有一样不不相等，则不登
       final Builder.Arc<T> arc = node.arcs[arcUpto];
       if (arc.label != scratchArc.label() ||
           !arc.output.equals(scratchArc.output()) ||
@@ -74,7 +74,7 @@ final class NodeHash<T> {
           return false;
         }
       }
-      fst.readNextRealArc(scratchArc, in);
+      fst.readNextRealArc(scratchArc, in); // 再度去下一个
     }
 
     return false;
@@ -90,11 +90,11 @@ final class NodeHash<T> {
     for (int arcIdx=0; arcIdx < node.numArcs; arcIdx++) {
       final Builder.Arc<T> arc = node.arcs[arcIdx];
       //System.out.println("  label=" + arc.label + " target=" + ((Builder.CompiledNode) arc.target).node + " h=" + h + " output=" + fst.outputs.outputToString(arc.output) + " isFinal?=" + arc.isFinal);
-      h = PRIME * h + arc.label;
+      h = PRIME * h + arc.label; // label  i的节点边的lebal决定了i-1边的lebal
       long n = ((Builder.CompiledNode) arc.target).node;
       h = PRIME * h + (int) (n^(n>>32));
-      h = PRIME * h + arc.output.hashCode();
-      h = PRIME * h + arc.nextFinalOutput.hashCode();
+      h = PRIME * h + arc.output.hashCode(); // output相关
+      h = PRIME * h + arc.nextFinalOutput.hashCode(); //nextFinalOutput相关
       if (arc.isFinal) {
         h += 17;
       }
@@ -102,7 +102,7 @@ final class NodeHash<T> {
     //System.out.println("  ret " + (h&Integer.MAX_VALUE));
     return h & Long.MAX_VALUE;
   }
-
+  // abcd,abde,acde的话，后面两个term，只有de共享
   // hash code for a frozen node
   private long hash(long node) throws IOException {
     final int PRIME = 31;
@@ -126,21 +126,21 @@ final class NodeHash<T> {
     //System.out.println("  ret " + (h&Integer.MAX_VALUE));
     return h & Long.MAX_VALUE;
   }
-
+ // 返回的就是CompiledNode.node
   public long add(Builder<T> builder, Builder.UnCompiledNode<T> nodeIn) throws IOException {
     //System.out.println("hash: add count=" + count + " vs " + table.size() + " mask=" + mask);
-    final long h = hash(nodeIn);
+    final long h = hash(nodeIn); // 该节点hash出一个值
     long pos = h & mask;
     int c = 0;
     while(true) {
-      final long v = table.get(pos);
+      final long v = table.get(pos);// 没有便是0。一般是node在fst中的终点写入位置
       if (v == 0) {
         // freeze & add
-        final long node = fst.addNode(builder, nodeIn);
+        final long node = fst.addNode(builder, nodeIn); // 该节点在fst中的存储位置
         //System.out.println("  now freeze node=" + node);
         assert hash(node) == h : "frozenHash=" + hash(node) + " vs h=" + h;
         count++;
-        table.set(pos, node);
+        table.set(pos, node); // node=fst中该词的存储位置
         // Rehash at 2/3 occupancy:
         if (count > 2*table.size()/3) {
           rehash();

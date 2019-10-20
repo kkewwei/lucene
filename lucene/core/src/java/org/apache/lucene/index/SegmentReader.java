@@ -41,31 +41,31 @@ import org.apache.lucene.util.IOUtils;
  * Instances pointing to the same segment (but with different deletes, etc)
  * may share the same core data.
  * @lucene.experimental
- */
-public final class SegmentReader extends CodecReader {
+ */ // 读取某个segment，总的reader:读取
+public final class SegmentReader extends CodecReader { // 父类有LeafReader
        
   private final SegmentCommitInfo si;
   // this is the original SI that IW uses internally but it's mutated behind the scenes
   // and we don't want this SI to be used for anything. Yet, IW needs this to do maintainance
   // and lookup pooled readers etc.
   private final SegmentCommitInfo originalSi;
-  private final LeafMetaData metaData;
-  private final Bits liveDocs;
+  private final LeafMetaData metaData; // 叶子节点标记
+  private final Bits liveDocs; //
   private final Bits hardLiveDocs;
 
   // Normally set to si.maxDoc - si.delDocCount, unless we
   // were created as an NRT reader from IW, in which case IW
   // tells us the number of live docs:
-  private final int numDocs;
+  private final int numDocs; // 该文档(不包括待删除的doc)
 
-  final SegmentCoreReaders core;
-  final SegmentDocValues segDocValues;
+  final SegmentCoreReaders core; // 就是SegmentCoreReaders
+  final SegmentDocValues segDocValues;// 就是SegmentDocValues
 
   /** True if we are holding RAM only liveDocs or DV updates, i.e. the SegmentCommitInfo delGen doesn't match our liveDocs. */
   final boolean isNRT;
   
-  final DocValuesProducer docValuesProducer;
-  final FieldInfos fieldInfos;
+  final DocValuesProducer docValuesProducer;  // SegmentDocValuesProducer
+  final FieldInfos fieldInfos; // 需要全部读取出来
 
   /**
    * Constructs a new SegmentReader with a new core.
@@ -73,14 +73,14 @@ public final class SegmentReader extends CodecReader {
    * @throws IOException if there is a low-level IO error
    */
   SegmentReader(SegmentCommitInfo si, int createdVersionMajor, IOContext context) throws IOException {
-    this.si = si.clone();
+    this.si = si.clone();// 仅仅是把SegmentCommitInfo对象给clone了一遍（除了SegmentInfo没变，别的都新产生的）
     this.originalSi = si;
     this.metaData = new LeafMetaData(createdVersionMajor, si.info.getMinVersion(), si.info.getIndexSort());
 
     // We pull liveDocs/DV updates from disk:
     this.isNRT = false;
-    
-    core = new SegmentCoreReaders(si.info.dir, si, context);
+    // 把需要的文件全部读取了一遍（比如fst文件）。比较重要
+    core = new SegmentCoreReaders(si.info.dir, si, context);// 这里超级重要
     segDocValues = new SegmentDocValues();
     
     boolean success = false;
@@ -88,7 +88,7 @@ public final class SegmentReader extends CodecReader {
     try {
       if (si.hasDeletions()) {
         // NOTE: the bitvector is stored using the regular directory, not cfs
-        hardLiveDocs = liveDocs = codec.liveDocsFormat().readLiveDocs(directory(), si, IOContext.READONCE);
+        hardLiveDocs = liveDocs = codec.liveDocsFormat().readLiveDocs(directory(), si, IOContext.READONCE); //FixedBits读取的是给segment所有存货的live
       } else {
         assert si.getDelCount() == 0;
         hardLiveDocs = liveDocs = null;
@@ -161,10 +161,10 @@ public final class SegmentReader extends CodecReader {
 
     if (fieldInfos.hasDocValues() == false) {
       return null;
-    } else {
+    } else { // 为true
       Directory dir;
       if (core.cfsReader != null) {
-        dir = core.cfsReader;
+        dir = core.cfsReader; // 进来了
       } else {
         dir = si.info.dir;
       }
@@ -187,14 +187,14 @@ public final class SegmentReader extends CodecReader {
       // updates always outside of CFS
       FieldInfosFormat fisFormat = si.info.getCodec().fieldInfosFormat();
       final String segmentSuffix = Long.toString(si.getFieldInfosGen(), Character.MAX_RADIX);
-      return fisFormat.read(si.info.dir, si.info, segmentSuffix, IOContext.READONCE);
+      return fisFormat.read(si.info.dir, si.info, segmentSuffix, IOContext.READONCE); //进入Lucene60FieldInfosFormat中，从fnm文件中读取最新的
     }
   }
   
   @Override
   public Bits getLiveDocs() {
     ensureOpen();
-    return liveDocs;
+    return liveDocs; // FixedBits
   }
 
   @Override
@@ -244,7 +244,7 @@ public final class SegmentReader extends CodecReader {
   @Override
   public PointsReader getPointsReader() {
     ensureOpen();
-    return core.pointsReader;
+    return core.pointsReader; // Lucene60PointsReader
   }
 
   @Override
@@ -256,13 +256,13 @@ public final class SegmentReader extends CodecReader {
   @Override
   public DocValuesProducer getDocValuesReader() {
     ensureOpen();
-    return docValuesProducer;
+    return docValuesProducer; // SegmentDocValuesProducer
   }
 
   @Override
   public FieldsProducer getPostingsReader() {
     ensureOpen();
-    return core.fields;
+    return core.fields; // 就是PerFieldPostingsFormat$FieldsReader
   }
 
   @Override
@@ -322,11 +322,11 @@ public final class SegmentReader extends CodecReader {
   public CacheHelper getReaderCacheHelper() {
     return readerCacheHelper;
   }
-
+  // 主要保证不对close的indices注册关闭的listener, 关闭的时候将内存占用从
   /** Wrap the cache helper of the core to add ensureOpen() calls that make
    *  sure users do not register closed listeners on closed indices. */
   private final IndexReader.CacheHelper coreCacheHelper = new IndexReader.CacheHelper() {
-
+    
     @Override
     public CacheKey getKey() {
       return core.getCacheHelper().getKey();
@@ -334,7 +334,7 @@ public final class SegmentReader extends CodecReader {
 
     @Override
     public void addClosedListener(ClosedListener listener) {
-      ensureOpen();
+      ensureOpen(); 
       core.getCacheHelper().addClosedListener(listener);
     }
   };

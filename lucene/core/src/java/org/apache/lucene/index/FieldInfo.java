@@ -32,16 +32,16 @@ public final class FieldInfo {
   /** Field's name */
   public final String name;
   /** Internal field number */
-  public final int number;
+  public final int number;  //每个域都有个编号，这个编号是按照写入顺序分配的，还是按照字符串顺序排序的
 
   private DocValuesType docValuesType = DocValuesType.NONE;
 
   // True if any document indexed term vectors
   private boolean storeTermVector;
-
+  // 是否忽略Norm
   private boolean omitNorms; // omit norms associated with indexed fields  
 
-  private IndexOptions indexOptions = IndexOptions.NONE;
+  private IndexOptions indexOptions = IndexOptions.NONE; // 实际的详细倒排索引设置是在PerField下面的FreqProxTermsWriterPerField里面设置的
   private boolean storePayloads; // whether this field stores payloads together with term positions
 
   private final Map<String,String> attributes;
@@ -52,7 +52,7 @@ public final class FieldInfo {
    *  (see {@link org.apache.lucene.codecs.PointsFormat}). */
   private int pointDimensionCount;
   private int pointIndexDimensionCount;
-  private int pointNumBytes;
+  private int pointNumBytes; // 每个元素占用多少byte,比如int占用4，long占用8
 
   // whether this field is used as the soft-deletes field
   private final boolean softDeletesField;
@@ -90,7 +90,7 @@ public final class FieldInfo {
   /** 
    * Performs internal consistency checks.
    * Always returns true (or throws IllegalStateException) 
-   */
+   */ // 属性的checkout
   public boolean checkConsistency() {
     if (indexOptions != IndexOptions.NONE) {
       // Cannot store payloads unless positions are indexed:
@@ -303,7 +303,7 @@ public final class FieldInfo {
    * Returns true if norms are explicitly omitted for this field
    */
   public boolean omitsNorms() {
-    return omitNorms;
+    return omitNorms; //
   }
 
   /** Omit norms for this field. */

@@ -32,27 +32,27 @@ import org.apache.lucene.util.IntBlockPool;
  *  streams per token.  Consumers of this class, eg {@link
  *  FreqProxTermsWriter} and {@link TermVectorsConsumer},
  *  write their own byte streams under each term. */
-abstract class TermsHash {
+abstract class TermsHash { // FreqProxTermsWriter或者TermVectorsConsumer，TermVectorsConsumer是没有nextTermsHash的
+ // 一个线程公用一个
+  final TermsHash nextTermsHash;  // TermVectorsConsumer，负责写 tvx, tvd, tvf 信息
 
-  final TermsHash nextTermsHash;
-
-  final IntBlockPool intPool;
-  final ByteBlockPool bytePool;
-  ByteBlockPool termBytePool;
-  final Counter bytesUsed;
+  final IntBlockPool intPool;// 存放bytePool中当前可用，一个线程公用一个。两个都是新产生的
+  final ByteBlockPool bytePool;//一个线程公用一个, TermVectorsConsumer和FreqProxTermsWriter分别有一个
+  ByteBlockPool termBytePool; // 无论是FreqProxTermsWriter或者TermVectorsConsumer，其值都是FreqProxTermsWriter.bytePool，一个线程公用一个
+  final Counter bytesUsed;// 这个DocumentsWriterPerThread所使用的内存
   final boolean trackAllocations;
-
+  // 需要注意，这里产生的bytePool、intPool、termBytePool是所有的域共享的存储
   TermsHash(final DocumentsWriterPerThread docWriter, boolean trackAllocations, TermsHash nextTermsHash) {
     this.trackAllocations = trackAllocations;
     this.nextTermsHash = nextTermsHash;
-    this.bytesUsed = trackAllocations ? docWriter.bytesUsed : Counter.newCounter();
-    intPool = new IntBlockPool(docWriter.intBlockAllocator);
-    bytePool = new ByteBlockPool(docWriter.byteBlockAllocator);
-
-    if (nextTermsHash != null) {
+    this.bytesUsed = trackAllocations ? docWriter.bytesUsed : Counter.newCounter(); // 都是新产生的
+    intPool = new IntBlockPool(docWriter.intBlockAllocator);// 都是新产生的
+    bytePool = new ByteBlockPool(docWriter.byteBlockAllocator);//  // 只有TermVectorsConsumer、TermVectorsConsumerPerField的bytePool是单独相等的。
+    // TermVectorsConsumer.termBytePool。FreqProxTermsWriter.bytePool, termBytePool, TermVectorsConsumerPerField.termBytePool，FreqProxTermsWriterPerField.termBytePool, FreqProxTermsWriterPerField.bytePool，两个TermsHashPerField.bytesHash里面的pool全部都是同一个。
+    if (nextTermsHash != null) {  // 若不为空，可能使用的是同一个bytePool
       // We are primary
       termBytePool = bytePool;
-      nextTermsHash.termBytePool = bytePool;
+      nextTermsHash.termBytePool = bytePool;  // 注意这里使用的是同一个byteBlockPool
     }
   }
 
@@ -72,26 +72,26 @@ abstract class TermsHash {
     intPool.reset(false, false); 
     bytePool.reset(false, false);
   }
-
+  // 不是直接跑到这里，第二次才是
   void flush(Map<String,TermsHashPerField> fieldsToFlush, final SegmentWriteState state,
-      Sorter.DocMap sortMap, NormsProducer norms) throws IOException {
+      Sorter.DocMap sortMap, NormsProducer norms) throws IOException { //sortMap为空
     if (nextTermsHash != null) {
       Map<String,TermsHashPerField> nextChildFields = new HashMap<>();
-      for (final Map.Entry<String,TermsHashPerField> entry : fieldsToFlush.entrySet()) {
+      for (final Map.Entry<String,TermsHashPerField> entry : fieldsToFlush.entrySet()) { // segment范围内就4个域
         nextChildFields.put(entry.getKey(), entry.getValue().getNextPerField());
-      }
-      nextTermsHash.flush(nextChildFields, state, sortMap, norms);
+      }// 写tvd/tvm文件
+      nextTermsHash.flush(nextChildFields, state, sortMap, norms);// 跑到TermVectorsConsumer那里，完成termVector相关的刷新工作
     }
   }
 
   abstract TermsHashPerField addField(FieldInvertState fieldInvertState, FieldInfo fieldInfo);
 
   void finishDocument(int docID) throws IOException {
-    if (nextTermsHash != null) {
-      nextTermsHash.finishDocument(docID);
+    if (nextTermsHash != null) {// 直接跑到next
+      nextTermsHash.finishDocument(docID); // 可能会触发128个文档的刷新
     }
   }
-
+  // 还没有对域开始真正处理，每写一个新词，就需要对nextTermsHash开始清理
   void startDocument() throws IOException {
     if (nextTermsHash != null) {
       nextTermsHash.startDocument();

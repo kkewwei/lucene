@@ -70,7 +70,7 @@ public final class RamUsageEstimator {
   /** 
    * Number of bytes this JVM uses to represent an object reference. 
    */
-  public final static int NUM_BYTES_OBJECT_REF;
+  public final static int NUM_BYTES_OBJECT_REF; // 对象引用的长度，我理解就是地址长度， 默认为4
 
   /**
    * Number of bytes to represent an object header (no fields, no alignments).
@@ -86,7 +86,7 @@ public final class RamUsageEstimator {
    * A constant specifying the object alignment boundary inside the JVM. Objects will
    * always take a full multiple of this constant, possibly wasting some space. 
    */
-  public final static int NUM_BYTES_OBJECT_ALIGNMENT;
+  public final static int NUM_BYTES_OBJECT_ALIGNMENT; // 为8
 
   /**
    * Approximate memory usage that we assign to all unknown queries -
@@ -220,7 +220,7 @@ public final class RamUsageEstimator {
   /** 
    * Aligns an object size to be the next multiple of {@link #NUM_BYTES_OBJECT_ALIGNMENT}. 
    */
-  public static long alignObjectSize(long size) {
+  public static long alignObjectSize(long size) { // 对其
     size += (long) NUM_BYTES_OBJECT_ALIGNMENT - 1L;
     return size - (size % NUM_BYTES_OBJECT_ALIGNMENT);
   }

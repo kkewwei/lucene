@@ -106,10 +106,10 @@ public final class Lucene60FieldInfosFormat extends FieldInfosFormat {
   /** Sole constructor. */
   public Lucene60FieldInfosFormat() {
   }
-  
+  // 读取的是 _7.cfs里面的片段文件slice=_7.fnm,就是保存的字段信息
   @Override
   public FieldInfos read(Directory directory, SegmentInfo segmentInfo, String segmentSuffix, IOContext context) throws IOException {
-    final String fileName = IndexFileNames.segmentFileName(segmentInfo.name, segmentSuffix, EXTENSION);
+    final String fileName = IndexFileNames.segmentFileName(segmentInfo.name, segmentSuffix, EXTENSION); // _7.fnm
     try (ChecksumIndexInput input = directory.openChecksumInput(fileName, context)) {
       Throwable priorE = null;
       FieldInfo infos[] = null;
@@ -120,30 +120,30 @@ public final class Lucene60FieldInfosFormat extends FieldInfosFormat {
                                    Lucene60FieldInfosFormat.FORMAT_CURRENT,
                                    segmentInfo.getId(), segmentSuffix);
         
-        final int size = input.readVInt(); //read in the size
+        final int size = input.readVInt(); //read in the size   // 获取字段个数
         infos = new FieldInfo[size];
         
         // previous field's attribute map, we share when possible:
         Map<String,String> lastAttributes = Collections.emptyMap();
-        
+        // 获取每个字段的具体属性
         for (int i = 0; i < size; i++) {
-          String name = input.readString();
-          final int fieldNumber = input.readVInt();
+          String name = input.readString(); // 获取字段名称
+          final int fieldNumber = input.readVInt();  // 字段列编号
           if (fieldNumber < 0) {
             throw new CorruptIndexException("invalid field number for field: " + name + ", fieldNumber=" + fieldNumber, input);
           }
-          byte bits = input.readByte();
+          byte bits = input.readByte(); // 字段的真正属性
           boolean storeTermVector = (bits & STORE_TERMVECTOR) != 0;
           boolean omitNorms = (bits & OMIT_NORMS) != 0;
           boolean storePayloads = (bits & STORE_PAYLOADS) != 0;
           boolean isSoftDeletesField = (bits & SOFT_DELETES_FIELD) != 0;
-
+         // // 读取索引类型
           final IndexOptions indexOptions = getIndexOptions(input, input.readByte());
-          
+          // 读取docValue类型
           // DV Types are packed in one byte
           final DocValuesType docValuesType = getDocValuesType(input, input.readByte());
-          final long dvGen = input.readLong();
-          Map<String,String> attributes = input.readMapOfStrings();
+          final long dvGen = input.readLong(); //dv版本
+          Map<String,String> attributes = input.readMapOfStrings(); //PerFieldPostingsFormat.format->Lucene50, PerFieldPostingsFormat.suffix->0
           // just use the last field's map if its the same
           if (attributes.equals(lastAttributes)) {
             attributes = lastAttributes;
@@ -268,10 +268,10 @@ public final class Lucene60FieldInfosFormat extends FieldInfosFormat {
 
   @Override
   public void write(Directory directory, SegmentInfo segmentInfo, String segmentSuffix, FieldInfos infos, IOContext context) throws IOException {
-    final String fileName = IndexFileNames.segmentFileName(segmentInfo.name, segmentSuffix, EXTENSION);
+    final String fileName = IndexFileNames.segmentFileName(segmentInfo.name, segmentSuffix, EXTENSION); // fnm文件
     try (IndexOutput output = directory.createOutput(fileName, context)) {
       CodecUtil.writeIndexHeader(output, Lucene60FieldInfosFormat.CODEC_NAME, Lucene60FieldInfosFormat.FORMAT_CURRENT, segmentInfo.getId(), segmentSuffix);
-      output.writeVInt(infos.size());
+      output.writeVInt(infos.size()); // 域的个数
       for (FieldInfo fi : infos) {
         fi.checkConsistency();
 
@@ -283,9 +283,9 @@ public final class Lucene60FieldInfosFormat extends FieldInfosFormat {
         if (fi.omitsNorms()) bits |= OMIT_NORMS;
         if (fi.hasPayloads()) bits |= STORE_PAYLOADS;
         if (fi.isSoftDeletesField()) bits |= SOFT_DELETES_FIELD;
-        output.writeByte(bits);
+        output.writeByte(bits); // 是否有TermVector
 
-        output.writeByte(indexOptionsByte(fi.getIndexOptions()));
+        output.writeByte(indexOptionsByte(fi.getIndexOptions())); // 存储DOCS、DOCS、_FREQS等
 
         // pack the DV type and hasNorms in one byte
         output.writeByte(docValuesByte(fi.getDocValuesType()));
@@ -312,8 +312,8 @@ public final class Lucene60FieldInfosFormat extends FieldInfosFormat {
   static final int FORMAT_CURRENT = FORMAT_SELECTIVE_INDEXING;
   
   // Field flags
-  static final byte STORE_TERMVECTOR = 0x1;
-  static final byte OMIT_NORMS = 0x2;
-  static final byte STORE_PAYLOADS = 0x4;
-  static final byte SOFT_DELETES_FIELD = 0x8;
+  static final byte STORE_TERMVECTOR = 0x1;  // store_termvector
+  static final byte OMIT_NORMS = 0x2;  // omit_norms
+  static final byte STORE_PAYLOADS = 0x4;  // store_payloads
+  static final byte SOFT_DELETES_FIELD = 0x8;  // soft_deletes_field
 }

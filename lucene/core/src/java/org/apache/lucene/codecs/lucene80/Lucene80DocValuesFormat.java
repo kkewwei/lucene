@@ -155,25 +155,25 @@ public final class Lucene80DocValuesFormat extends DocValuesFormat {
   static final int VERSION_CURRENT = VERSION_BIN_COMPRESSED;
 
   // indicates docvalues type
-  static final byte NUMERIC = 0;
-  static final byte BINARY = 1;
-  static final byte SORTED = 2;
-  static final byte SORTED_SET = 3;
-  static final byte SORTED_NUMERIC = 4;
+  static final byte NUMERIC = 0;   // number
+  static final byte BINARY = 1;   //binary
+  static final byte SORTED = 2;  //sorted
+  static final byte SORTED_SET = 3;   //sorted_set
+  static final byte SORTED_NUMERIC = 4;   //sorted_number
 
-  static final int DIRECT_MONOTONIC_BLOCK_SHIFT = 16;
+  static final int DIRECT_MONOTONIC_BLOCK_SHIFT = 16;   // direct_monotinic_block_shift， block最大的个数 1<<16
 
-  static final int NUMERIC_BLOCK_SHIFT = 14;
+  static final int NUMERIC_BLOCK_SHIFT = 14; // number_block_shift
   static final int NUMERIC_BLOCK_SIZE = 1 << NUMERIC_BLOCK_SHIFT;
 
   static final int BINARY_BLOCK_SHIFT = 5;
   static final int BINARY_DOCS_PER_COMPRESSED_BLOCK = 1 << BINARY_BLOCK_SHIFT;
   
   static final int TERMS_DICT_BLOCK_SHIFT = 4;
-  static final int TERMS_DICT_BLOCK_SIZE = 1 << TERMS_DICT_BLOCK_SHIFT;
-  static final int TERMS_DICT_BLOCK_MASK = TERMS_DICT_BLOCK_SIZE - 1;
+  static final int TERMS_DICT_BLOCK_SIZE = 1 << TERMS_DICT_BLOCK_SHIFT;// terms_dict_block_size   为14
+  static final int TERMS_DICT_BLOCK_MASK = TERMS_DICT_BLOCK_SIZE - 1;// 15  词典block，会没15个词尽量压缩到一次，为一个block
 
-  static final int TERMS_DICT_REVERSE_INDEX_SHIFT = 10;
-  static final int TERMS_DICT_REVERSE_INDEX_SIZE = 1 << TERMS_DICT_REVERSE_INDEX_SHIFT;
-  static final int TERMS_DICT_REVERSE_INDEX_MASK = TERMS_DICT_REVERSE_INDEX_SIZE - 1;
+  static final int TERMS_DICT_REVERSE_INDEX_SHIFT = 10;    // terms_dict_reverses_index_shift
+  static final int TERMS_DICT_REVERSE_INDEX_SIZE = 1 << TERMS_DICT_REVERSE_INDEX_SHIFT;    // terms_dict_reverses_index_size
+  static final int TERMS_DICT_REVERSE_INDEX_MASK = TERMS_DICT_REVERSE_INDEX_SIZE - 1; // terms_dict_reverses_index_mask
 }

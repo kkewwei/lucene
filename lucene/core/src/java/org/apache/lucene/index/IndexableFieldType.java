@@ -39,7 +39,7 @@ public interface IndexableFieldType {
    */
   // TODO: shouldn't we remove this?  Whether/how a field is
   // tokenized is an impl detail under Field?
-  public boolean tokenized();
+  public boolean tokenized();  //是否分词，默认是分词的
 
   /** 
    * True if this field's indexed form should be also stored 
@@ -51,9 +51,9 @@ public interface IndexableFieldType {
    * <p>
    * This option is illegal if {@link #indexOptions()} returns
    * IndexOptions.NONE.
-   */
+   */ // es中对分词的字段有效，主要是term偏移量，词频等信息，默认是关闭的。不能针对不分词的字段设置
   public boolean storeTermVectors();
-
+   // https://www.elastic.co/guide/en/elasticsearch/reference/current/term-vector.html
   /** 
    * True if this field's token character offsets should also
    * be stored into term vectors.
@@ -96,12 +96,12 @@ public interface IndexableFieldType {
   /** 
    * DocValues {@link DocValuesType}: how the field's value will be indexed
    * into docValues.
-   */
-  public DocValuesType docValuesType();
-
+   */ // es中默认不分词的字段，docValue都是打开的，磁盘存储的，也可以通过"doc_values": false主动关闭。不能针对分词的字段进行设置
+  public DocValuesType docValuesType();// 还需要和tokenized配合使用，将分词器关闭才行。默认是打开的
+  // lucene默认是关闭的
   /**
    * If this is positive (representing the number of point dimensions), the field is indexed as a point.
-   */
+   */ // 该维度的个数
   public int pointDimensionCount();
 
   /**

@@ -53,7 +53,7 @@ final class MinShouldMatchSumScorer extends Scorer {
     // could be rewritten to:
     // (c1 AND (c2..cn|msm=m-1)) OR (!c1 AND (c2..cn|msm=m))
     // if we assume that clauses come in ascending cost, then
-    // the cost of the first part is the cost of c1 (because the cost of a conjunction is
+    // the cost of the first part is the cost of c1 (because the cost of a conjunction is // cost的合约是取最便宜的那组
     // the cost of the least costly clause)
     // the cost of the second part is the cost of finding m matches among the c2...cn
     // remaining clauses
@@ -61,16 +61,16 @@ final class MinShouldMatchSumScorer extends Scorer {
     // two parts
 
     // If we recurse infinitely, we find out that the cost of a msm query is the sum of the
-    // costs of the num_scorers - minShouldMatch + 1 least costly scorers
-    final PriorityQueue<Long> pq = new PriorityQueue<Long>(numScorers - minShouldMatch + 1) {
+    // costs of the num_scorers - minShouldMatch + 1 least costly scorers // 已经排好序，取得是多少种可能性
+    final PriorityQueue<Long> pq = new PriorityQueue<Long>(numScorers - minShouldMatch + 1) { // 优先队列使用堆来实现，从1开始使用
       @Override
-      protected boolean lessThan(Long a, Long b) {
+      protected boolean lessThan(Long a, Long b) { // 升序
         return a > b;
       }
     };
-    costs.forEach(pq::insertWithOverflow);
-    return StreamSupport.stream(pq.spliterator(), false).mapToLong(Number::longValue).sum();
-  }
+    costs.forEach(pq::insertWithOverflow); // 获取合适的那个最小堆
+    return StreamSupport.stream(pq.spliterator(), false).mapToLong(Number::longValue).sum(); // 将求和，求取最小的前n个
+  } // spliterator()不用管，是为了底层计算是否并行优化的
 
   final int minShouldMatch;
 

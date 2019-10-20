@@ -126,7 +126,7 @@ public abstract class IndexReader implements Closeable {
     void onClose(CacheKey key) throws IOException;
   }
 
-  private final Set<IndexReader> parentReaders = 
+  private final Set<IndexReader> parentReaders =  // 添加
       Collections.synchronizedSet(Collections.newSetFromMap(new WeakHashMap<IndexReader,Boolean>()));
   
   /** Expert: This method is called by {@code IndexReader}s which wrap other readers
@@ -417,7 +417,7 @@ public abstract class IndexReader implements Closeable {
    * @see IndexReaderContext#leaves()
    */
   public final List<LeafReaderContext> leaves() {
-    return getContext().leaves();
+    return getContext().leaves(); // 该shard下面所有的segment
   }
 
   /**

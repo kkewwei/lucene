@@ -27,7 +27,7 @@ import java.util.zip.CheckedOutputStream;
 public class OutputStreamIndexOutput extends IndexOutput {
 
   private final CRC32 crc = new CRC32();
-  private final BufferedOutputStream os;
+  private final BufferedOutputStream os; // 都是有8k的缓存
   
   private long bytesWritten = 0L;
   private boolean flushedOnClose = false;
@@ -50,7 +50,7 @@ public class OutputStreamIndexOutput extends IndexOutput {
   
   @Override
   public final void writeBytes(byte[] b, int offset, int length) throws IOException {
-    os.write(b, offset, length);
+    os.write(b, offset, length); // 写入kdd中：每个文档的压缩后的长度
     bytesWritten += length;
   }
 

@@ -34,8 +34,8 @@ import org.apache.lucene.store.DataOutput;
  * <p>
  * Files:
  * <ol>
- *   <li><tt>.nvd</tt>: Norms data</li>
- *   <li><tt>.nvm</tt>: Norms metadata</li>
+ *   <li><tt>.nvd</tt>: Norms data</li>  存储域的标准化值(normalization values)
+ *   <li><tt>.nvm</tt>: Norms metadata</li>   存储域的标准化值(normalization values)
  * </ol>
  * <ol>
  *   <li><a name="nvm"></a>
@@ -89,7 +89,7 @@ public class Lucene80NormsFormat extends NormsFormat {
   public NormsProducer normsProducer(SegmentReadState state) throws IOException {
     return new Lucene80NormsProducer(state, DATA_CODEC, DATA_EXTENSION, METADATA_CODEC, METADATA_EXTENSION);
   }
-  
+  // 可以参考：https://www.amazingkoala.com.cn/Lucene/suoyinwenjian/2019/0305/39.html介绍
   private static final String DATA_CODEC = "Lucene80NormsData";
   private static final String DATA_EXTENSION = "nvd";
   private static final String METADATA_CODEC = "Lucene80NormsMetadata";

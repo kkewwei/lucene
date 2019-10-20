@@ -39,24 +39,24 @@ final class FieldsIndexReader extends FieldsIndex {
 
   private static final long BASE_RAM_BYTES_USED = RamUsageEstimator.shallowSizeOfInstance(FieldsIndexReader.class);
 
-  private final int maxDoc;
+  private final int maxDoc; // 总文档数
   private final int blockShift;
   private final int numChunks;
   private final DirectMonotonicReader.Meta docsMeta;
   private final DirectMonotonicReader.Meta startPointersMeta;
-  private final IndexInput indexInput;
+  private final IndexInput indexInput;//_v.fdx
   private final long docsStartPointer, docsEndPointer, startPointersStartPointer, startPointersEndPointer;
-  private final DirectMonotonicReader docs, startPointers;
+  private final DirectMonotonicReader docs, startPointers; // 应该是放的某个block或者chunk
   private final long maxPointer;
 
   FieldsIndexReader(Directory dir, String name, String suffix, String extensionPrefix, String codecName, byte[] id) throws IOException {
-    try (ChecksumIndexInput metaIn = dir.openChecksumInput(IndexFileNames.segmentFileName(name, suffix, extensionPrefix + FIELDS_META_EXTENSION_SUFFIX), IOContext.READONCE)) {
+    try (ChecksumIndexInput metaIn = dir.openChecksumInput(IndexFileNames.segmentFileName(name, suffix, extensionPrefix + FIELDS_META_EXTENSION_SUFFIX), IOContext.READONCE)) { // _v.fdm
       Throwable priorE = null;
       try {
         CodecUtil.checkIndexHeader(metaIn, codecName + "Meta", VERSION_START, VERSION_CURRENT, id, suffix);
         maxDoc = metaIn.readInt();
-        blockShift = metaIn.readInt();
-        numChunks = metaIn.readInt();
+        blockShift = metaIn.readInt(); // 一个block 1024个chunk
+        numChunks = metaIn.readInt(); // 所有block里面chunk和
         docsStartPointer = metaIn.readLong();
         docsMeta = DirectMonotonicReader.loadMeta(metaIn, numChunks, blockShift);
         docsEndPointer = startPointersStartPointer = metaIn.readLong();
@@ -67,7 +67,7 @@ final class FieldsIndexReader extends FieldsIndex {
         CodecUtil.checkFooter(metaIn, priorE);
       }
     }
-
+    // 读取_v.fdx
     indexInput = dir.openInput(IndexFileNames.segmentFileName(name, suffix, extensionPrefix + FIELDS_INDEX_EXTENSION_SUFFIX), IOContext.READ);
     boolean success = false;
     try {
@@ -113,15 +113,15 @@ final class FieldsIndexReader extends FieldsIndex {
   public void close() throws IOException {
     indexInput.close();
   }
-
+  // 根据docId（这个chunk）在fdx中定位该文档在fdt中哪里存放的
   @Override
   long getStartPointer(int docID) {
     FutureObjects.checkIndex(docID, maxDoc);
-    long blockIndex = docs.binarySearch(0, numChunks, docID);
-    if (blockIndex < 0) {
+    long blockIndex = docs.binarySearch(0, numChunks, docID); // 找到这个docId的文档在哪个chunk上
+    if (blockIndex < 0) { // 找一个chunk内的docId
       blockIndex = -2 - blockIndex;
     }
-    return startPointers.get(blockIndex);
+    return startPointers.get(blockIndex); // DirectMonotonicReader
   }
 
   @Override
@@ -139,6 +139,6 @@ final class FieldsIndexReader extends FieldsIndex {
 
   @Override
   void checkIntegrity() throws IOException {
-    CodecUtil.checksumEntireFile(indexInput);
+    CodecUtil.checksumEntireFile(indexInput); // check的是fdx的尾部内容
   }
 }

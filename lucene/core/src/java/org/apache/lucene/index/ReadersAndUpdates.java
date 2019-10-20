@@ -48,7 +48,7 @@ import org.apache.lucene.util.InfoStream;
 // Used by IndexWriter to hold open SegmentReaders (for
 // searching or merging), plus pending deletes and updates,
 // for a given segment
-final class ReadersAndUpdates {
+final class ReadersAndUpdates { // 为了更新某个segment，而专门产生的一个Segment
   // Not final because we replace (clone) when we need to
   // change it and it's been shared:
   final SegmentCommitInfo info;
@@ -57,11 +57,11 @@ final class ReadersAndUpdates {
   private final AtomicInteger refCount = new AtomicInteger(1);
 
   // Set once (null, and then maybe set, and never set again):
-  private SegmentReader reader;
+  private SegmentReader reader; // 根本不动，别的只是copy该类
 
   // How many further deletions we've done against
   // liveDocs vs when we loaded it or last wrote it:
-  private final PendingDeletes pendingDeletes;
+  private final PendingDeletes pendingDeletes; // 对于存量的segment,需要删除的docId放在这里（termDelete,queryDelete都放这里）
 
   // the major version this index was created with
   private final int indexCreatedVersionMajor;
@@ -75,7 +75,7 @@ final class ReadersAndUpdates {
   private boolean isMerging = false;
 
   // Holds resolved (to docIDs) doc values updates that have not yet been
-  // written to the index
+  // written to the index // 暂存需要更新的docId，这些doc value还没开始写入索引中
   private final Map<String,List<DocValuesFieldUpdates>> pendingDVUpdates = new HashMap<>();
 
   // Holds resolved (to docIDs) doc values updates that were resolved while
@@ -92,7 +92,7 @@ final class ReadersAndUpdates {
     this.info = info;
     this.pendingDeletes = pendingDeletes;
     this.indexCreatedVersionMajor = indexCreatedVersionMajor;
-  }
+  } // 没有reader赋值
 
   /** Init from a previously opened SegmentReader.
    *
@@ -166,9 +166,9 @@ final class ReadersAndUpdates {
 
   /** Returns a {@link SegmentReader}. */
   public synchronized SegmentReader getReader(IOContext context) throws IOException {
-    if (reader == null) {
+    if (reader == null) { //若reader为null的话，就创建一个。新产生的segment的reader就为空
       // We steal returned ref:
-      reader = new SegmentReader(info, indexCreatedVersionMajor, context);
+      reader = new SegmentReader(info, indexCreatedVersionMajor, context); // 对一个segment的读取。refresh时跑到这里，会实现准实时查询功能。会进行mmap映射
       pendingDeletes.onNewReader(reader, info);
     }
 
@@ -207,16 +207,16 @@ final class ReadersAndUpdates {
   /**
    * Returns a ref to a clone. NOTE: you should decRef() the reader when you're
    * done (ie do not call close()).
-   */
+   */ //
   public synchronized SegmentReader getReadOnlyClone(IOContext context) throws IOException {
-    if (reader == null) {
+    if (reader == null) { // 首先reader为null的话，就创建SegmentReader， 比较重要，获取读取fst文件头，并映射
       getReader(context).decRef();
       assert reader != null;
     }
     // force new liveDocs
     Bits liveDocs = pendingDeletes.getLiveDocs();
     if (liveDocs != null) {
-      return new SegmentReader(info, reader, liveDocs, pendingDeletes.getHardLiveDocs(), pendingDeletes.numDocs(), true);
+      return new SegmentReader(info, reader, liveDocs, pendingDeletes.getHardLiveDocs(), pendingDeletes.numDocs(), true); // 产生一个新的
     } else {
       // liveDocs == null and reader != null. That can only be if there are no deletes
       assert reader.getLiveDocs() == null;

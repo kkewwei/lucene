@@ -30,7 +30,7 @@ public class IOContext {
    * is being used for.
    */
   public enum Context {
-    MERGE, READ, FLUSH, DEFAULT
+    MERGE, READ, FLUSH, DEFAULT // 所指目录用作：merge,read,flush,default
   };
 
   /**
@@ -44,9 +44,9 @@ public class IOContext {
 
   public final boolean readOnce;
 
-  public static final IOContext DEFAULT = new IOContext(Context.DEFAULT);
+  public static final IOContext DEFAULT = new IOContext(Context.DEFAULT); //
 
-  public static final IOContext READONCE = new IOContext(true);
+  public static final IOContext READONCE = new IOContext(true); // readonce
 
   public static final IOContext READ = new IOContext(false);
 

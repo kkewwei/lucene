@@ -99,7 +99,7 @@ public class MMapDirectory extends FSDirectory {
    * @see #MMapDirectory(Path, LockFactory, int)
    */
   public static final int DEFAULT_MAX_CHUNK_SIZE = Constants.JRE_IS_64BIT ? (1 << 30) : (1 << 28);
-  final int chunkSizePower;
+  final int chunkSizePower;// 30，也就是每1G文件大小，算一个chunk
 
   /** Create a new MMapDirectory for the named location.
    *  The directory is created at the named location if it does not yet exist.
@@ -161,7 +161,7 @@ public class MMapDirectory extends FSDirectory {
       throw new IllegalArgumentException("Maximum chunk size for mmap must be >0");
     }
     this.chunkSizePower = 31 - Integer.numberOfLeadingZeros(maxChunkSize);
-    assert this.chunkSizePower >= 0 && this.chunkSizePower <= 30;
+    assert this.chunkSizePower >= 0 && this.chunkSizePower <= 30; // 最大映射1G
   }
   
   /**
@@ -230,16 +230,16 @@ public class MMapDirectory extends FSDirectory {
   }
 
   /** Creates an IndexInput for the file with the given name. */
-  @Override
+  @Override // 这里会去映射文件
   public IndexInput openInput(String name, IOContext context) throws IOException {
     ensureOpen();
     ensureCanRead(name);
-    Path path = directory.resolve(name);
+    Path path = directory.resolve(name); //
     try (FileChannel c = FileChannel.open(path, StandardOpenOption.READ)) {
       final String resourceDescription = "MMapIndexInput(path=\"" + path.toString() + "\")";
-      final boolean useUnmap = getUseUnmap();
+      final boolean useUnmap = getUseUnmap(); // 默认为true
       return ByteBufferIndexInput.newInstance(resourceDescription,
-          map(resourceDescription, c, 0, c.size()), 
+          map(resourceDescription, c, 0, c.size()), //DirectByteBufferR,1G映射一个
           c.size(), chunkSizePower, new ByteBufferGuard(resourceDescription, useUnmap ? CLEANER : null));
     }
   }
@@ -252,23 +252,23 @@ public class MMapDirectory extends FSDirectory {
     final long chunkSize = 1L << chunkSizePower;
     
     // we always allocate one more buffer, the last one may be a 0 byte one
-    final int nrBuffers = (int) (length >>> chunkSizePower) + 1;
-    
+    final int nrBuffers = (int) (length >>> chunkSizePower) + 1;//至少需要个1个buffer
+    // 每1G，使用一个ByteBuffer
     ByteBuffer buffers[] = new ByteBuffer[nrBuffers];
     
     long bufferStart = 0L;
     for (int bufNr = 0; bufNr < nrBuffers; bufNr++) { 
-      int bufSize = (int) ( (length > (bufferStart + chunkSize))
+      int bufSize = (int) ( (length > (bufferStart + chunkSize))//这个map映射的大小。最大映射1G的空间
           ? chunkSize
               : (length - bufferStart)
           );
       MappedByteBuffer buffer;
-      try {
-        buffer = fc.map(MapMode.READ_ONLY, offset + bufferStart, bufSize);
+      try { // DirectByteBufferR应该是专门为mmap函数定制的一个堆外内存，所有的写操作，将抛出ReadOnlyBufferException异常。
+        buffer = fc.map(MapMode.READ_ONLY, offset + bufferStart, bufSize);   // DirectByteBufferR
       } catch (IOException ioe) {
         throw convertMapFailedIOException(ioe, resourceDescription, bufSize);
       }
-      if (preload) {
+      if (preload) { // 若预加载的话，在第一次映射的时候，就直接load接进来。refresh产生的新的segment也会预加载进来
         buffer.load();
       }
       buffers[bufNr] = buffer;

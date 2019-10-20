@@ -81,13 +81,13 @@ public final class Util {
 
     // Accumulate output as we go
     T output = fst.outputs.getNoOutput();
-    for(int i=0;i<input.length;i++) {
+    for(int i=0;i<input.length;i++) { // 开始针对每个字符串进行匹配
       if (fst.findTargetArc(input.bytes[i+input.offset] & 0xFF, arc, arc, fstReader) == null) {
         return null;
       }
       output = fst.outputs.add(output, arc.output());
     }
-
+    // output组合
     if (arc.isFinal()) {
       return fst.outputs.add(output, arc.nextFinalOutput());
     } else {
@@ -891,7 +891,7 @@ public final class Util {
   }
 
   /** Just takes unsigned byte values from the BytesRef and
-   *  converts into an IntsRef. */
+   *  converts into an IntsRef. */ // 将input里面的值放入scratch中
   public static IntsRef toIntsRef(BytesRef input, IntsRefBuilder scratch) {
     scratch.clear();
     for(int i=0;i<input.length;i++) {

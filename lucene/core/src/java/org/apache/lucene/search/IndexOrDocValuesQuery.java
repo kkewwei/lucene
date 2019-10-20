@@ -33,7 +33,7 @@ import org.apache.lucene.index.Term;
  * instance, for a field that both indexed {@link LongPoint}s and
  * {@link SortedNumericDocValuesField}s with the same values, an efficient
  * range query could be created by doing:
- * <pre class="prettyprint">
+ * <pre class="prettyprint"> // 一个查询既可以使用pointQuery来查询，也可以使用dvQuery来查询，如果Range的代价小，可以用来引领合并过程，就走PointRangeQuery，直接构造bitset来进行迭代------ 如果range的代价高，构造bitset太慢，就使用SortedSetDocValuesRangeQuery，利用DocValues的全局docID序，并包含每个docid对应value的数据结构来做文档的匹配
  *   String field;
  *   long minValue, maxValue;
  *   Query pointQuery = LongPoint.newRangeQuery(field, minValue, maxValue);
@@ -51,7 +51,7 @@ import org.apache.lucene.index.Term;
  */
 public final class IndexOrDocValuesQuery extends Query {
 
-  private final Query indexQuery, dvQuery;
+  private final Query indexQuery, dvQuery; //可以分别是LongPoint$1，SortedNumericDocValuesRangeQuery$1
 
   /**
    * Create an {@link IndexOrDocValuesQuery}. Both provided queries must match
@@ -101,8 +101,8 @@ public final class IndexOrDocValuesQuery extends Query {
 
   @Override
   public Query rewrite(IndexReader reader) throws IOException {
-    Query indexRewrite = indexQuery.rewrite(reader);
-    Query dvRewrite = dvQuery.rewrite(reader);
+    Query indexRewrite = indexQuery.rewrite(reader); // indexQuery可以是LongPoint$1
+    Query dvRewrite = dvQuery.rewrite(reader); // dvQuery可以是SortedNumericDocValuesField$1
     if (indexQuery != indexRewrite || dvQuery != dvRewrite) {
       return new IndexOrDocValuesQuery(indexRewrite, dvRewrite);
     }
@@ -118,14 +118,14 @@ public final class IndexOrDocValuesQuery extends Query {
 
   @Override
   public Weight createWeight(IndexSearcher searcher, ScoreMode scoreMode, float boost) throws IOException {
-    final Weight indexWeight = indexQuery.createWeight(searcher, scoreMode, boost);
-    final Weight dvWeight = dvQuery.createWeight(searcher, scoreMode, boost);
+    final Weight indexWeight = indexQuery.createWeight(searcher, scoreMode, boost); // indexWeight=PointRangeQuery$1,   indexQuery=LatLonPoint$1
+    final Weight dvWeight = dvQuery.createWeight(searcher, scoreMode, boost); // dvWeight=LatLonDocValuesBoxQuery$1 , dvQuery=LatLonDocValuesBoxQuery
     return new Weight(this) {
       @Override
       public void extractTerms(Set<Term> terms) {
         indexWeight.extractTerms(terms);
       }
-
+      // 单个文档的匹配，使用docValue更合适
       @Override
       public Matches matches(LeafReaderContext context, int doc) throws IOException {
         // We need to check a single doc, so the dv query should perform better
@@ -137,12 +137,12 @@ public final class IndexOrDocValuesQuery extends Query {
         // We need to check a single doc, so the dv query should perform better
         return dvWeight.explain(context, doc);
       }
-
+      // 批量文档匹配，使用indexPoint更合适
       @Override
       public BulkScorer bulkScorer(LeafReaderContext context) throws IOException {
         // Bulk scorers need to consume the entire set of docs, so using an
         // index structure should perform better
-        return indexWeight.bulkScorer(context);
+        return indexWeight.bulkScorer(context); // bulk Scores需要读取全部的doc，所以使用indexWeight更好
       }
 
       @Override
@@ -155,11 +155,11 @@ public final class IndexOrDocValuesQuery extends Query {
         return new ScorerSupplier() {
           @Override
           public Scorer get(long leadCost) throws IOException {
-            // At equal costs, doc values tend to be worse than points since they
+            // At equal costs, doc values tend to be worse than points since they 若cost相同，
             // still need to perform one comparison per document while points can
             // do much better than that given how values are organized. So we give
             // an arbitrary 8x penalty to doc values.
-            final long threshold = cost() >>> 3;
+            final long threshold = cost() >>> 3; // 我们给与Point 8倍的得分和DocValue进行比较，选中哪个最合适
             if (threshold <= leadCost) {
               return indexScorerSupplier.get(leadCost);
             } else {

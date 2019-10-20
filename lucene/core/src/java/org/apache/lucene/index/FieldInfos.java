@@ -42,20 +42,20 @@ public class FieldInfos implements Iterable<FieldInfo> {
   /** An instance without any fields. */
   public final static FieldInfos EMPTY = new FieldInfos(new FieldInfo[0]);
 
-  private final boolean hasFreq;
+  private final boolean hasFreq; //所有域的汇总
   private final boolean hasProx;
   private final boolean hasPayloads;
-  private final boolean hasOffsets;
-  private final boolean hasVectors;
+  private final boolean hasOffsets; //所有域的汇总
+  private final boolean hasVectors; //所有域的汇总
   private final boolean hasNorms;
-  private final boolean hasDocValues;
+  private final boolean hasDocValues; //所有域的汇总
   private final boolean hasPointValues;
   private final String softDeletesField;
   
   // used only by fieldInfo(int)
   private final FieldInfo[] byNumber;
   
-  private final HashMap<String,FieldInfo> byName = new HashMap<>();
+  private final HashMap<String,FieldInfo> byName = new HashMap<>(); // 字段->域信息
   private final Collection<FieldInfo> values; // for an unmodifiable iterator
   
   /**
@@ -264,27 +264,27 @@ public class FieldInfos implements Iterable<FieldInfo> {
     }
   }
   
-  static final class FieldNumbers {
+  static final class FieldNumbers { // 全局性的
     
-    private final Map<Integer,String> numberToName;
-    private final Map<String,Integer> nameToNumber;
-    private final Map<String, IndexOptions> indexOptions;
+    private final Map<Integer,String> numberToName;  // 域编号->域名
+    private final Map<String,Integer> nameToNumber; //  域名 -> 编号
+    private final Map<String, IndexOptions> indexOptions; // 域名 -> 域的设置信息
     // We use this to enforce that a given field never
     // changes DV type, even across segments / IndexWriter
     // sessions:
-    private final Map<String,DocValuesType> docValuesType;
+    private final Map<String,DocValuesType> docValuesType; // 统计fieldName->DocVaue类型
 
-    private final Map<String,FieldDimensions> dimensions;
+    private final Map<String,FieldDimensions> dimensions; // 数值型的这里统计
 
     // TODO: we should similarly catch an attempt to turn
     // norms back on after they were already committed; today
     // we silently discard the norm but this is badly trappy
-    private int lowestUnassignedFieldNumber = -1;
+    private int lowestUnassignedFieldNumber = -1; // 当前最新的没有使用到的域number
 
     // The soft-deletes field from IWC to enforce a single soft-deletes field
     private final String softDeletesFieldName;
     
-    FieldNumbers(String softDeletesFieldName) {
+    FieldNumbers(String softDeletesFieldName) { // 所有segment中的字段的全局唯一性
       this.nameToNumber = new HashMap<>();
       this.numberToName = new HashMap<>();
       this.indexOptions = new HashMap<>();
@@ -332,17 +332,17 @@ public class FieldInfos implements Iterable<FieldInfo> {
           dimensions.put(fieldName, new FieldDimensions(dimensionCount, indexDimensionCount, dimensionNumBytes));
         }
       }
-      Integer fieldNumber = nameToNumber.get(fieldName);
-      if (fieldNumber == null) {
+      Integer fieldNumber = nameToNumber.get(fieldName);  // 字段的全局唯一性id
+      if (fieldNumber == null) { // 空的跑这里
         final Integer preferredBoxed = Integer.valueOf(preferredFieldNumber);
-        if (preferredFieldNumber != -1 && !numberToName.containsKey(preferredBoxed)) {
+        if (preferredFieldNumber != -1 && !numberToName.containsKey(preferredBoxed)) { // 说明这个字段是历史存在的
           // cool - we can use this number globally
           fieldNumber = preferredBoxed;
-        } else {
+        } else { // 是一个新的字段
           // find a new FieldNumber
           while (numberToName.containsKey(++lowestUnassignedFieldNumber)) {
             // might not be up to date - lets do the work once needed
-          }
+          }  // 给这个域分配一个字段（从低点给分配一个id）
           fieldNumber = lowestUnassignedFieldNumber;
         }
         assert fieldNumber >= 0;
@@ -438,7 +438,7 @@ public class FieldInfos implements Iterable<FieldInfo> {
     }
 
     synchronized void setIndexOptions(int number, String name, IndexOptions indexOptions) {
-      verifyConsistent(number, name, indexOptions);
+      verifyConsistent(number, name, indexOptions); // 验证前后传递的一致性
       this.indexOptions.put(name, indexOptions);
     }
 
@@ -446,11 +446,11 @@ public class FieldInfos implements Iterable<FieldInfo> {
       verifyConsistent(number, name, dvType);
       docValuesType.put(name, dvType);
     }
-
+    // 设置多维Dimensions
     synchronized void setDimensions(int number, String name, int dimensionCount, int indexDimensionCount, int dimensionNumBytes) {
-      if (dimensionCount > PointValues.MAX_DIMENSIONS) {
+      if (dimensionCount > PointValues.MAX_DIMENSIONS) {// 最长单个字符16个，long才8位
         throw new IllegalArgumentException("dimensionCount must be <= PointValues.MAX_DIMENSIONS (= " + PointValues.MAX_DIMENSIONS + "); got " + dimensionCount + " for field=\"" + name + "\"");
-      }
+      }//一次添加的数值型个数
       if (dimensionNumBytes > PointValues.MAX_NUM_BYTES) {
         throw new IllegalArgumentException("dimension numBytes must be <= PointValues.MAX_NUM_BYTES (= " + PointValues.MAX_NUM_BYTES + "); got " + dimensionNumBytes + " for field=\"" + name + "\"");
       }
@@ -466,8 +466,8 @@ public class FieldInfos implements Iterable<FieldInfo> {
   }
   
   static final class Builder {
-    private final HashMap<String,FieldInfo> byName = new HashMap<>();
-    final FieldNumbers globalFieldNumbers;
+    private final HashMap<String,FieldInfo> byName = new HashMap<>(); // 存放的所有name->FieldInfo映射关系， 由globalFieldNumbers保证全局唯一
+    final FieldNumbers globalFieldNumbers;    //globalFieldNumberMap： 所有IndexWriter构造函数中初始化，所有IndexWriter共享一个，在其构造函数中初始化的, 所有segment都被计算在内
     private boolean finished;
 
     /**
@@ -496,7 +496,7 @@ public class FieldInfos implements Iterable<FieldInfo> {
         // before then we'll get the same name and number,
         // else we'll allocate a new one:
         final boolean isSoftDeletesField = name.equals(globalFieldNumbers.softDeletesFieldName);
-        final int fieldNumber = globalFieldNumbers.addOrGet(name, -1, IndexOptions.NONE, DocValuesType.NONE, 0, 0, 0, isSoftDeletesField);
+        final int fieldNumber = globalFieldNumbers.addOrGet(name, -1, IndexOptions.NONE, DocValuesType.NONE, 0, 0, 0, isSoftDeletesField); //给每个域都分配了一个编号
         fi = new FieldInfo(name, fieldNumber, false, false, false, IndexOptions.NONE, DocValuesType.NONE, -1, new HashMap<>(), 0, 0, 0, isSoftDeletesField);
         assert !byName.containsKey(fi.name);
         globalFieldNumbers.verifyConsistent(Integer.valueOf(fi.number), fi.name, DocValuesType.NONE);
@@ -579,7 +579,7 @@ public class FieldInfos implements Iterable<FieldInfo> {
       }
       return true;
     }
-    
+    // 这个segment总的段数
     FieldInfos finish() {
       finished = true;
       return new FieldInfos(byName.values().toArray(new FieldInfo[byName.size()]));

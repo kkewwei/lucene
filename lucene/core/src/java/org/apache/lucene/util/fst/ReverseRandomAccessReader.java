@@ -21,7 +21,7 @@ import org.apache.lucene.store.RandomAccessInput;
 
 /** Implements reverse read from a RandomAccessInput. */
 final class ReverseRandomAccessReader extends FST.BytesReader {
-    private final RandomAccessInput in;
+    private final RandomAccessInput in; //就是一个slice（mmap）
     private long pos;
 
     public ReverseRandomAccessReader(RandomAccessInput in) {

@@ -64,13 +64,13 @@ import org.apache.lucene.index.LeafReaderContext;
  * @lucene.experimental
  */
 public interface Collector {
-
+//   在搜索阶段，通过 Collector 类的方法来获得 LeafCollector 对象
   /**
    * Create a new {@link LeafCollector collector} to collect the given context.
    *
    * @param context
    *          next atomic reader context
-   */
+   */ // 通过该方法获得一个 LeafCollector 对象，Lucene 每处理完一个段，就会调用该方法获得下一个段对应的 LeafCollector 对象
   LeafCollector getLeafCollector(LeafReaderContext context) throws IOException;
   
   /**

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 package org.apache.lucene.index;
-
+// 当写入完成而不刷新时，该对象会释放到pool中，当触发了flush时，刷新完后会直接丢弃了。
 import java.io.IOException;
 import java.text.NumberFormat;
 import java.util.Collections;
@@ -47,9 +47,9 @@ import org.apache.lucene.util.Version;
 
 import static org.apache.lucene.util.ByteBlockPool.BYTE_BLOCK_MASK;
 import static org.apache.lucene.util.ByteBlockPool.BYTE_BLOCK_SIZE;
-
-final class DocumentsWriterPerThread {
-
+// 为了支持多线程并发索引,对每一个线程都有一个 DocumentsWriterThreadState,其为每一个线程根据 DocConsumer consumer 的索引链来创建每个线程的索引链(XXXPerThread),来进行对文档的并发处理。
+final class DocumentsWriterPerThread {// 由ThreadState拥有
+// 每写入一个文档时，都有拥有一个该对象，与ThreadState绑定在一起，若不需要刷新时，ThreadState被释放至池中，而DocumentsWriterPerThread不会被释放，若文档&内存超了，才会解绑
   LiveIndexWriterConfig getIndexWriterConfig() {
     return indexWriterConfig;
   }
@@ -90,7 +90,7 @@ final class DocumentsWriterPerThread {
   static final class FlushedSegment {
     final SegmentCommitInfo segmentInfo;
     final FieldInfos fieldInfos;
-    final FrozenBufferedUpdates segmentUpdates;
+    final FrozenBufferedUpdates segmentUpdates; // 是从DWPT的pendingUpdates转移出来的
     final FixedBitSet liveDocs;
     final Sorter.DocMap sortMap;
     final int delCount;
@@ -129,52 +129,52 @@ final class DocumentsWriterPerThread {
     }
   }
   private final static boolean INFO_VERBOSE = false;
-  final Codec codec;
-  final TrackingDirectoryWrapper directory;
-  private final DocConsumer consumer;
-  final Counter bytesUsed;
+  final Codec codec;// Lucene80Codec
+  final TrackingDirectoryWrapper directory;//就是index_name/0/index目录
+  private final DocConsumer consumer; // DefaultIndexingChain, 每个DocumentsWriterPerThread都会专门拥有一个DefaultIndexingChain，随着刷新落盘后。
+  final Counter bytesUsed; // 这个DocumentsWriterPerThread所使用的内存, 包括intBlockAllocator和IntBlockAllocator都会引入该对象，// 主要是lucene在内存中构建索引时使用的byte[]大小，包括intPool，bytePool
   
   // Updates for our still-in-RAM (to be flushed next) segment
-  private final BufferedUpdates pendingUpdates;
-  private final SegmentInfo segmentInfo;     // Current segment we are working on
+  private final BufferedUpdates pendingUpdates; // 快照的是deleteSlice映射的长度。和DocumentsWriterDeleteQueue中globalSlice与globalBufferedUpdates作用一样
+  private final SegmentInfo segmentInfo;     // Current segment we are working on  我们正在工作的segment
   private boolean aborted = false;   // True if we aborted
-  private SetOnce<Boolean> flushPending = new SetOnce<>();
+  private SetOnce<Boolean> flushPending = new SetOnce<>(); // 等待刷新.比如es索引周期性refresh的话，就将当前正在写入的
   private volatile long lastCommittedBytesUsed;
   private SetOnce<Boolean> hasFlushed = new SetOnce<>();
 
   private final FieldInfos.Builder fieldInfos;
-  private final InfoStream infoStream;
-  private int numDocsInRAM;
-  final DocumentsWriterDeleteQueue deleteQueue;
-  private final DeleteSlice deleteSlice;
+  private final InfoStream infoStream; // LoggerInfoStream，控制了lucene日志在es中打印
+  private int numDocsInRAM;  // 该DWPT在内存中写的数据量，索引结构已经建立。每刷新一次，该对象就新产生一个
+  final DocumentsWriterDeleteQueue deleteQueue; // 一个DocuentsWriter会私下产生一个DocumentsWriterFlushQueue
+  private final DeleteSlice deleteSlice; //每个DocumentsWriterPerThread自己拥有的
   private final NumberFormat nf = NumberFormat.getInstance(Locale.ROOT);
-  final Allocator byteBlockAllocator;
-  final IntBlockPool.Allocator intBlockAllocator;
+  final Allocator byteBlockAllocator; // 默认使用DirectTrackingAllocator，两者都记录了内存使用情况
+  final IntBlockPool.Allocator intBlockAllocator;  // IntBlockAllocator ，可以统计byte申请的内存大小
   private final AtomicLong pendingNumDocs;
   private final LiveIndexWriterConfig indexWriterConfig;
   private final boolean enableTestPoints;
-  private final int indexVersionCreated;
-  private final ReentrantLock lock = new ReentrantLock();
+  private final int indexVersionCreated;// lucene版本 ，8
+  private final ReentrantLock lock = new ReentrantLock(); //每个DocumentsWriterPerThread被使用的时候，都会被locked。
   private int[] deleteDocIDs = new int[0];
   private int numDeletedDocIds = 0;
 
-
+  // 复用的，一个shard所有的压缩方式都会保持不变,在DocumentsWriter初始化时，会产生DocumentsWriterPerThread构造器
   DocumentsWriterPerThread(int indexVersionCreated, String segmentName, Directory directoryOrig, Directory directory, LiveIndexWriterConfig indexWriterConfig, DocumentsWriterDeleteQueue deleteQueue,
                                   FieldInfos.Builder fieldInfos, AtomicLong pendingNumDocs, boolean enableTestPoints) throws IOException {
     this.directory = new TrackingDirectoryWrapper(directory);
     this.fieldInfos = fieldInfos;
     this.indexWriterConfig = indexWriterConfig;
     this.infoStream = indexWriterConfig.getInfoStream();
-    this.codec = indexWriterConfig.getCodec();
+    this.codec = indexWriterConfig.getCodec();// Lucene80Codec
     this.pendingNumDocs = pendingNumDocs;
     bytesUsed = Counter.newCounter();
-    byteBlockAllocator = new DirectTrackingAllocator(bytesUsed);
+    byteBlockAllocator = new DirectTrackingAllocator(bytesUsed); // 这里设置了
     pendingUpdates = new BufferedUpdates(segmentName);
     intBlockAllocator = new IntBlockAllocator(bytesUsed);
-    this.deleteQueue = Objects.requireNonNull(deleteQueue);
+    this.deleteQueue = Objects.requireNonNull(deleteQueue);// 传递进来的
     assert numDocsInRAM == 0 : "num docs " + numDocsInRAM;
-    deleteSlice = deleteQueue.newSlice();
-   
+    deleteSlice = deleteQueue.newSlice(); // 每个DeleteSlice都会作为DocumentsWriterDeleteQueue中一个节点存放起来
+    //  每个DocumentsWriterPerThread都会在刷新时产生一个segment。
     segmentInfo = new SegmentInfo(directoryOrig, Version.LATEST, Version.LATEST, segmentName, -1, false, codec, Collections.emptyMap(), StringHelper.randomId(), Collections.emptyMap(), indexWriterConfig.getIndexSort());
     assert numDocsInRAM == 0;
     if (INFO_VERBOSE && infoStream.isEnabled("DWPT")) {
@@ -185,7 +185,7 @@ final class DocumentsWriterPerThread {
     // this should be the last call in the ctor
     // it really sucks that we need to pull this within the ctor and pass this ref to the chain!
     consumer = indexWriterConfig.getIndexingChain().getChain(this);
-  }
+  } // getIndexingChain()将返回的是defaultIndexingChain(在该类前面定义的)，获取的是DefaultIndexingChain。每个
   
   FieldInfos.Builder getFieldInfosBuilder() {
     return fieldInfos;
@@ -204,8 +204,8 @@ final class DocumentsWriterPerThread {
 
   /** Anything that will add N docs to the index should reserve first to
    *  make sure it's allowed. */
-  private void reserveOneDoc() {
-    if (pendingNumDocs.incrementAndGet() > IndexWriter.getActualMaxDocs()) {
+  private void reserveOneDoc() {  // 检查单个segment写入是否超过了上限
+    if (pendingNumDocs.incrementAndGet() > IndexWriter.getActualMaxDocs()) { // bug_kw 是否有必要设置pendingNumDocs为AtomicLong，而不是AtomicInteger
       // Reserve failed: put the one doc back and throw exc:
       pendingNumDocs.decrementAndGet();
       throw new IllegalArgumentException("number of documents in the index cannot exceed " + IndexWriter.getActualMaxDocs());
@@ -218,8 +218,8 @@ final class DocumentsWriterPerThread {
       assert hasHitAbortingException() == false: "DWPT has hit aborting exception but is still indexing";
       if (INFO_VERBOSE && infoStream.isEnabled("DWPT")) {
         infoStream.message("DWPT", Thread.currentThread().getName() + " update delTerm=" + deleteNode + " docID=" + numDocsInRAM + " seg=" + segmentInfo.name);
-      }
-      final int docsInRamBefore = numDocsInRAM;
+      } // 该文档写入之前的文档数，为了删除时只删除该文档写入前已经写入的文档。对之后写入的文档，都不再删除了
+      final int docsInRamBefore = numDocsInRAM; // 当前DocumentsWriterPerThread内保存的还没有刷新到磁盘的文档。每次磁盘刷新后，docId从0开始数数。
       boolean allDocsIndexed = false;
       try {
         for (Iterable<? extends IndexableField> doc : docs) {
@@ -233,7 +233,7 @@ final class DocumentsWriterPerThread {
           consumer.processDocument(numDocsInRAM++, doc);
         }
         allDocsIndexed = true;
-        return finishDocuments(deleteNode, docsInRamBefore);
+        return finishDocuments(deleteNode, docsInRamBefore); // 这里就会主动将全局global删除信息放入单个DWPT中（免得之后产生的DWPT带上之前的删除信息）
       } finally {
         if (!allDocsIndexed && !aborted) {
           // the iterator threw an exception that is not aborting
@@ -264,9 +264,9 @@ final class DocumentsWriterPerThread {
       assert deleteSlice.isTail(deleteNode) : "expected the delete term as the tail item";
       deleteSlice.apply(pendingUpdates, docIdUpTo);
       return seqNo;
-    } else {
-      seqNo = deleteQueue.updateSlice(deleteSlice);
-      if (seqNo < 0) {
+    } else { // 默认跑到这里
+      seqNo = deleteQueue.updateSlice(deleteSlice); //会跑到DocumentsWriterDeleteQueue.getNextSequenceNumber()获取下一个id
+      if (seqNo < 0) { // 有删除发生了
         seqNo = -seqNo;
         deleteSlice.apply(pendingUpdates, docIdUpTo);
       } else {
@@ -319,24 +319,24 @@ final class DocumentsWriterPerThread {
    */
   FrozenBufferedUpdates prepareFlush() {
     assert numDocsInRAM > 0;
-    final FrozenBufferedUpdates globalUpdates = deleteQueue.freezeGlobalBuffer(deleteSlice);
+    final FrozenBufferedUpdates globalUpdates = deleteQueue.freezeGlobalBuffer(deleteSlice); // 冻结了全局的，作用于其他段（私有FrozenBufferedUpdates会作用于当前段）
     /* deleteSlice can possibly be null if we have hit non-aborting exceptions during indexing and never succeeded 
     adding a document. */
     if (deleteSlice != null) {
       // apply all deletes before we flush and release the delete slice
-      deleteSlice.apply(pendingUpdates, numDocsInRAM);
+      deleteSlice.apply(pendingUpdates, numDocsInRAM); // 把deleteSlice中全部转到pendingUpdates中（这里会更新每个的文档上线）
       assert deleteSlice.isEmpty();
-      deleteSlice.reset();
+      deleteSlice.reset(); // 清空了
     }
     return globalUpdates;
   }
-
+// 这里进来是因为设置的全局文档个数或者内存大小引起的刷新
   /** Flush all pending docs to a new segment */
   FlushedSegment flush(DocumentsWriter.FlushNotifications flushNotifications) throws IOException {
     assert flushPending.get() == Boolean.TRUE;
     assert numDocsInRAM > 0;
     assert deleteSlice.isEmpty() : "all deletes must be applied in prepareFlush";
-    segmentInfo.setMaxDoc(numDocsInRAM);
+    segmentInfo.setMaxDoc(numDocsInRAM); // 设置这个segmentInfo里面存储的文档书
     final SegmentWriteState flushState = new SegmentWriteState(infoStream, directory, segmentInfo, fieldInfos.finish(),
         pendingUpdates, new IOContext(new FlushInfo(numDocsInRAM, bytesUsed())));
     final double startMBUsed = bytesUsed() / 1024. / 1024.;
@@ -364,7 +364,7 @@ final class DocumentsWriterPerThread {
     }
 
     long t0 = System.nanoTime();
-
+    // 会跑LoggerInfoStream中，判断是否为trace
     if (infoStream.isEnabled("DWPT")) {
       infoStream.message("DWPT", "flush postings as segment " + flushState.segmentInfo.name + " numDocs=" + numDocsInRAM);
     }
@@ -374,18 +374,18 @@ final class DocumentsWriterPerThread {
       if (getIndexWriterConfig().getSoftDeletesField() != null) {
         softDeletedDocs = consumer.getHasDocValues(getIndexWriterConfig().getSoftDeletesField());
       } else {
-        softDeletedDocs = null;
-      }
-      sortMap = consumer.flush(flushState);
+        softDeletedDocs = null; // 到这里
+      }// 主要是是这里
+      sortMap = consumer.flush(flushState); // 进去呀，有较大的写入（在落盘前，若有删除，会标志哪些文档不需要删除，下面会有live文件生成）
       if (softDeletedDocs == null) {
-        flushState.softDelCountOnFlush = 0;
+        flushState.softDelCountOnFlush = 0; // 这里
       } else {
         flushState.softDelCountOnFlush = PendingSoftDeletes.countSoftDeletes(softDeletedDocs, flushState.liveDocs);
         assert flushState.segmentInfo.maxDoc() >= flushState.softDelCountOnFlush + flushState.delCountOnFlush;
       }
       // We clear this here because we already resolved them (private to this segment) when writing postings:
-      pendingUpdates.clearDeleteTerms();
-      segmentInfo.setFiles(new HashSet<>(directory.getCreatedFiles()));
+      pendingUpdates.clearDeleteTerms(); // 改把需要删除信息全部清楚了，已经在flushState.liveDocs保留了哪些doc不需要删除
+      segmentInfo.setFiles(new HashSet<>(directory.getCreatedFiles())); // 给本segment所有的索引文件加上segment编号
 
       final SegmentCommitInfo segmentInfoPerCommit = new SegmentCommitInfo(segmentInfo, 0, flushState.softDelCountOnFlush, -1L, -1L, -1L, StringHelper.randomId());
       if (infoStream.isEnabled("DWPT")) {
@@ -406,7 +406,7 @@ final class DocumentsWriterPerThread {
         pendingUpdates.clear();
         segmentDeletes = null;
       } else {
-        segmentDeletes = pendingUpdates;
+        segmentDeletes = pendingUpdates; // 开始处理需要删除的termQuery
       }
 
       if (infoStream.isEnabled("DWPT")) {
@@ -418,10 +418,10 @@ final class DocumentsWriterPerThread {
       }
 
       assert segmentInfo != null;
-
+      // 注意，sealFlushedSegment中有删除操作的落盘（保留liv文档）
       FlushedSegment fs = new FlushedSegment(infoStream, segmentInfoPerCommit, flushState.fieldInfos,
           segmentDeletes, flushState.liveDocs, flushState.delCountOnFlush, sortMap);
-      sealFlushedSegment(fs, sortMap, flushNotifications);
+      sealFlushedSegment(fs, sortMap, flushNotifications); // 然后再将产生的单个索引文件合并产复合文件，还并没有mmap打开，在IndexWriter.getReader()中会mmap
       if (infoStream.isEnabled("DWPT")) {
         infoStream.message("DWPT", "flush time " + ((System.nanoTime() - t0) / 1000000.0) + " msec");
       }
@@ -447,7 +447,7 @@ final class DocumentsWriterPerThread {
     }
   }
   
-  private final Set<String> filesToDelete = new HashSet<>();
+  private final Set<String> filesToDelete = new HashSet<>(); // 12个索引文件
   
   Set<String> pendingFilesToDelete() {
     return filesToDelete;
@@ -465,10 +465,10 @@ final class DocumentsWriterPerThread {
     return sortedLiveDocs;
   }
 
-  /**
+  /** // 封印这个segment和持久化删除不用的文件
    * Seals the {@link SegmentInfo} for the new flushed segment and persists
    * the deleted documents {@link FixedBitSet}.
-   */
+   */ // 封装semgent:将fdt等12个索引文件封装成_n.cfs、_n.cfe、_n.si文件,同时有保存live操作
   void sealFlushedSegment(FlushedSegment flushedSegment, Sorter.DocMap sortMap, DocumentsWriter.FlushNotifications flushNotifications) throws IOException {
     assert flushedSegment != null;
     SegmentCommitInfo newSegment = flushedSegment.segmentInfo;
@@ -479,12 +479,12 @@ final class DocumentsWriterPerThread {
 
     boolean success = false;
     try {
-      
-      if (getIndexWriterConfig().getUseCompoundFile()) {
+
+      if (getIndexWriterConfig().getUseCompoundFile()) {//产生复合文件
         Set<String> originalFiles = newSegment.info.files();
         // TODO: like addIndexes, we are relying on createCompoundFile to successfully cleanup...
         IndexWriter.createCompoundFile(infoStream, new TrackingDirectoryWrapper(directory), newSegment.info, context, flushNotifications::deleteUnusedFiles);
-        filesToDelete.addAll(originalFiles);
+        filesToDelete.addAll(originalFiles); //放置到需要原始的需要删除的文件
         newSegment.info.setUseCompoundFile(true);
       }
 
@@ -492,7 +492,7 @@ final class DocumentsWriterPerThread {
       // creating CFS so that 1) .si isn't slurped into CFS,
       // and 2) .si reflects useCompoundFile=true change
       // above:
-      codec.segmentInfoFormat().write(directory, newSegment.info, context);
+      codec.segmentInfoFormat().write(directory, newSegment.info, context); // 构建_n.si文件名
 
       // TODO: ideally we would freeze newSegment here!!
       // because any changes after writing the .si will be
@@ -500,7 +500,7 @@ final class DocumentsWriterPerThread {
 
       // Must write deleted docs after the CFS so we don't
       // slurp the del file into CFS:
-      if (flushedSegment.liveDocs != null) {
+      if (flushedSegment.liveDocs != null) { // 若有删除，那么会写live文件
         final int delCount = flushedSegment.delCount;
         assert delCount > 0;
         if (infoStream.isEnabled("DWPT")) {
@@ -519,14 +519,14 @@ final class DocumentsWriterPerThread {
         SegmentCommitInfo info = flushedSegment.segmentInfo;
         Codec codec = info.info.getCodec();
         final FixedBitSet bits;
-        if (sortMap == null) {
+        if (sortMap == null) { // 一般跑到这里
           bits = flushedSegment.liveDocs;
         } else {
           bits = sortLiveDocs(flushedSegment.liveDocs, sortMap);
         }
         codec.liveDocsFormat().writeLiveDocs(bits, directory, info, delCount, context);
         newSegment.setDelCount(delCount);
-        newSegment.advanceDelGen();
+        newSegment.advanceDelGen(); // 会随机产生一个segment_id
       }
 
       success = true;
@@ -545,7 +545,7 @@ final class DocumentsWriterPerThread {
     return segmentInfo;
   }
 
-  long bytesUsed() {
+  long bytesUsed() { // 主要是lucene在内存中构建索引时使用的bytep[]大小，包括intPool，bytePool
     return bytesUsed.get() + pendingUpdates.ramBytesUsed();
   }
 
@@ -559,7 +559,7 @@ final class DocumentsWriterPerThread {
 
 
   private static class IntBlockAllocator extends IntBlockPool.Allocator {
-    private final Counter bytesUsed;
+    private final Counter bytesUsed; // 是从DocumentsWriterPerThread初始化中传递过来的
     
     public IntBlockAllocator(Counter bytesUsed) {
       super(IntBlockPool.INT_BLOCK_SIZE);
@@ -591,14 +591,14 @@ final class DocumentsWriterPerThread {
 
   /**
    * Returns true iff this DWPT is marked as flush pending
-   */
+   */ // 等待刷新()
   boolean isFlushPending() {
     return flushPending.get() == Boolean.TRUE;
   }
 
   /**
    * Sets this DWPT as flush pending. This can only be set once.
-   */
+   */ // 内存超了（或者全局设置Fullflush），DWPT则会立马设置该状态
   void setFlushPending() {
     flushPending.set(Boolean.TRUE);
   }
@@ -627,7 +627,7 @@ final class DocumentsWriterPerThread {
   /**
    * Locks this DWPT for exclusive access.
    * @see ReentrantLock#lock()
-   */
+   */ // lock就说明这个DocumentsWriterPerThread被正在使用写入
   void lock() {
     lock.lock();
   }
@@ -637,7 +637,7 @@ final class DocumentsWriterPerThread {
    * of invocation.
    * @return true if the lock was acquired.
    * @see ReentrantLock#tryLock()
-   */
+   */ // 可能被别的线程使用了还没释放（等待刷新时，也会释放了锁）
   boolean tryLock() {
     return lock.tryLock();
   }

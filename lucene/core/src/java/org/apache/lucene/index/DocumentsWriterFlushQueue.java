@@ -27,12 +27,12 @@ import org.apache.lucene.util.IOUtils;
 
 /**
  * @lucene.internal 
- */
+ */  // 一个DocuentsWriter会私下产生一个DocumentsWriterFlushQueue
 final class DocumentsWriterFlushQueue {
-  private final Queue<FlushTicket> queue = new LinkedList<>();
+  private final Queue<FlushTicket> queue = new LinkedList<>(); // 全局打包待删除的Node
   // we track tickets separately since count must be present even before the ticket is
   // constructed ie. queue.size would not reflect it.
-  private final AtomicInteger ticketCount = new AtomicInteger();
+  private final AtomicInteger ticketCount = new AtomicInteger(); // 记录有多少个ticket
   private final ReentrantLock purgeLock = new ReentrantLock();
 
   synchronized boolean addDeletes(DocumentsWriterDeleteQueue deleteQueue) throws IOException {
@@ -52,25 +52,25 @@ final class DocumentsWriterFlushQueue {
     }
     return success;
   }
-  
+  // 只有innerPurge结束了（执行完publishFlushedSegments），才会调用
   private void incTickets() {
     int numTickets = ticketCount.incrementAndGet();
     assert numTickets > 0;
   }
-  
+  // 只有innerPurge结束了（执行完publishFlushedSegments），才会调用
   private void decTickets() {
     int numTickets = ticketCount.decrementAndGet();
     assert numTickets >= 0;
-  }
-
+  }// 这里并发控制执行，删除顺序不能颠倒（详见说明见https://www.amazingkoala.com.cn/Lucene/Index/2019/0718/75.html介绍）
+  // 每一个DWPT执行doFlush后，都会生成一个FlushTicket对象，并同步的添加到Queue<FlushTicket> queue中。
   synchronized FlushTicket addFlushTicket(DocumentsWriterPerThread dwpt) throws IOException {
     // Each flush is assigned a ticket in the order they acquire the ticketQueue
-    // lock
+    // lock 每次刷新都会分配一个ticket，以便获取ticketQueue锁
     incTickets();
     boolean success = false;
-    try {
+    try { // 看来每个DWPT进来时，都会主动从全局globalSlice创建一个作用于已生产的所有已存在segment的FrozenBufferedUpdates，以删除。
       // prepare flush freezes the global deletes - do in synced block!
-      final FlushTicket ticket = new FlushTicket(dwpt.prepareFlush(), true);
+      final FlushTicket ticket = new FlushTicket(dwpt.prepareFlush(), true); // 冻结全局的删除Nodes
       queue.add(ticket);
       success = true;
       return ticket;
@@ -104,9 +104,9 @@ final class DocumentsWriterFlushQueue {
     while (true) {
       final FlushTicket head;
       final boolean canPublish;
-      synchronized (this) {
-        head = queue.peek();
-        canPublish = head != null && head.canPublish(); // do this synced 
+      synchronized (this) { // 循环进行publish
+        head = queue.peek(); // 获取顶部，并没有拿出来
+        canPublish = head != null && head.canPublish(); // do this synced  是否可以publish
       }
       if (canPublish) {
         try {
@@ -116,13 +116,13 @@ final class DocumentsWriterFlushQueue {
            * the downside is that we need to force a purge on fullFlush since there could
            * be a ticket still in the queue. 
            */
-          consumer.accept(head);
+          consumer.accept(head); // 会跳转到IndexWriter.publishFlushedSegments()里面定义的发布代码里面
 
         } finally {
           synchronized (this) {
             // finally remove the published ticket from the queue
-            final FlushTicket poll = queue.poll();
-            decTickets();
+            final FlushTicket poll = queue.poll(); // 最后才移除这个ticket
+            decTickets(); // 只有innerPurge结束了（执行完publishFlushedSegments），才会调用
             // we hold the purgeLock so no other thread should have polled:
             assert poll == head;
           }
@@ -135,7 +135,7 @@ final class DocumentsWriterFlushQueue {
 
   void forcePurge(IOUtils.IOConsumer<FlushTicket> consumer) throws IOException {
     assert !Thread.holdsLock(this);
-    purgeLock.lock();
+    purgeLock.lock(); // 一定的获取到，否则就阻塞
     try {
       innerPurge(consumer);
     } finally {
@@ -145,23 +145,23 @@ final class DocumentsWriterFlushQueue {
 
   void tryPurge(IOUtils.IOConsumer<FlushTicket> consumer) throws IOException {
     assert !Thread.holdsLock(this);
-    if (purgeLock.tryLock()) {
+    if (purgeLock.tryLock()) { // 尝试获取锁，只允许一个线程进来工作
       try {
         innerPurge(consumer);
       } finally {
         purgeLock.unlock();
-      }
+      }// 获取不到就直接退出了
     }
   }
 
   int getTicketCount() {
-    return ticketCount.get();
+    return ticketCount.get(); // 只有
   }
 
-  static final class FlushTicket {
-    private final FrozenBufferedUpdates frozenUpdates;
+  static final class FlushTicket { // frozenUpdates是一个包含删除信息且作用于其他段中的文档的全局FrozenBufferedUpdate对象
+    private final FrozenBufferedUpdates frozenUpdates; // 在执行DWPT的doFlush()流程中需要生成一个全局的删除信息FrozenBufferedUpdates，它将作用（apply）到索引目录中已有的段
     private final boolean hasSegment;
-    private FlushedSegment segment;
+    private FlushedSegment segment; // FlushedSegment不为空：FlushTicket在发布生成的段的流程中需要执行将删除信息作用（apply）到其他段以及更新生成的段的任务；FlushedSegment为空：FlushTicket在发布生成的段的流程中仅仅需要执行将删除信息作用到其他段的任务
     private boolean failed = false;
     private boolean published = false;
 
@@ -169,9 +169,9 @@ final class DocumentsWriterFlushQueue {
       this.frozenUpdates = frozenUpdates;
       this.hasSegment = hasSegment;
     }
-
+    // 只要成功建立了segment，就可以publish
     boolean canPublish() {
-      return hasSegment == false || segment != null || failed;
+      return hasSegment == false || segment != null || failed; //
     }
 
     synchronized void markPublished() {

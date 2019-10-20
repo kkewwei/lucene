@@ -34,19 +34,19 @@ abstract class DisjunctionScorer extends Scorer {
   private final DisiPriorityQueue subScorers;
   private final DocIdSetIterator approximation;
   private final BlockMaxDISI blockMaxApprox;
-  private final TwoPhase twoPhase;
-
+  private final TwoPhase twoPhase; // 
+  // 联合score
   protected DisjunctionScorer(Weight weight, List<Scorer> subScorers, ScoreMode scoreMode) throws IOException {
     super(weight);
     if (subScorers.size() <= 1) {
       throw new IllegalArgumentException("There must be at least 2 subScorers");
     }
     this.subScorers = new DisiPriorityQueue(subScorers.size());
-    for (Scorer scorer : subScorers) {
+    for (Scorer scorer : subScorers) { // 可以是ConstantScoreScorer
       final DisiWrapper w = new DisiWrapper(scorer);
       this.subScorers.add(w);
     }
-    this.needsScores = scoreMode != ScoreMode.COMPLETE_NO_SCORES;
+    this.needsScores = scoreMode != ScoreMode.COMPLETE_NO_SCORES; // 只有COMPLETE_NO_SCORES不需要打分
     if (scoreMode == ScoreMode.TOP_SCORES) {
       for (Scorer scorer : subScorers) {
         scorer.advanceShallow(0);
@@ -59,7 +59,7 @@ abstract class DisjunctionScorer extends Scorer {
     }
 
     boolean hasApproximation = false;
-    float sumMatchCost = 0;
+    float sumMatchCost = 0; // 总和sum，匹配的文档数
     long sumApproxCost = 0;
     // Compute matchCost as the average over the matchCost of the subScorers.
     // This is weighted by the cost, which is an expected number of matching documents.

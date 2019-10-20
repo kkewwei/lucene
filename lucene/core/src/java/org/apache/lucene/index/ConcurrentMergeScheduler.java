@@ -84,19 +84,19 @@ public class ConcurrentMergeScheduler extends MergeScheduler {
   public static final String DEFAULT_SPINS_PROPERTY = "lucene.cms.override_spins";
 
   /** List of currently active {@link MergeThread}s. */
-  protected final List<MergeThread> mergeThreads = new ArrayList<>();
+  protected final List<MergeThread> mergeThreads = new ArrayList<>(); // 任何merge线程都会放进来
   
   // Max number of merge threads allowed to be running at
   // once.  When there are more merges then this, we
   // forcefully pause the larger ones, letting the smaller
   // ones run, up until maxMergeCount merges at which point
   // we forcefully pause incoming threads (that presumably
-  // are the ones causing so much merging).
-  private int maxThreadCount = AUTO_DETECT_MERGES_AND_THREADS;
-
+  // are the ones causing so much merging).  // shard粒度统计个数
+  private int maxThreadCount = AUTO_DETECT_MERGES_AND_THREADS; //当前正在合并的线程最大值，作用：1.在新合并开始前，会检查合并的线程个数，若新的没堵，旧的合并线程大于maxThreadCount，那么就说明旧的堵了，速度不降。
+  // 2.  新的合并跑起来了，合并线程从大到小排序，接着检查当前大于50M的合并线程个数，大于maxThreadCount个数的次小线程会直接暂停合并。
   // Max number of merges we accept before forcefully
-  // throttling the incoming threads
-  private int maxMergeCount = AUTO_DETECT_MERGES_AND_THREADS;
+  // throttling the incoming threads // shard粒度统计个数
+  private int maxMergeCount = AUTO_DETECT_MERGES_AND_THREADS; // es层面，侧重于目前shard bulk写入能力上的限制.若一限制，写入都会暂停。仅仅限制写入，不会做任何别的处理
 
   /** How many {@link MergeThread}s have kicked off (this is use
    *  to name them). */
@@ -115,7 +115,7 @@ public class ConcurrentMergeScheduler extends MergeScheduler {
   private static final double MIN_BIG_MERGE_MB = 50.0;
 
   /** Current IO writes throttle rate */
-  protected double targetMBPerSec = START_MB_PER_SEC;
+  protected double targetMBPerSec = START_MB_PER_SEC; // 当doAutoIOThrottle=true时，会维持一个全局的合并速度，只会影响新创建的索引
 
   /** true if we should rate-limit writes for each merge */
   private boolean doAutoIOThrottle = true;
@@ -285,7 +285,7 @@ public class ConcurrentMergeScheduler extends MergeScheduler {
         // always be called from that context. Verify this.
         assert mergeThread == Thread.currentThread() : "Not the same merge thread, current="
           + Thread.currentThread() + ", expected=" + mergeThread;
-
+        // merge时设置的一些写入限速
         return new RateLimitedIndexOutput(rateLimiter, in.createOutput(name, context));
       }
     };
@@ -314,10 +314,10 @@ public class ConcurrentMergeScheduler extends MergeScheduler {
       }
       activeMerges.add(mergeThread);
       threadIdx++;
-    }
+    } // 更新维持的merge线程情况，去掉已经完成的
 
     // Sort the merge threads, largest first:
-    CollectionUtil.timSort(activeMerges);
+    CollectionUtil.timSort(activeMerges);  // segment最大的放最前面
 
     final int activeMergeCount = activeMerges.size();
 
@@ -326,10 +326,10 @@ public class ConcurrentMergeScheduler extends MergeScheduler {
     for (threadIdx=activeMergeCount-1;threadIdx>=0;threadIdx--) {
       MergeThread mergeThread = activeMerges.get(threadIdx);
       if (mergeThread.merge.estimatedMergeBytes > MIN_BIG_MERGE_MB*1024*1024) {
-        bigMergeCount = 1+threadIdx;
+        bigMergeCount = 1+threadIdx; //只是统计大于50的段合并线程个数
         break;
       }
-    }
+    } // 找大于50M的正在合并的段个数
 
     long now = System.nanoTime();
 
@@ -341,26 +341,26 @@ public class ConcurrentMergeScheduler extends MergeScheduler {
       message = null;
     }
 
-    for (threadIdx=0;threadIdx<activeMergeCount;threadIdx++) {
+    for (threadIdx=0;threadIdx<activeMergeCount;threadIdx++) { // 遍历全部的端合并线程
       MergeThread mergeThread = activeMerges.get(threadIdx);
 
       OneMerge merge = mergeThread.merge;
 
       // pause the thread if maxThreadCount is smaller than the number of merge threads.
-      final boolean doPause = threadIdx < bigMergeCount - maxThreadCount;
+      final boolean doPause = threadIdx < bigMergeCount - maxThreadCount; // 若最大的超过限制个数的最大的那个几个，直接暂停速度。小于50M的不限速，别的调整规定速度。
 
       double newMBPerSec;
-      if (doPause) {
+      if (doPause) { // 大于50MB的合并线程超了，那么直接将超的几个大的线程合并速度降为0
         newMBPerSec = 0.0;
-      } else if (merge.maxNumSegments != -1) {
+      } else if (merge.maxNumSegments != -1) { // 是强制合并的速度
         newMBPerSec = forceMergeMBPerSec;
-      } else if (doAutoIOThrottle == false) {
+      } else if (doAutoIOThrottle == false) { // 限流还没开启(一般都会开启)
         newMBPerSec = Double.POSITIVE_INFINITY;
-      } else if (merge.estimatedMergeBytes < MIN_BIG_MERGE_MB*1024*1024) {
+      } else if (merge.estimatedMergeBytes < MIN_BIG_MERGE_MB*1024*1024) { // 若端的大小小于50M，则没有限制
         // Don't rate limit small merges:
         newMBPerSec = Double.POSITIVE_INFINITY;
       } else {
-        newMBPerSec = targetMBPerSec;
+        newMBPerSec = targetMBPerSec; // 通过全局的段合并速度来更新本身的段合并速度
       }
 
       MergeRateLimiter rateLimiter = mergeThread.rateLimiter;
@@ -400,7 +400,7 @@ public class ConcurrentMergeScheduler extends MergeScheduler {
           message.append(String.format(Locale.ROOT, "  leave running at %.1f MB/sec", curMBPerSec));
         }
       }
-
+      // 更新本身的段合并速度
       rateLimiter.setMBPerSec(newMBPerSec);
     }
     if (verbose()) {
@@ -409,7 +409,7 @@ public class ConcurrentMergeScheduler extends MergeScheduler {
   }
 
   private synchronized void initDynamicDefaults(Directory directory) throws IOException {
-    if (maxThreadCount == AUTO_DETECT_MERGES_AND_THREADS) {
+    if (maxThreadCount == AUTO_DETECT_MERGES_AND_THREADS) { // 默认不为-1
       boolean spins = IOUtils.spins(directory);
 
       // Let tests override this to help reproducing a failure on a machine that has a different
@@ -500,8 +500,8 @@ public class ConcurrentMergeScheduler extends MergeScheduler {
     initDynamicDefaults(directory);
 
   }
-
-  @Override
+  //此时this=
+  @Override // 可以从IndexWriter.maybeMerge()中跳转过来
   public synchronized void merge(MergeSource mergeSource, MergeTrigger trigger) throws IOException {
 
     if (trigger == MergeTrigger.CLOSING) {
@@ -525,12 +525,12 @@ public class ConcurrentMergeScheduler extends MergeScheduler {
     // Iterate, pulling from the IndexWriter's queue of
     // pending merges, until it's empty:
     while (true) {
-
+      // es里面将跑到ElasticsearchConcurrentMergeScheduler.maybeStall(),返回true
       if (maybeStall(mergeSource) == false) {
         break;
       }
 
-      OneMerge merge = mergeSource.getNextMerge();
+      OneMerge merge = mergeSource.getNextMerge(); // 将跑到IndexWriter$IndexWriterMergeSource
       if (merge == null) {
         if (verbose()) {
           message("  no more merges pending; now return");
@@ -541,18 +541,18 @@ public class ConcurrentMergeScheduler extends MergeScheduler {
       boolean success = false;
       try {
         // OK to spawn a new merge thread to handle this
-        // merge:
+        // merge:  // 看起来多大的merge,都会另起线程合并
         final MergeThread newMergeThread = getMergeThread(mergeSource, merge);
         mergeThreads.add(newMergeThread);
-
+        // 更新全局维护的段合并速度（看是否有合并慢的段）。同时初始化新创建的这个的merge速度
         updateIOThrottle(newMergeThread.merge, newMergeThread.rateLimiter);
 
         if (verbose()) {
           message("    launch new thread [" + newMergeThread.getName() + "]");
         }
-
+        // 开始产生merge线程进行merge
         newMergeThread.start();
-        updateMergeThreads();
+        updateMergeThreads(); // 更新全局维持的段合并速度，来更新存在的每个的段合并速度
 
         success = true;
       } finally {
@@ -621,7 +621,7 @@ public class ConcurrentMergeScheduler extends MergeScheduler {
 
   /** Does the actual merge, by calling {@link org.apache.lucene.index.MergeScheduler.MergeSource#merge} */
   protected void doMerge(MergeSource mergeSource, OneMerge merge) throws IOException {
-    mergeSource.merge(merge);
+    mergeSource.merge(merge); // 进的是ElasticsearchConcurrentMergeScheduler，第二次才进入IndexWriter
   }
 
   /** Create and return a new MergeThread */
@@ -639,7 +639,7 @@ public class ConcurrentMergeScheduler extends MergeScheduler {
     assert mergeThreads.contains(Thread.currentThread()) : "caller is not a merge thread";
     // Let CMS run new merges if necessary:
     try {
-      merge(mergeSource, MergeTrigger.MERGE_FINISHED);
+      merge(mergeSource, MergeTrigger.MERGE_FINISHED);// 循环检查是否还有merge需要进行
     } catch (AlreadyClosedException ace) {
       // OK
     } catch (IOException ioe) {
@@ -678,7 +678,7 @@ public class ConcurrentMergeScheduler extends MergeScheduler {
         if (verbose()) {
           message("  merge thread: start");
         }
-
+        // merge线程才会真正去调用beforeMerge，aftermerge
         doMerge(mergeSource, merge);
 
         if (verbose()) {
@@ -729,18 +729,18 @@ public class ConcurrentMergeScheduler extends MergeScheduler {
     sb.append("ioThrottle=").append(doAutoIOThrottle);
     return sb.toString();
   }
-
+  // 新段小于50MB的话，在外边就直接退出了
   private boolean isBacklog(long now, OneMerge merge) {
     double mergeMB = bytesToMB(merge.estimatedMergeBytes);
-    for (MergeThread mergeThread : mergeThreads) {
+    for (MergeThread mergeThread : mergeThreads) { // 遍历所有正在合并的段
       long mergeStartNS = mergeThread.merge.mergeStartNS;
-      if (mergeThread.isAlive() && mergeThread.merge != merge &&
+      if (mergeThread.isAlive() && mergeThread.merge != merge && // 检查所有正在合并的大于50M的段
           mergeStartNS != -1 &&
-          mergeThread.merge.estimatedMergeBytes >= MIN_BIG_MERGE_MB*1024*1024 &&
-          nsToSec(now-mergeStartNS) > 3.0) {
+          mergeThread.merge.estimatedMergeBytes >= MIN_BIG_MERGE_MB*1024*1024 && // 大于50M的段个数
+          nsToSec(now-mergeStartNS) > 3.0) { // 比当前时间早3s合并的段
         double otherMergeMB = bytesToMB(mergeThread.merge.estimatedMergeBytes);
         double ratio = otherMergeMB / mergeMB;
-        if (ratio > 0.3 && ratio < 3.0) {
+        if (ratio > 0.3 && ratio < 3.0) { // 若大小相差范围在0.3-3之间，则返回true
           return true;
         }
       }
@@ -748,15 +748,15 @@ public class ConcurrentMergeScheduler extends MergeScheduler {
 
     return false;
   }
-
-  /** Tunes IO throttle when a new merge starts. */
+  // 大于50M的合并的段个数来限速。新和旧一样大小，说旧的合并慢了，则提速。旧被阻塞，则速度不变。新旧都没问题，则降速合并
+  /** Tunes IO throttle when a new merge starts. */ // 只有在新产生一个Merge线程对象时，会去检查下
   private synchronized void updateIOThrottle(OneMerge newMerge, MergeRateLimiter rateLimiter) throws IOException {
-    if (doAutoIOThrottle == false) {
+    if (doAutoIOThrottle == false) { // 默认自动限速
       return;
     }
 
-    double mergeMB = bytesToMB(newMerge.estimatedMergeBytes);
-    if (mergeMB < MIN_BIG_MERGE_MB) {
+    double mergeMB = bytesToMB(newMerge.estimatedMergeBytes);// 待合并的merge大小
+    if (mergeMB < MIN_BIG_MERGE_MB) { // 如果待合并的小于 50M的话，就没必要更新速度
       // Only watch non-trivial merges for throttling; this is safe because the MP must eventually
       // have to do larger merges:
       return;
@@ -767,18 +767,18 @@ public class ConcurrentMergeScheduler extends MergeScheduler {
     // Simplistic closed-loop feedback control: if we find any other similarly
     // sized merges running, then we are falling behind, so we bump up the
     // IO throttle, else we lower it:
-    boolean newBacklog = isBacklog(now, newMerge);
+    boolean newBacklog = isBacklog(now, newMerge); // 如果发现有相似的merge，则说明当前档位的merge落后了。否则当前级别合并时，之前的应该早就合并完了
 
-    boolean curBacklog = false;
+    boolean curBacklog = false; // 检查已经的合并是否被阻塞了
 
-    if (newBacklog == false) {
-      if (mergeThreads.size() > maxThreadCount) {
+    if (newBacklog == false) { // 新的没有阻塞
+      if (mergeThreads.size() > maxThreadCount) { // 若大于50M的索引合并个数超过限制
         // If there are already more than the maximum merge threads allowed, count that as backlog:
-        curBacklog = true;
+        curBacklog = true; // 旧的阻塞了
       } else {
         // Now see if any still-running merges are backlog'd:
         for (MergeThread mergeThread : mergeThreads) {
-          if (isBacklog(now, mergeThread.merge)) {
+          if (isBacklog(now, mergeThread.merge)) { // 检查旧的合并是否被阻塞了
             curBacklog = true;
             break;
           }
@@ -786,13 +786,13 @@ public class ConcurrentMergeScheduler extends MergeScheduler {
       }
     }
 
-    double curMBPerSec = targetMBPerSec;
+    double curMBPerSec = targetMBPerSec; // 初始值为20M
 
-    if (newBacklog) {
+    if (newBacklog) { // 新的是被阻塞了,那么整体提速20%
       // This new merge adds to the backlog: increase IO throttle by 20%
-      targetMBPerSec *= 1.20;
+      targetMBPerSec *= 1.20; // 合并速度提速20%
       if (targetMBPerSec > MAX_MERGE_MB_PER_SEC) {
-        targetMBPerSec = MAX_MERGE_MB_PER_SEC;
+        targetMBPerSec = MAX_MERGE_MB_PER_SEC; // 5m-1024m之间变动
       }
       if (verbose()) {
         if (curMBPerSec == targetMBPerSec) {
@@ -801,15 +801,15 @@ public class ConcurrentMergeScheduler extends MergeScheduler {
           message(String.format(Locale.ROOT, "io throttle: new merge backlog; increase IO rate to %.1f MB/sec", targetMBPerSec));
         }
       }
-    } else if (curBacklog) {
+    } else if (curBacklog) { // 若存量的被阻塞了，则不变
       // We still have an existing backlog; leave the rate as is:
       if (verbose()) {
         message(String.format(Locale.ROOT, "io throttle: current merge backlog; leave IO rate at %.1f MB/sec",
                               targetMBPerSec));
       }
-    } else {
+    } else { // 若新旧合并都没有问题
       // We are not falling behind: decrease IO throttle by 10%
-      targetMBPerSec /= 1.10;
+      targetMBPerSec /= 1.10; // 那么降速10%
       if (targetMBPerSec < MIN_MERGE_MB_PER_SEC) {
         targetMBPerSec = MIN_MERGE_MB_PER_SEC;
       }
@@ -830,7 +830,7 @@ public class ConcurrentMergeScheduler extends MergeScheduler {
       rate = targetMBPerSec;
     }
     rateLimiter.setMBPerSec(rate);
-    targetMBPerSecChanged();
+    targetMBPerSecChanged(); // 不做任何事情
   }
 
   /** Subclass can override to tweak targetMBPerSec. */

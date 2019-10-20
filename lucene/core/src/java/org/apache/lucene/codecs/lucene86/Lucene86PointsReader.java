@@ -44,13 +44,13 @@ public class Lucene86PointsReader extends PointsReader implements Closeable {
   public Lucene86PointsReader(SegmentReadState readState) throws IOException {
     this.readState = readState;
 
-    String metaFileName = IndexFileNames.segmentFileName(readState.segmentInfo.name,
+    String metaFileName = IndexFileNames.segmentFileName(readState.segmentInfo.name, // kdm文件
         readState.segmentSuffix,
         Lucene86PointsFormat.META_EXTENSION);
-    String indexFileName = IndexFileNames.segmentFileName(readState.segmentInfo.name,
+    String indexFileName = IndexFileNames.segmentFileName(readState.segmentInfo.name, // kdi文件
         readState.segmentSuffix,
         Lucene86PointsFormat.INDEX_EXTENSION);
-    String dataFileName = IndexFileNames.segmentFileName(readState.segmentInfo.name,
+    String dataFileName = IndexFileNames.segmentFileName(readState.segmentInfo.name, // kdd文件
         readState.segmentSuffix,
         Lucene86PointsFormat.DATA_EXTENSION);
 

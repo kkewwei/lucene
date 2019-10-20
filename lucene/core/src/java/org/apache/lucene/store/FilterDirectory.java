@@ -41,7 +41,7 @@ public abstract class FilterDirectory extends Directory {
     return dir;
   }
 
-  protected final Directory in;
+  protected final Directory in; //  HybridDirectory
 
   /** Sole constructor, typically called from sub-classes. */
   protected FilterDirectory(Directory in) {

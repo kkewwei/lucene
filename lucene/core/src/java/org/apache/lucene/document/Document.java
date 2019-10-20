@@ -40,7 +40,7 @@ import org.apache.lucene.util.BytesRef;
 
 public final class Document implements Iterable<IndexableField> {
 
-  private final List<IndexableField> fields = new ArrayList<>();
+  private final List<IndexableField> fields = new ArrayList<>(); // 最开始写入时文档存放的地方
 
   /** Constructs a new document with no fields. */
   public Document() {}

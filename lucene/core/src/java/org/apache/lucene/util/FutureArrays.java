@@ -51,7 +51,7 @@ public final class FutureArrays {
   /**
    * Behaves like Java 9's Arrays.mismatch
    * @see <a href="http://download.java.net/java/jdk9/docs/api/java/util/Arrays.html#mismatch-byte:A-int-int-byte:A-int-int-">Arrays.mismatch</a>
-   */
+   */ // 不同的起点
   public static int mismatch(byte[] a, int aFromIndex, int aToIndex, byte[] b, int bFromIndex, int bToIndex) {
     checkFromToIndex(aFromIndex, aToIndex, a.length);
     checkFromToIndex(bFromIndex, bToIndex, b.length);

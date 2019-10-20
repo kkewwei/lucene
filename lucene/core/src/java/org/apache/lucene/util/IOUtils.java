@@ -454,7 +454,7 @@ public final class IOUtils {
    * @param fileToSync the file to fsync
    * @param isDir if true, the given file is a directory (we open for read and ignore IOExceptions,
    *  because not all file systems and operating systems allow to fsync on a directory)
-   */
+   *///若isDir为true, 则同时将文件数据和元数据强制写到磁盘上
   public static void fsync(Path fileToSync, boolean isDir) throws IOException {
     // If the file is a directory we have to open read-only, for regular files we must open r/w for the fsync to have an effect.
     // See http://blog.httrack.com/blog/2013/11/15/everything-you-always-wanted-to-know-about-fsync/

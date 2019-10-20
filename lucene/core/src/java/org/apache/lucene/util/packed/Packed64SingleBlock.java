@@ -27,13 +27,13 @@ import org.apache.lucene.util.RamUsageEstimator;
 /**
  * This class is similar to {@link Packed64} except that it trades space for
  * speed by ensuring that a single block needs to be read/written in order to
- * read/write a value.
- */
+ * read/write a value.   //https://www.iteye.com/blog/suichangkele-2427667
+ */  // 都是包装数的基本单位，详细讲解，可以参考https://www.iteye.com/blog/suichangkele-2427648
 abstract class Packed64SingleBlock extends PackedInts.MutableImpl {
 
   public static final int MAX_SUPPORTED_BITS_PER_VALUE = 32;
   private static final int[] SUPPORTED_BITS_PER_VALUE = new int[] {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 16, 21, 32};
-
+  // 看目前bitsPerValue是否在SUPPORTED_BITS_PER_VALUE中
   public static boolean isSupported(int bitsPerValue) {
     return Arrays.binarySearch(SUPPORTED_BITS_PER_VALUE, bitsPerValue) >= 0;
   }
@@ -65,7 +65,7 @@ abstract class Packed64SingleBlock extends PackedInts.MutableImpl {
         + RamUsageEstimator.NUM_BYTES_OBJECT_REF) // blocks ref
         + RamUsageEstimator.sizeOf(blocks);
   }
-
+   // 将block中的数据进行解压缩
   @Override
   public int get(int index, long[] arr, int off, int len) {
     assert len > 0 : "len must be > 0 (got " + len + ")";
@@ -94,7 +94,7 @@ abstract class Packed64SingleBlock extends PackedInts.MutableImpl {
     assert decoder.longBlockCount() == 1;
     assert decoder.longValueCount() == valuesPerBlock;
     final int blockIndex = index / valuesPerBlock;
-    final int nblocks = (index + len) / valuesPerBlock - blockIndex;
+    final int nblocks = (index + len) / valuesPerBlock - blockIndex;//目前一次可以从几个long中满取
     decoder.decode(blocks, blockIndex, arr, off, nblocks);
     final int diff = nblocks * valuesPerBlock;
     index += diff; len -= diff;
@@ -120,37 +120,37 @@ abstract class Packed64SingleBlock extends PackedInts.MutableImpl {
     final int originalIndex = index;
 
     // go to the next block boundary
-    final int valuesPerBlock = 64 / bitsPerValue;
+    final int valuesPerBlock = 64 / bitsPerValue;  // 看看插入点index是不是在一个新的long的开始，如果！=0，则表示是在一个已经有值的long里面。这个代码其实是为下面的bulk set做准备的，先将一些数字存储，然后等到index恰好是一个新的long的开始
     final int offsetInBlock = index % valuesPerBlock;
-    if (offsetInBlock != 0) {
+    if (offsetInBlock != 0) {  //将最开始的几个放入到现在long里面，
       for (int i = offsetInBlock; i < valuesPerBlock && len > 0; ++i) {
-        set(index++, arr[off++]);
+        set(index++, arr[off++]);//单独的调用set
         --len;
       }
-      if (len == 0) {
+      if (len == 0) {//如果已经完了，则直接返回
         return index - originalIndex;
       }
     }
 
-    // bulk set
-    assert index % valuesPerBlock == 0;
-    final BulkOperation op = BulkOperation.of(PackedInts.Format.PACKED_SINGLE_BLOCK, bitsPerValue);
+    //bulk set  开始的地方一定是一个新的block，即一个新的long
+    assert index % valuesPerBlock == 0;//开始的那个一定是在一个新的long里面。
+    final BulkOperation op = BulkOperation.of(PackedInts.Format.PACKED_SINGLE_BLOCK, bitsPerValue);//将方法封装在一个类中了，下面有代码分析
     assert op.longBlockCount() == 1;
     assert op.longValueCount() == valuesPerBlock;
-    final int blockIndex = index / valuesPerBlock;
-    final int nblocks = (index + len) / valuesPerBlock - blockIndex;
-    op.encode(arr, off, blocks, blockIndex, nblocks);
-    final int diff = nblocks * valuesPerBlock;
-    index += diff; len -= diff;
+    final int blockIndex = index / valuesPerBlock;//在第几个long上。
+    final int nblocks = (index + len) / valuesPerBlock - blockIndex;//目前一次可以向几个long中放满,称为block
+    op.encode(arr, off, blocks, blockIndex, nblocks);//下面有介绍
+    final int diff = nblocks * valuesPerBlock;//下面有介绍
+    index += diff; len -= diff; //index现在跑到哪里了，还剩多少len
 
-    if (index > originalIndex) {
+    if (index > originalIndex) {//index不可能小于originalIndex，只要有数字进行了编码就会是大于，不过即使是大于，也会有的数字没有编码，比如上面的op.encode就可能没有编码任何数字，不过没关系，会进行下一次编码的。
       // stay at the block boundary
       return index - originalIndex;
     } else {
       // no progress so far => already at a block boundary but no full block to
-      // set
+      // set没有进行一个的设置，原因就是数字很少，不到一个long，而且插入点index一开始就是在一个新的long里面。此时就要调用子类的set方法。
       assert index == originalIndex;
-      return super.set(index, arr, off, len);
+      return super.set(index, arr, off, len);//父类方法中单独的调用set方法，即一个一个的设置
     }
   }
 

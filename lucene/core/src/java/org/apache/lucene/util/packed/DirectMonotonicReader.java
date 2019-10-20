@@ -78,16 +78,16 @@ public final class DirectMonotonicReader extends LongValues implements Accountab
           + RamUsageEstimator.sizeOf(offsets);
     }
   }
-
+  // 可以参考DirectMonotonicWriter，是对文档进行处理的
   /** Load metadata from the given {@link IndexInput}.
    *  @see DirectMonotonicReader#getInstance(Meta, RandomAccessInput) */
   public static Meta loadMeta(IndexInput metaIn, long numValues, int blockShift) throws IOException {
-    Meta meta = new Meta(numValues, blockShift);
-    for (int i = 0; i < meta.numBlocks; ++i) {
-      meta.mins[i] = metaIn.readLong();
+    Meta meta = new Meta(numValues, blockShift); // 3个chunk，只有一个
+    for (int i = 0; i < meta.numBlocks; ++i) { //该block多少个chunk
+      meta.mins[i] = metaIn.readLong(); // 每个chun的
       meta.avgs[i] = Float.intBitsToFloat(metaIn.readInt());
-      meta.offsets[i] = metaIn.readLong();
-      meta.bpvs[i] = metaIn.readByte();
+      meta.offsets[i] = metaIn.readLong(); // 这个block在data中的起始位置
+      meta.bpvs[i] = metaIn.readByte(); // byteRequire
     }
     return meta;
   }
@@ -96,11 +96,11 @@ public final class DirectMonotonicReader extends LongValues implements Accountab
    * Retrieves an instance from the specified slice.
    */
   public static DirectMonotonicReader getInstance(Meta meta, RandomAccessInput data) throws IOException {
-    final LongValues[] readers = new LongValues[meta.numBlocks];
+    final LongValues[] readers = new LongValues[meta.numBlocks]; // 多少个block
     for (int i = 0; i < meta.mins.length; ++i) {
       if (meta.bpvs[i] == 0) {
         readers[i] = EMPTY;
-      } else {
+      } else { // 读具体的原始值
         readers[i] = DirectReader.getInstance(data, meta.bpvs[i], meta.offsets[i]);
       }
     }
@@ -108,11 +108,11 @@ public final class DirectMonotonicReader extends LongValues implements Accountab
     return new DirectMonotonicReader(meta.blockShift, readers, meta.mins, meta.avgs, meta.bpvs);
   }
 
-  private final int blockShift;
+  private final int blockShift; // 一个block最多放多少个chunk,一般都是1024个
   private final LongValues[] readers;
-  private final long[] mins;
+  private final long[] mins; // ，每个block的
   private final float[] avgs;
-  private final byte[] bpvs;
+  private final byte[] bpvs; // requireBit
   private final int nonZeroBpvs;
 
   private DirectMonotonicReader(int blockShift, LongValues[] readers, long[] mins, float[] avgs, byte[] bpvs) {
@@ -134,19 +134,19 @@ public final class DirectMonotonicReader extends LongValues implements Accountab
   }
 
   @Override
-  public long get(long index) {
-    final int block = (int) (index >>> blockShift);
-    final long blockIndex = index & ((1 << blockShift) - 1);
-    final long delta = readers[block].get(blockIndex);
-    return mins[block] + (long) (avgs[block] * blockIndex) + delta;
-  }
+  public long get(long index) { //index是文档id,返回的是这个chunk的文档数
+    final int block = (int) (index >>> blockShift); // 在第几个block上
+    final long blockIndex = index & ((1 << blockShift) - 1); // 这个block内第几个chunk
+    final long delta = readers[block].get(blockIndex); // 从fdx中读偏移量
+    return mins[block] + (long) (avgs[block] * blockIndex) + delta; // 返回这chunk对应的数字
+  } //
 
   /** Get lower/upper bounds for the value at a given index without hitting the direct reader. */
-  private long[] getBounds(long index) {
-    final int block = Math.toIntExact(index >>> blockShift);
-    final long blockIndex = index & ((1 << blockShift) - 1);
-    final long lowerBound = mins[block] + (long) (avgs[block] * blockIndex);
-    final long upperBound = lowerBound + (1L << bpvs[block]) - 1;
+  private long[] getBounds(long index) { // index=第i个chunk
+    final int block = Math.toIntExact(index >>> blockShift); // 这个chunk在第几个block上上
+    final long blockIndex = index & ((1 << blockShift) - 1); // 落到某个block内的chunk数
+    final long lowerBound = mins[block] + (long) (avgs[block] * blockIndex); // 这个chunk的下限
+    final long upperBound = lowerBound + (1L << bpvs[block]) - 1; // 这个chunk的上限
     if (bpvs[block] == 64 || upperBound < lowerBound) { // overflow
       return new long[] { Long.MIN_VALUE, Long.MAX_VALUE };
     } else {
@@ -159,8 +159,8 @@ public final class DirectMonotonicReader extends LongValues implements Accountab
    * like {@link Arrays#binarySearch(long[], int, int, long)}.
    *
    * @see Arrays#binarySearch(long[], int, int, long)
-   */
-  public long binarySearch(long fromIndex, long toIndex, long key) {
+   */ // 二分搜索，扎到这个文档所在的chunk。比如32 32 12,那么在存储的时候就是0 32 64 78。当我们搜索的时候，key只会是0 32  64 78.
+  public long binarySearch(long fromIndex, long toIndex, long key) { //查找这个key落在了哪个chunk上
     if (fromIndex < 0 || fromIndex > toIndex) {
       throw new IllegalArgumentException("fromIndex=" + fromIndex + ",toIndex=" + toIndex);
     }
@@ -171,24 +171,24 @@ public final class DirectMonotonicReader extends LongValues implements Accountab
       final long mid = (lo + hi) >>> 1;
       // Try to run as many iterations of the binary search as possible without
       // hitting the direct readers, since they might hit a page fault.
-      final long[] bounds = getBounds(mid);
-      if (bounds[1] < key) {
+      final long[] bounds = getBounds(mid); // 尝试找到这个chunk(数字)的上下界
+      if (bounds[1] < key) { //
         lo = mid + 1;
       } else if (bounds[0] > key) {
         hi = mid - 1;
-      } else {
-        final long midVal = get(mid);
+      } else {// 此大概率是low=high,此时midVal=lowest
+        final long midVal = get(mid); // //index是文档id,返回的是这个chunk的文档数
         if (midVal < key) {
           lo = mid + 1;
-        } else if (midVal > key) {
+        } else if (midVal > key) { //只能跑这里
           hi = mid - 1;
-        } else {
+        } else { // 直到找到对应的chunk
           return mid;
         }
       }
     }
 
-    return -1 - lo;
+    return -1 - lo; // 若没找到，此时一般都是log=high+1，已经错过了，那么-2-(-1-lo)=log-1
   }
 
   @Override

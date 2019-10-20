@@ -51,12 +51,12 @@ public final class OnHeapFSTStore implements FSTStore {
 
     @Override
     public void init(DataInput in, long numBytes) throws IOException {
-        if (numBytes > 1 << this.maxBlockBits) {
+        if (numBytes > 1 << this.maxBlockBits) {// 大于1G，选用
             // FST is big: we need multiple pages
             bytes = new BytesStore(in, numBytes, 1<<this.maxBlockBits);
         } else {
             // FST fits into a single block: use ByteArrayBytesStoreReader for less overhead
-            bytesArray = new byte[(int) numBytes];
+            bytesArray = new byte[(int) numBytes]; // 小于1G选用
             in.readBytes(bytesArray, 0, bytesArray.length);
         }
     }

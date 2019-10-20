@@ -32,18 +32,18 @@ import org.apache.lucene.index.PointValues;
 public class FieldType implements IndexableFieldType  {
 
   private boolean stored;
-  private boolean tokenized = true;
+  private boolean tokenized = true; // 通过该参数设置是否分词
   private boolean storeTermVectors;
   private boolean storeTermVectorOffsets;
   private boolean storeTermVectorPositions;
   private boolean storeTermVectorPayloads;
   private boolean omitNorms;
-  private IndexOptions indexOptions = IndexOptions.NONE;
-  private boolean frozen;
+  private IndexOptions indexOptions = IndexOptions.NONE;  // 是否建立倒排索引
+  private boolean frozen; // 字段设置不再允许修改
   private DocValuesType docValuesType = DocValuesType.NONE;
-  private int dimensionCount;
-  private int indexDimensionCount;
-  private int dimensionNumBytes;
+  private int dimensionCount;// 有几个维度
+  private int indexDimensionCount;// 有几个数字
+  private int dimensionNumBytes;// 每个维度的长度,int为4位，long为8位
   private Map<String, String> attributes;
 
   /**
@@ -298,7 +298,7 @@ public class FieldType implements IndexableFieldType  {
     if (dimensionCount < 0) {
       throw new IllegalArgumentException("dimensionCount must be >= 0; got " + dimensionCount);
     }
-    if (dimensionCount > PointValues.MAX_DIMENSIONS) {
+    if (dimensionCount > PointValues.MAX_DIMENSIONS) { // 最多16个维度
       throw new IllegalArgumentException("dimensionCount must be <= " + PointValues.MAX_DIMENSIONS + "; got " + dimensionCount);
     }
     if (indexDimensionCount < 0) {

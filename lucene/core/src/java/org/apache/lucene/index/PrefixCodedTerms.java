@@ -76,10 +76,10 @@ public class PrefixCodedTerms implements Accountable {
 
       try {
         final int prefix;
-        if (size > 0 && field.equals(lastTerm.field)) {
+        if (size > 0 && field.equals(lastTerm.field)) { // 和上一个删除的字段名是否相同
           // same field as the last term
           prefix = StringHelper.bytesDifference(lastTerm.bytes, bytes);
-          output.writeVInt(prefix << 1);
+          output.writeVInt(prefix << 1); // 首位不用
         } else {
           // field change
           prefix = 0;
@@ -103,7 +103,7 @@ public class PrefixCodedTerms implements Accountable {
     public PrefixCodedTerms finish() {
       try {
         output.close();
-        return new PrefixCodedTerms(buffer, size);
+        return new PrefixCodedTerms(buffer, size); // 介个DeleteTerm
       } catch (IOException e) {
         throw new RuntimeException(e);
       }

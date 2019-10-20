@@ -58,7 +58,7 @@ public class Lucene84Codec extends Codec {
   private final FieldInfosFormat fieldInfosFormat = new Lucene60FieldInfosFormat();
   private final SegmentInfoFormat segmentInfosFormat = new Lucene70SegmentInfoFormat();
   private final LiveDocsFormat liveDocsFormat = new Lucene50LiveDocsFormat();
-  private final CompoundFormat compoundFormat = new Lucene50CompoundFormat();
+  private final CompoundFormat compoundFormat = new Lucene50CompoundFormat(); // 复合文件读取
   private final PostingsFormat defaultFormat;
 
   private final PostingsFormat postingsFormat = new PerFieldPostingsFormat() {
@@ -75,7 +75,7 @@ public class Lucene84Codec extends Codec {
     }
   };
 
-  private final StoredFieldsFormat storedFieldsFormat;
+  private final StoredFieldsFormat storedFieldsFormat; // Lucene50StoredFieldsFormat
 
   /**
    * Instantiates a new codec.
@@ -93,12 +93,12 @@ public class Lucene84Codec extends Codec {
   public Lucene84Codec(Mode mode) {
     super("Lucene84");
     this.storedFieldsFormat = new Lucene50StoredFieldsFormat(Objects.requireNonNull(mode));
-    this.defaultFormat = new Lucene84PostingsFormat();
+    this.defaultFormat = new Lucene84PostingsFormat(); // 申请一个默认Lucene84PostingsFormat
   }
 
   @Override
   public final StoredFieldsFormat storedFieldsFormat() {
-    return storedFieldsFormat;
+    return storedFieldsFormat; // Lucene50StoredFieldsFormat
   }
 
   @Override
@@ -113,12 +113,12 @@ public class Lucene84Codec extends Codec {
 
   @Override
   public final FieldInfosFormat fieldInfosFormat() {
-    return fieldInfosFormat;
+    return fieldInfosFormat; // Lucene60FieldInfosFormat
   }
 
   @Override
   public SegmentInfoFormat segmentInfoFormat() {
-    return segmentInfosFormat;
+    return segmentInfosFormat;// Lucene70Segement
   }
 
   @Override
@@ -128,7 +128,7 @@ public class Lucene84Codec extends Codec {
 
   @Override
   public final CompoundFormat compoundFormat() {
-    return compoundFormat;
+    return compoundFormat; //Lucene50CompoundFormat
   }
 
   @Override
@@ -146,7 +146,7 @@ public class Lucene84Codec extends Codec {
    *  guaranteed to be able to read the default implementation.
    */
   public PostingsFormat getPostingsFormatForField(String field) {
-    return defaultFormat;
+    return defaultFormat;//Lucene50PostingsFormat
   }
 
   /** Returns the docvalues format that should be used for writing
@@ -159,12 +159,12 @@ public class Lucene84Codec extends Codec {
    *  guaranteed to be able to read the default implementation.
    */
   public DocValuesFormat getDocValuesFormatForField(String field) {
-    return defaultDVFormat;
+    return defaultDVFormat; // 就是DocValuesFormat
   }
 
   @Override
   public final DocValuesFormat docValuesFormat() {
-    return docValuesFormat;
+    return docValuesFormat; // 就是DocValuesFormat
   }
 
   private final DocValuesFormat defaultDVFormat = DocValuesFormat.forName("Lucene80");

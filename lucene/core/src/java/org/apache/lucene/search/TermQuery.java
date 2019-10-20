@@ -38,7 +38,7 @@ import org.apache.lucene.search.similarities.Similarity;
  */
 public class TermQuery extends Query {
 
-  private final Term term;
+  private final Term term; //实际就是key:value
   private final TermStates perReaderTermState;
 
   final class TermWeight extends Weight {
@@ -59,7 +59,7 @@ public class TermQuery extends Query {
 
       final CollectionStatistics collectionStats;
       final TermStatistics termStats;
-      if (scoreMode.needsScores()) {
+      if (scoreMode.needsScores()) { // 是哦
         collectionStats = searcher.collectionStatistics(term.field());
         termStats = termStates.docFreq() > 0 ? searcher.termStatistics(term, termStates.docFreq(), termStates.totalTermFreq()) : null;
       } else {
@@ -136,8 +136,8 @@ public class TermQuery extends Query {
         assert termNotInReader(context.reader(), term) : "no termstate found but term exists in reader term=" + term;
         return null;
       }
-      final TermsEnum termsEnum = context.reader().terms(term.field()).iterator();
-      termsEnum.seekExact(term.bytes(), state);
+      final TermsEnum termsEnum = context.reader().terms(term.field()).iterator(); //SegmentTermsEnum
+      termsEnum.seekExact(term.bytes(), state); //继续下沉
       return termsEnum;
     }
 
@@ -192,11 +192,11 @@ public class TermQuery extends Query {
 
   @Override
   public Weight createWeight(IndexSearcher searcher, ScoreMode scoreMode, float boost) throws IOException {
-    final IndexReaderContext context = searcher.getTopReaderContext();
+    final IndexReaderContext context = searcher.getTopReaderContext(); // CompositeReaderContext
     final TermStates termState;
     if (perReaderTermState == null
         || perReaderTermState.wasBuiltFor(context) == false) {
-      termState = TermStates.build(context, term, scoreMode.needsScores());
+      termState = TermStates.build(context, term, scoreMode.needsScores()); // scoreMode.needsScores() 若需要打分的话，就开始对FST加载遍历了
     } else {
       // PRTS was pre-build for this IS
       termState = this.perReaderTermState;

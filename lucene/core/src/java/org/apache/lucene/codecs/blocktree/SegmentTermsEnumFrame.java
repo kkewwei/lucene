@@ -29,7 +29,7 @@ import org.apache.lucene.util.ArrayUtil;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.FutureArrays;
 import org.apache.lucene.util.fst.FST;
-
+// 作用？
 final class SegmentTermsEnumFrame {
   // Our index in stack[]:
   final int ord;
@@ -90,7 +90,7 @@ final class SegmentTermsEnumFrame {
   // metaData
   int metaDataUpto;
 
-  final BlockTermState state;
+  final BlockTermState state; // 产生一个IntBlockTermState
 
   // metadata buffer
   byte[] bytes = new byte[32];
@@ -102,10 +102,10 @@ final class SegmentTermsEnumFrame {
   public SegmentTermsEnumFrame(SegmentTermsEnum ste, int ord) throws IOException {
     this.ste = ste;
     this.ord = ord;
-    this.state = ste.fr.parent.postingsReader.newTermState();
+    this.state = ste.fr.parent.postingsReader.newTermState(); // IntBlockTermState
     this.state.totalTermFreq = -1;
     this.version = ste.fr.parent.version;
-    if (version >= BlockTreeTermsReader.VERSION_COMPRESSED_SUFFIXES) {
+    if (version >= BlockTreeTermsReader.VERSION_COMPRESSED_SUFFIXES) { // 进来了
       suffixLengthBytes = new byte[32];
       suffixLengthsReader = new ByteArrayDataInput();
     } else {

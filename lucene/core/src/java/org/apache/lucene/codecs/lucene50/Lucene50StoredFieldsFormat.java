@@ -105,13 +105,13 @@ public final class Lucene50StoredFieldsFormat extends StoredFieldsFormat {
   /** Configuration option for stored fields. */
   public static enum Mode {
     /** Trade compression ratio for retrieval speed. */
-    BEST_SPEED,
+    BEST_SPEED, // 默认是best_speed
     /** Trade retrieval speed for compression ratio. */
     BEST_COMPRESSION
   }
   
   /** Attribute key for compression mode. */
-  public static final String MODE_KEY = Lucene50StoredFieldsFormat.class.getSimpleName() + ".mode";
+  public static final String MODE_KEY = Lucene50StoredFieldsFormat.class.getSimpleName() + ".mode"; // Lucene50StoredFieldsFormat.mode
   
   final Mode mode;
   
@@ -127,7 +127,7 @@ public final class Lucene50StoredFieldsFormat extends StoredFieldsFormat {
 
   @Override
   public StoredFieldsReader fieldsReader(Directory directory, SegmentInfo si, FieldInfos fn, IOContext context) throws IOException {
-    String value = si.getAttribute(MODE_KEY);
+    String value = si.getAttribute(MODE_KEY); // Lucene50StoredFieldsFormat.mode->BEST_SPEED
     if (value == null) {
       throw new IllegalStateException("missing value for " + MODE_KEY + " for segment: " + si.name);
     }
@@ -137,17 +137,17 @@ public final class Lucene50StoredFieldsFormat extends StoredFieldsFormat {
 
   @Override
   public StoredFieldsWriter fieldsWriter(Directory directory, SegmentInfo si, IOContext context) throws IOException {
-    String previous = si.putAttribute(MODE_KEY, mode.name());
+    String previous = si.putAttribute(MODE_KEY, mode.name());// Lucene50StoredFieldsFormat.mode:  best_speed
     if (previous != null && previous.equals(mode.name()) == false) {
       throw new IllegalStateException("found existing value for " + MODE_KEY + " for segment: " + si.name +
                                       "old=" + previous + ", new=" + mode.name());
     }
-    return impl(mode).fieldsWriter(directory, si, context);
+    return impl(mode).fieldsWriter(directory, si, context); // impl()跑到下面, 而fieldsWriter()跑到
   }
   
   StoredFieldsFormat impl(Mode mode) {
     switch (mode) {
-      case BEST_SPEED: 
+      case BEST_SPEED:  // 默认这个
         return new CompressingStoredFieldsFormat("Lucene50StoredFieldsFastData", CompressionMode.FAST, 1 << 14, 128, 10);
       case BEST_COMPRESSION: 
         return new CompressingStoredFieldsFormat("Lucene50StoredFieldsHighData", CompressionMode.HIGH_COMPRESSION, 61440, 512, 10);

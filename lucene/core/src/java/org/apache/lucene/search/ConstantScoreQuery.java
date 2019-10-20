@@ -28,12 +28,12 @@ import org.apache.lucene.util.Bits;
  * A query that wraps another query and simply returns a constant score equal to
  * 1 for every document that matches the query.
  * It therefore simply strips of all scores and always returns 1.
- */
+ */  // 打分全部为1的话，就是常亮查询器
 public final class ConstantScoreQuery extends Query {
   private final Query query;
 
   /** Strips off scores from the passed in Query. The hits will get a constant score
-   * of 1. */
+   * of 1. */ //
   public ConstantScoreQuery(Query query) {
     this.query = Objects.requireNonNull(query, "Query must not be null");
   }
@@ -134,7 +134,7 @@ public final class ConstantScoreQuery extends Query {
           return new ScorerSupplier() {
             @Override
             public Scorer get(long leadCost) throws IOException {
-              final Scorer innerScorer = innerScorerSupplier.get(leadCost);
+              final Scorer innerScorer = innerScorerSupplier.get(leadCost); //返回DisjunctionSumScorer
               final TwoPhaseIterator twoPhaseIterator = innerScorer.twoPhaseIterator();
               if (twoPhaseIterator == null) {
                 return new ConstantScoreScorer(innerWeight, score(), scoreMode, innerScorer.iterator());
@@ -161,7 +161,7 @@ public final class ConstantScoreQuery extends Query {
           if (scorerSupplier == null) {
             return null;
           }
-          return scorerSupplier.get(Long.MAX_VALUE);
+          return scorerSupplier.get(Long.MAX_VALUE); // 开始打分了,比较重要
         }
 
         @Override

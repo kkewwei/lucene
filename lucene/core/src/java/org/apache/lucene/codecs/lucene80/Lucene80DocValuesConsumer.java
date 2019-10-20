@@ -64,7 +64,7 @@ import static org.apache.lucene.codecs.lucene80.Lucene80DocValuesFormat.NUMERIC_
 /** writer for {@link Lucene80DocValuesFormat} */
 final class Lucene80DocValuesConsumer extends DocValuesConsumer implements Closeable {
 
-  IndexOutput data, meta;
+  IndexOutput data, meta; //  meta=/data1/_0_Lucene80_0.dvd, data=/data1/_0_Lucene80_0.dvm
   final int maxDoc;
   private final SegmentWriteState state;
 
@@ -87,7 +87,7 @@ final class Lucene80DocValuesConsumer extends DocValuesConsumer implements Close
       }
     }
   }
-
+ // 官博的时候刷新到dvm dvd中
   @Override
   public void close() throws IOException {
     boolean success = false;
@@ -553,12 +553,12 @@ final class Lucene80DocValuesConsumer extends DocValuesConsumer implements Close
     meta.writeByte(Lucene80DocValuesFormat.SORTED);
     doAddSortedField(field, valuesProducer);
   }
-
+  /// 存储termId
   private void doAddSortedField(FieldInfo field, DocValuesProducer valuesProducer) throws IOException {
-    SortedDocValues values = valuesProducer.getSorted(field);
+    SortedDocValues values = valuesProducer.getSorted(field); //SortedSetSelector$MinValue
     int numDocsWithField = 0;
     for (int doc = values.nextDoc(); doc != DocIdSetIterator.NO_MORE_DOCS; doc = values.nextDoc()) {
-      numDocsWithField++;
+      numDocsWithField++; // 只是统计该域所有文档相同域名的域个数（一个文档相同域名的域可能有两个）
     }
 
     if (numDocsWithField == 0) {
@@ -566,123 +566,123 @@ final class Lucene80DocValuesConsumer extends DocValuesConsumer implements Close
       meta.writeLong(0L); // docsWithFieldLength
       meta.writeShort((short) -1); // jumpTableEntryCount
       meta.writeByte((byte) -1);   // denseRankPower
-    } else if (numDocsWithField == maxDoc) {
+    } else if (numDocsWithField == maxDoc) {// 会跑到这里，重新建立dvd文件，
       meta.writeLong(-1); // docsWithFieldOffset
       meta.writeLong(0L); // docsWithFieldLength
       meta.writeShort((short) -1); // jumpTableEntryCount
       meta.writeByte((byte) -1);   // denseRankPower
     } else {
-      long offset = data.getFilePointer();
-      meta.writeLong(offset); // docsWithFieldOffset
-      values = valuesProducer.getSorted(field);
+      long offset = data.getFilePointer(); // 获取文件写入的地方
+      meta.writeLong(offset); // docsWithFieldOffset， 存放到meta中
+      values = valuesProducer.getSorted(field); //SortedSetSelector$MinValue
       final short jumpTableentryCount = IndexedDISI.writeBitSet(values, data, IndexedDISI.DEFAULT_DENSE_RANK_POWER);
       meta.writeLong(data.getFilePointer() - offset); // docsWithFieldLength
       meta.writeShort(jumpTableentryCount);
       meta.writeByte(IndexedDISI.DEFAULT_DENSE_RANK_POWER);
     }
 
-    meta.writeInt(numDocsWithField);
-    if (values.getValueCount() <= 1) {
+    meta.writeInt(numDocsWithField); // 文档个数
+    if (values.getValueCount() <= 1) { // 所有域个数
       meta.writeByte((byte) 0); // bitsPerValue
       meta.writeLong(0L); // ordsOffset
       meta.writeLong(0L); // ordsLength
-    } else {
-      int numberOfBitsPerOrd = DirectWriter.unsignedBitsRequired(values.getValueCount() - 1);
+    } else { // 支持的没有10， 只能选择12
+      int numberOfBitsPerOrd = DirectWriter.unsignedBitsRequired(values.getValueCount() - 1); // 获取的是segment内唯一的域个数
       meta.writeByte((byte) numberOfBitsPerOrd); // bitsPerValue
-      long start = data.getFilePointer();
-      meta.writeLong(start); // ordsOffset
-      DirectWriter writer = DirectWriter.getInstance(data, numDocsWithField, numberOfBitsPerOrd);
-      values = valuesProducer.getSorted(field);
-      for (int doc = values.nextDoc(); doc != DocIdSetIterator.NO_MORE_DOCS; doc = values.nextDoc()) {
-        writer.add(values.ordValue());
+      long start = data.getFilePointer();    // 获取data文档目前写入的位置
+      meta.writeLong(start); // ordsOffset   开始从文档这里写入
+      DirectWriter writer = DirectWriter.getInstance(data, numDocsWithField, numberOfBitsPerOrd); // DirectWriter，就是简单地长度压缩
+      values = valuesProducer.getSorted(field); //SortedSetSelector$MinValue
+      for (int doc = values.nextDoc(); doc != DocIdSetIterator.NO_MORE_DOCS; doc = values.nextDoc()) { // 遍历这numDocsWithField
+        writer.add(values.ordValue()); // dvd中存储经过排序后的每个termId, 仅仅存入缓存
       }
-      writer.finish();
+      writer.finish(); // 将termId编码写入dvd中
       meta.writeLong(data.getFilePointer() - start); // ordsLength
     }
 
     addTermsDict(DocValues.singleton(valuesProducer.getSorted(field)));
   }
-
+  // 16个词一个索引
   private void addTermsDict(SortedSetDocValues values) throws IOException {
-    final long size = values.getValueCount();
+    final long size = values.getValueCount(); // 词的个数
     meta.writeVLong(size);
     meta.writeInt(Lucene80DocValuesFormat.TERMS_DICT_BLOCK_SHIFT);
 
     ByteBuffersDataOutput addressBuffer = new ByteBuffersDataOutput();
     ByteBuffersIndexOutput addressOutput = new ByteBuffersIndexOutput(addressBuffer, "temp", "temp");
     meta.writeInt(DIRECT_MONOTONIC_BLOCK_SHIFT);
-    long numBlocks = (size + Lucene80DocValuesFormat.TERMS_DICT_BLOCK_MASK) >>> Lucene80DocValuesFormat.TERMS_DICT_BLOCK_SHIFT;
+    long numBlocks = (size + Lucene80DocValuesFormat.TERMS_DICT_BLOCK_MASK) >>> Lucene80DocValuesFormat.TERMS_DICT_BLOCK_SHIFT; // 一个block为16
     DirectMonotonicWriter writer = DirectMonotonicWriter.getInstance(meta, addressOutput, numBlocks, DIRECT_MONOTONIC_BLOCK_SHIFT);
 
     BytesRefBuilder previous = new BytesRefBuilder();
     long ord = 0;
     long start = data.getFilePointer();
     int maxLength = 0;
-    TermsEnum iterator = values.termsEnum();
-    for (BytesRef term = iterator.next(); term != null; term = iterator.next()) {
+    TermsEnum iterator = values.termsEnum(); // SortedDocValuesTermsEnum
+    for (BytesRef term = iterator.next(); term != null; term = iterator.next()) { // 就segment内唯一某个域的distinct(词)的存储，// 按照字母排序后的termId依次读取
       if ((ord & Lucene80DocValuesFormat.TERMS_DICT_BLOCK_MASK) == 0) {
-        writer.add(data.getFilePointer() - start);
-        data.writeVInt(term.length);
-        data.writeBytes(term.bytes, term.offset, term.length);
+        writer.add(data.getFilePointer() - start); // 向writer中写入一次data使用位置
+        data.writeVInt(term.length); // 写入真实的term长度
+        data.writeBytes(term.bytes, term.offset, term.length);//写入真实的term的二进制数据，压缩从头开始
       } else {
         final int prefixLength = StringHelper.bytesDifference(previous.get(), term);
         final int suffixLength = term.length - prefixLength;
         assert suffixLength > 0; // terms are unique
-
-        data.writeByte((byte) (Math.min(prefixLength, 15) | (Math.min(15, suffixLength - 1) << 4)));
-        if (prefixLength >= 15) {
+        // 相同前缀用低4位，不同的后缀用高4位
+        data.writeByte((byte) (Math.min(prefixLength, 15) | (Math.min(15, suffixLength - 1) << 4))); // 高4位和低4位
+        if (prefixLength >= 15) { // 若前缀大于15，再接着另存
           data.writeVInt(prefixLength - 15);
         }
-        if (suffixLength >= 16) {
+        if (suffixLength >= 16) { // 后缀大于16，再接着另存
           data.writeVInt(suffixLength - 16);
-        }
+        } // dvd保存term内容，存储的是不同后缀的长度
         data.writeBytes(term.bytes, term.offset + prefixLength, term.length - prefixLength);
       }
       maxLength = Math.max(maxLength, term.length);
       previous.copyBytes(term);
       ++ord;
     }
-    writer.finish();
+    writer.finish(); // 将每隔15个词在dvm中的位置给记录下来
     meta.writeInt(maxLength);
     meta.writeLong(start);
     meta.writeLong(data.getFilePointer() - start);
     start = data.getFilePointer();
-    addressBuffer.copyTo(data);
-    meta.writeLong(start);
+    addressBuffer.copyTo(data); // 将每隔15个词在dvm中的位置给记录下来给存储到dvd中
+    meta.writeLong(start); // dvd中起始位置
     meta.writeLong(data.getFilePointer() - start);
-
+    // 第三层，记录 term 字典的索引，values 是按照值 hash 排过序的，这里每 1024 条抽取一个作为索引，加速查询
     // Now write the reverse terms index
     writeTermsIndex(values);
   }
-
+  // TermsIndex是TermsDict索引, TermsDict是16个term一个索引，而 TermsIndex是1024一个索引结构
   private void writeTermsIndex(SortedSetDocValues values) throws IOException {
-    final long size = values.getValueCount();
-    meta.writeInt(Lucene80DocValuesFormat.TERMS_DICT_REVERSE_INDEX_SHIFT);
+    final long size = values.getValueCount(); // segment范围内所有文档相同域distinct(term)的个数
+    meta.writeInt(Lucene80DocValuesFormat.TERMS_DICT_REVERSE_INDEX_SHIFT); // 字典间隔1024
     long start = data.getFilePointer();
 
     long numBlocks = 1L + ((size + Lucene80DocValuesFormat.TERMS_DICT_REVERSE_INDEX_MASK) >>> Lucene80DocValuesFormat.TERMS_DICT_REVERSE_INDEX_SHIFT);
     ByteBuffersDataOutput addressBuffer = new ByteBuffersDataOutput();
     DirectMonotonicWriter writer;
     try (ByteBuffersIndexOutput addressOutput = new ByteBuffersIndexOutput(addressBuffer, "temp", "temp")) {
-      writer = DirectMonotonicWriter.getInstance(meta, addressOutput, numBlocks, DIRECT_MONOTONIC_BLOCK_SHIFT);
-      TermsEnum iterator = values.termsEnum();
+      writer = DirectMonotonicWriter.getInstance(meta, addressOutput, numBlocks, DIRECT_MONOTONIC_BLOCK_SHIFT); // 也是使用这玩意写入数据
+      TermsEnum iterator = values.termsEnum();// SortedDocValuesTermsEnum
       BytesRefBuilder previous = new BytesRefBuilder();
       long offset = 0;
       long ord = 0;
-      for (BytesRef term = iterator.next(); term != null; term = iterator.next()) {
-        if ((ord & Lucene80DocValuesFormat.TERMS_DICT_REVERSE_INDEX_MASK) == 0) {
-          writer.add(offset);
+      for (BytesRef term = iterator.next(); term != null; term = iterator.next()) { // 就segment内唯一某个域的distinct(词)的存储，依次遍历
+        if ((ord & Lucene80DocValuesFormat.TERMS_DICT_REVERSE_INDEX_MASK) == 0) { // 每隔1024个词存一次  1024*   my_bug
+          writer.add(offset); // 存储的是第二级别相同长度
           final int sortKeyLength;
           if (ord == 0) {
             // no previous term: no bytes to write
             sortKeyLength = 0;
           } else {
-            sortKeyLength = StringHelper.sortKeyLength(previous.get(), term);
+            sortKeyLength = StringHelper.sortKeyLength(previous.get(), term); // 相同的前缀
           }
           offset += sortKeyLength;
-          data.writeBytes(term.bytes, term.offset, sortKeyLength);
-        } else if ((ord & Lucene80DocValuesFormat.TERMS_DICT_REVERSE_INDEX_MASK) == Lucene80DocValuesFormat.TERMS_DICT_REVERSE_INDEX_MASK) {
-          previous.copyBytes(term);
+          data.writeBytes(term.bytes, term.offset, sortKeyLength); // dvd  和前一个词相比，存储相同的前缀
+        } else if ((ord & Lucene80DocValuesFormat.TERMS_DICT_REVERSE_INDEX_MASK) == Lucene80DocValuesFormat.TERMS_DICT_REVERSE_INDEX_MASK) { // 1024*x + 1023
+          previous.copyBytes(term); // 每次找到第1024*x + 1023个词，主要是为了获取该词，为第1024*(x+1)个词找相同的前缀
         }
         ++ord;
       }
@@ -692,7 +692,7 @@ final class Lucene80DocValuesConsumer extends DocValuesConsumer implements Close
       meta.writeLong(data.getFilePointer() - start);
       start = data.getFilePointer();
       addressBuffer.copyTo(data);
-      meta.writeLong(start);
+      meta.writeLong(start); // 往meta中写入
       meta.writeLong(data.getFilePointer() - start);
     }
   }
@@ -725,13 +725,13 @@ final class Lucene80DocValuesConsumer extends DocValuesConsumer implements Close
       meta.writeLong(data.getFilePointer() - start);
     }
   }
-
+  /// 这是某一个域
   @Override
   public void addSortedSetField(FieldInfo field, DocValuesProducer valuesProducer) throws IOException {
-    meta.writeInt(field.number);
-    meta.writeByte(Lucene80DocValuesFormat.SORTED_SET);
+    meta.writeInt(field.number); // 域number
+    meta.writeByte(Lucene80DocValuesFormat.SORTED_SET); // 该域存储类型
 
-    SortedSetDocValues values = valuesProducer.getSortedSet(field);
+    SortedSetDocValues values = valuesProducer.getSortedSet(field); // BufferedSortedSetDocValues
     int numDocsWithField = 0;
     long numOrds = 0;
     for (int doc = values.nextDoc(); doc != DocIdSetIterator.NO_MORE_DOCS; doc = values.nextDoc()) {
@@ -739,18 +739,18 @@ final class Lucene80DocValuesConsumer extends DocValuesConsumer implements Close
       for (long ord = values.nextOrd(); ord != SortedSetDocValues.NO_MORE_ORDS; ord = values.nextOrd()) {
         numOrds++;
       }
-    }
+    } // 已经把数据解压缩出来了，存放在values中了
 
-    if (numDocsWithField == numOrds) {
+    if (numDocsWithField == numOrds) { // 一般都跑到这里，同名的域一个文档之只有一个
       meta.writeByte((byte) 0); // multiValued (0 = singleValued)
-      doAddSortedField(field, new EmptyDocValuesProducer() {
+      doAddSortedField(field, new EmptyDocValuesProducer() { //单值类型
         @Override
         public SortedDocValues getSorted(FieldInfo field) throws IOException {
           return SortedSetSelector.wrap(valuesProducer.getSortedSet(field), SortedSetSelector.Type.MIN);
         }
       });
       return;
-    }
+    } // 此时是多值类型的
     meta.writeByte((byte) 1);  // multiValued (1 = multiValued)
 
     assert numDocsWithField != 0;
@@ -775,7 +775,7 @@ final class Lucene80DocValuesConsumer extends DocValuesConsumer implements Close
     meta.writeLong(start); // ordsOffset
     DirectWriter writer = DirectWriter.getInstance(data, numOrds, numberOfBitsPerOrd);
     values = valuesProducer.getSortedSet(field);
-    for (int doc = values.nextDoc(); doc != DocIdSetIterator.NO_MORE_DOCS; doc = values.nextDoc()) {
+    for (int doc = values.nextDoc(); doc != DocIdSetIterator.NO_MORE_DOCS; doc = values.nextDoc()) { // 遍历所有的文档
       for (long ord = values.nextOrd(); ord != SortedSetDocValues.NO_MORE_ORDS; ord = values.nextOrd()) {
         writer.add(ord);
       }
@@ -798,7 +798,7 @@ final class Lucene80DocValuesConsumer extends DocValuesConsumer implements Close
       while (values.nextOrd() != SortedSetDocValues.NO_MORE_ORDS) {
         addr++;
       }
-      addressesWriter.add(addr);
+      addressesWriter.add(addr); // 多少个是唯一的
     }
     addressesWriter.finish();
     meta.writeLong(data.getFilePointer() - start); // addressesLength

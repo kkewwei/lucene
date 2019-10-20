@@ -31,26 +31,26 @@ import org.apache.lucene.util.AttributeSource;
  * 
  * @lucene.experimental
  */
-public final class FieldInvertState {
+public final class FieldInvertState { // 某个字段的拥有的，在每次进入某个文档的时候，都会调用FieldInvertState.reset清空所有统计
   final int indexCreatedVersionMajor;
   final String name;
   final IndexOptions indexOptions;
-  int position;
-  int length;
-  int numOverlap;
-  int offset;
-  int maxTermFrequency;
-  int uniqueTermCount;
+  int position;  // 当前field所有字段的词累计position，每个文档进入时会被清空
+  int length; // 保存所有词的个数，和position很像，每个文档进入时会被清空
+  int numOverlap;//，每次进入清空
+  int offset;  // 统计当前field所有字段值累积的offset，每次进入清空
+  int maxTermFrequency; // 最大那个词频，每次进入清空
+  int uniqueTermCount; // 统计词的个数，每次进入清空
   // we must track these across field instances (multi-valued case)
-  int lastStartOffset = 0;
-  int lastPosition = 0;
-  AttributeSource attributeSource;
-
-  OffsetAttribute offsetAttribute;
-  PositionIncrementAttribute posIncrAttribute;
-  PayloadAttribute payloadAttribute;
-  TermToBytesRefAttribute termAttribute;
-  TermFrequencyAttribute termFreqAttribute;
+  int lastStartOffset = 0;  //上一个词在整个域中的起始偏移位置，每次进入清空
+  int lastPosition = 0; //，每次进入清空
+  AttributeSource attributeSource; // StopFilter
+ // 见Lucene实战 P118介绍
+  OffsetAttribute offsetAttribute;  // PackedTokenAttributeImpl, 词汇的起始位置和终止字符的偏移量
+  PositionIncrementAttribute posIncrAttribute;    // 位置增量（默认值为1）
+  PayloadAttribute payloadAttribute; // PackedTokenAttributeImpl  每个词汇单元的byte[]类型有效负载
+  TermToBytesRefAttribute termAttribute;// PackedTokenAttributeImpl
+  TermFrequencyAttribute termFreqAttribute;// PackedTokenAttributeImpl
 
   /** Creates {code FieldInvertState} for the specified
    *  field name. */
@@ -92,12 +92,12 @@ public final class FieldInvertState {
    */
   void setAttributeSource(AttributeSource attributeSource) {
     if (this.attributeSource != attributeSource) {
-      this.attributeSource = attributeSource;
+      this.attributeSource = attributeSource; // StopFilter
       termAttribute = attributeSource.getAttribute(TermToBytesRefAttribute.class);
-      termFreqAttribute = attributeSource.addAttribute(TermFrequencyAttribute.class);
+      termFreqAttribute = attributeSource.addAttribute(TermFrequencyAttribute.class);// PackedTokenAttributeImpl
       posIncrAttribute = attributeSource.addAttribute(PositionIncrementAttribute.class);
       offsetAttribute = attributeSource.addAttribute(OffsetAttribute.class);
-      payloadAttribute = attributeSource.getAttribute(PayloadAttribute.class);
+      payloadAttribute = attributeSource.getAttribute(PayloadAttribute.class);// null
     }
   }
 

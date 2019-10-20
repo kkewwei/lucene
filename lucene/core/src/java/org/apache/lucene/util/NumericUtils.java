@@ -89,17 +89,17 @@ public final class NumericUtils {
     return bits ^ (bits >> 31) & 0x7fffffff;
   }
 
-
+   // 减法
   /** Result = a - b, where a &gt;= b, else {@code IllegalArgumentException} is thrown.  */
   public static void subtract(int bytesPerDim, int dim, byte[] a, byte[] b, byte[] result) {
     int start = dim * bytesPerDim;
     int end = start + bytesPerDim;
-    int borrow = 0;
-    for(int i=end-1;i>=start;i--) {
+    int borrow = 0; //借位
+    for(int i=end-1;i>=start;i--) { // 从低位开始进行减法运算
       int diff = (a[i]&0xff) - (b[i]&0xff) - borrow;
       if (diff < 0) {
         diff += 256;
-        borrow = 1;
+        borrow = 1; // 借一位
       } else {
         borrow = 0;
       }
@@ -138,7 +138,7 @@ public final class NumericUtils {
   public static void intToSortableBytes(int value, byte[] result, int offset) {
     // Flip the sign bit, so negative ints sort before positive ints correctly:
     value ^= 0x80000000;
-    result[offset] =   (byte) (value >> 24);
+    result[offset] =   (byte) (value >> 24);// 大的在前面
     result[offset+1] = (byte) (value >> 16);
     result[offset+2] = (byte) (value >>  8);
     result[offset+3] = (byte) value;
@@ -172,7 +172,7 @@ public final class NumericUtils {
     result[offset+4] = (byte) (value >> 24);
     result[offset+5] = (byte) (value >> 16);
     result[offset+6] = (byte) (value >> 8);
-    result[offset+7] = (byte) value;
+    result[offset+7] = (byte) value; 
   }
 
   /**

@@ -40,7 +40,7 @@ public final class TermStates {
 
   // Important: do NOT keep hard references to index readers
   private final Object topReaderContextIdentity;
-  private final TermState[] states;
+  private final TermState[] states; // 该shard拥有的segment个数
   private final Term term;  // null if stats are to be used
   private int docFreq;
   private long totalTermFreq;
@@ -58,7 +58,7 @@ public final class TermStates {
     } else {
       len = context.leaves().size();
     }
-    states = new TermState[len];
+    states = new TermState[len]; // 该shard上的segment个数
     this.term = term;
   }
 
@@ -104,11 +104,11 @@ public final class TermStates {
     assert context != null && context.isTopLevel;
     final TermStates perReaderTermState = new TermStates(needsStats ? null : term, context);
     if (needsStats) {
-      for (final LeafReaderContext ctx : context.leaves()) {
+      for (final LeafReaderContext ctx : context.leaves()) { // 顺序遍历该shard上每个segment
         //if (DEBUG) System.out.println("  r=" + leaves[i].reader);
-        TermsEnum termsEnum = loadTermsEnum(ctx, term);
+        TermsEnum termsEnum = loadTermsEnum(ctx, term); // 遍历FST结构
         if (termsEnum != null) {
-          final TermState termState = termsEnum.termState();
+          final TermState termState = termsEnum.termState(); // 从tim中查找了该term的倒排索引结构
           //if (DEBUG) System.out.println("    found");
           perReaderTermState.register(termState, ctx.ord, termsEnum.docFreq(), termsEnum.totalTermFreq());
         }
@@ -118,10 +118,10 @@ public final class TermStates {
   }
 
   private static TermsEnum loadTermsEnum(LeafReaderContext ctx, Term term) throws IOException {
-    final Terms terms = ctx.reader().terms(term.field());
+    final Terms terms = ctx.reader().terms(term.field()); // 进入ExitableDirectoryReader.terms()。返回值terms=ExitableTerms，也就可以返回FieldReader
     if (terms != null) {
-      final TermsEnum termsEnum = terms.iterator();
-      if (termsEnum.seekExact(term.bytes())) {
+      final TermsEnum termsEnum = terms.iterator(); //SegmentTermsEnum
+      if (termsEnum.seekExact(term.bytes())) { // 寻找这个terms
         return termsEnum;
       }
     }
@@ -183,9 +183,9 @@ public final class TermStates {
     assert ctx.ord >= 0 && ctx.ord < states.length;
     if (term == null)
       return states[ctx.ord];
-    if (this.states[ctx.ord] == null) {
-      TermsEnum te = loadTermsEnum(ctx, term);
-      this.states[ctx.ord] = te == null ? EMPTY_TERMSTATE : te.termState();
+    if (this.states[ctx.ord] == null) { // 这个term还没有读取出来
+      TermsEnum te = loadTermsEnum(ctx, term); // 直接定位到对应的fst目标位置,te=SegmentTermsEnum
+      this.states[ctx.ord] = te == null ? EMPTY_TERMSTATE : te.termState(); //
     }
     if (this.states[ctx.ord] == EMPTY_TERMSTATE)
       return null;

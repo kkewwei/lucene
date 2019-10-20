@@ -29,7 +29,7 @@ import org.apache.lucene.util.IOSupplier;
 public class FilterMergePolicy extends MergePolicy {
 
   /** The wrapped {@link MergePolicy}. */
-  protected final MergePolicy in;
+  protected final MergePolicy in; // RecoverySourcePruneMergePolicy.
 
   /**
    * Creates a new filter merge policy instance wrapping another.
@@ -44,8 +44,8 @@ public class FilterMergePolicy extends MergePolicy {
   public MergeSpecification findMerges(MergeTrigger mergeTrigger, SegmentInfos segmentInfos, MergeContext mergeContext)
       throws IOException {
     return in.findMerges(mergeTrigger, segmentInfos, mergeContext);
-  }
-
+  } // in=ShuffleForcedMergePolicy，里面的in=RecoverySourcePruneMergePolicy，实际进入的是OneMergeWrappingMergePolicy, 第二次是 TieredMergePolicy
+  // in=ShuffleForcedMergePolicy时，此时this=ElasticsearchMergePolicy。第二次in=RecoverySourcePruneMergePolicy，此时this=ShuffleForcedMergePolicy时
   @Override
   public MergeSpecification findForcedMerges(SegmentInfos segmentInfos, int maxSegmentCount,
                                              Map<SegmentCommitInfo,Boolean> segmentsToMerge, MergeContext mergeContext) throws IOException {

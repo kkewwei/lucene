@@ -102,7 +102,7 @@ final class SegmentMerger {
     if (mergeState.infoStream.isEnabled("SM")) {
       t0 = System.nanoTime();
     }
-    int numMerged = mergeFields();
+    int numMerged = mergeFields();// StoredFields合并，可能会发生merge中断
     if (mergeState.infoStream.isEnabled("SM")) {
       long t1 = System.nanoTime();
       mergeState.infoStream.message("SM", ((t1-t0)/1000000) + " msec to merge stored fields [" + numMerged + " docs]");
@@ -223,9 +223,9 @@ final class SegmentMerger {
    * @throws CorruptIndexException if the index is corrupt
    * @throws IOException if there is a low-level IO error
    */
-  private int mergeFields() throws IOException {
-    try (StoredFieldsWriter fieldsWriter = codec.storedFieldsFormat().fieldsWriter(directory, mergeState.segmentInfo, context)) {
-      return fieldsWriter.merge(mergeState);
+  private int mergeFields() throws IOException {// merge合并，可能会发生merge中断
+    try (StoredFieldsWriter fieldsWriter = codec.storedFieldsFormat().fieldsWriter(directory, mergeState.segmentInfo, context)) { // storedFieldsFormat()直接进入的是Lucene50StoredFieldsFormat.fieldsWriter(), 返回的是创建的CompressingStoredFieldsWriter
+      return fieldsWriter.merge(mergeState); // 进的是CompressingStoredFieldsWriter.merge()
     }
   }
 

@@ -27,7 +27,7 @@ import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.util.packed.PackedInts;
 
 /**
- * A builder of {@link DocIdSet}s.  At first it uses a sparse structure to gather
+ * A builder of {@link DocIdSet}s.  At first it uses a sparse structure to gather // 首先使用稀疏的结构来存储文档，当匹配足够的数据时，将升级为非稀疏结构
  * documents, and then upgrades to a non-sparse bit set once enough hits match.
  *
  * To add documents, you first need to call {@link #grow} in order to reserve
@@ -53,7 +53,7 @@ public final class DocIdSetBuilder {
 
     @Override
     public void add(int doc) {
-      bitSet.set(doc);
+      bitSet.set(doc); // 匹配一个文档
     }
   }
 
@@ -85,18 +85,18 @@ public final class DocIdSetBuilder {
     }
   }
 
-  private final int maxDoc;
+  private final int maxDoc; // 该segment最大的文档Id。用回来初始化bitSet
   private final int threshold;
   // pkg-private for testing
   final boolean multivalued;
-  final double numValuesPerDoc;
+  final double numValuesPerDoc; // 每个文档该域几个值
 
-  private List<Buffer> buffers = new ArrayList<>();
+  private List<Buffer> buffers = new ArrayList<>(); // 数量少于threshold时，使用数组保存，
   private int totalAllocated; // accumulated size of the allocated buffers
 
-  private FixedBitSet bitSet;
+  private FixedBitSet bitSet; // 当数据量大于threshold时，使用bitSet保存。定义空间为该segment最大的DocId
 
-  private long counter = -1;
+  private long counter = -1; //统计了当前存放了多少文档Id
   private BulkAdder adder;
 
   /**
@@ -136,7 +136,7 @@ public final class DocIdSetBuilder {
     // maxDoc >>> 7 is a good value if you want to save memory, lower values
     // such as maxDoc >>> 11 should provide faster building but at the expense
     // of using a full bitset even for quite sparse data
-    this.threshold = maxDoc >>> 7;
+    this.threshold = maxDoc >>> 7; // 若读取的文档数小于maxDoc >>> 7，就使用数组，若大于，则使用BitSize
 
     this.bitSet = null;
   }
@@ -170,11 +170,11 @@ public final class DocIdSetBuilder {
    * add up to {@code numDocs} documents.
    */
   public BulkAdder grow(int numDocs) {
-    if (bitSet == null) {
+    if (bitSet == null) { //
       if ((long) totalAllocated + numDocs <= threshold) {
         ensureBufferCapacity(numDocs);
       } else {
-        upgradeToBitSet();
+        upgradeToBitSet(); // 升级为非BitSet
         counter += numDocs;
       }
     } else {
@@ -233,7 +233,7 @@ public final class DocIdSetBuilder {
     assert bitSet == null;
     FixedBitSet bitSet = new FixedBitSet(maxDoc);
     long counter = 0;
-    for (Buffer buffer : buffers) {
+    for (Buffer buffer : buffers) { // 针对这个buffer
       int[] array = buffer.array;
       int length = buffer.length;
       counter += length;

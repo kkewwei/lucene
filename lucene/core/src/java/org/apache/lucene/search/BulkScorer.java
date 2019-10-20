@@ -36,7 +36,7 @@ public abstract class BulkScorer {
    *                   {@code null} if they are all allowed to match.
    */
   public void score(LeafCollector collector, Bits acceptDocs) throws IOException {
-    final int next = score(collector, acceptDocs, 0, DocIdSetIterator.NO_MORE_DOCS);
+    final int next = score(collector, acceptDocs, 0, DocIdSetIterator.NO_MORE_DOCS); // 跑到CancellableBulkScorer.score中了
     assert next == DocIdSetIterator.NO_MORE_DOCS;
   }
 

@@ -34,7 +34,7 @@ import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.IOContext;
 import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.IOUtils;
-
+// 近实时性搜索靠的该函数
 /** Default implementation of {@link DirectoryReader}. */
 public final class StandardDirectoryReader extends DirectoryReader {
 
@@ -58,12 +58,12 @@ public final class StandardDirectoryReader extends DirectoryReader {
     return new SegmentInfos.FindSegmentsFile<DirectoryReader>(directory) {
       @Override
       protected DirectoryReader doBody(String segmentFileName) throws IOException {
-        SegmentInfos sis = SegmentInfos.readCommit(directory, segmentFileName);
+        SegmentInfos sis = SegmentInfos.readCommit(directory, segmentFileName); // 解析Segments_N，获取所有Segments的元数据，并读取每个Segment从_n.si中获取每个segment的元数据
         final SegmentReader[] readers = new SegmentReader[sis.size()];
         boolean success = false;
         try {
           for (int i = sis.size()-1; i >= 0; i--) {
-            readers[i] = new SegmentReader(sis.info(i), sis.getIndexCreatedVersionMajor(), IOContext.READ);
+            readers[i] = new SegmentReader(sis.info(i), sis.getIndexCreatedVersionMajor(), IOContext.READ);// 把所有segment的数据全部解析了一遍
           }
 
           // This may throw CorruptIndexException if there are too many docs, so
@@ -80,7 +80,7 @@ public final class StandardDirectoryReader extends DirectoryReader {
       }
     }.run(commit);
   }
-
+  // 用来实现近实时性搜索NRT,有一个新的segment创建，就会重新打开
   /** Used by near real-time search */
   static DirectoryReader open(IndexWriter writer, SegmentInfos infos, boolean applyAllDeletes, boolean writeAllDeletes) throws IOException {
     // IndexWriter synchronizes externally before calling
@@ -88,25 +88,25 @@ public final class StandardDirectoryReader extends DirectoryReader {
     // no need to process segments in reverse order
     final int numSegments = infos.size();
 
-    final List<SegmentReader> readers = new ArrayList<>(numSegments);
+    final List<SegmentReader> readers = new ArrayList<>(numSegments); // 一个文档使用的
     final Directory dir = writer.getDirectory();
 
     final SegmentInfos segmentInfos = infos.clone();
     int infosUpto = 0;
     try {
-      for (int i = 0; i < numSegments; i++) {
+      for (int i = 0; i < numSegments; i++) { // 轮训所有segment
         // NOTE: important that we use infos not
         // segmentInfos here, so that we are passing the
         // actual instance of SegmentInfoPerCommit in
         // IndexWriter's segmentInfos:
-        final SegmentCommitInfo info = infos.info(i);
+        final SegmentCommitInfo info = infos.info(i); //
         assert info.info.dir == dir;
-        final ReadersAndUpdates rld = writer.getPooledInstance(info, true);
-        try {
+        final ReadersAndUpdates rld = writer.getPooledInstance(info, true);// 这里会创建ReadersAndUpdates。
+        try { // 会去进行fst结构文件mmap
           final SegmentReader reader = rld.getReadOnlyClone(IOContext.READ);
           if (reader.numDocs() > 0 || writer.getConfig().mergePolicy.keepFullyDeletedSegment(() -> reader)) {
             // Steal the ref:
-            readers.add(reader);
+            readers.add(reader); //只要有数据，就放入
             infosUpto++;
           } else {
             reader.decRef();
@@ -254,9 +254,9 @@ public final class StandardDirectoryReader extends DirectoryReader {
     return buffer.toString();
   }
 
-  @Override
+  @Override // es refresh时会进来
   protected DirectoryReader doOpenIfChanged() throws IOException {
-    return doOpenIfChanged((IndexCommit) null);
+    return doOpenIfChanged((IndexCommit) null);// 会触发主动merge操作，flush产生新的segment时候也会过来。跑到下面
   }
 
   @Override
@@ -265,8 +265,8 @@ public final class StandardDirectoryReader extends DirectoryReader {
 
     // If we were obtained by writer.getReader(), re-ask the
     // writer to get a new reader.
-    if (writer != null) {
-      return doOpenFromWriter(commit);
+    if (writer != null) { // 跑到这里了
+      return doOpenFromWriter(commit); // 会触发主动merge操作
     } else {
       return doOpenNoWriter(commit);
     }
@@ -281,17 +281,17 @@ public final class StandardDirectoryReader extends DirectoryReader {
       return writer.getReader(applyAllDeletes, writeAllDeletes);
     }
   }
-
+  // refresh时候会进来(一个shard，周期时间内只有一个refresh)
   private DirectoryReader doOpenFromWriter(IndexCommit commit) throws IOException {
     if (commit != null) {
       return doOpenFromCommit(commit);
     }
-
+    // //检查IndexWriter,这个IndexWriter所有的元素，若发生了变化，就需要重新产生新的(没发生变化，就返回空)
     if (writer.nrtIsCurrent(segmentInfos)) {
       return null;
     }
-
-    DirectoryReader reader = writer.getReader(applyAllDeletes, writeAllDeletes);
+    // 会触发主动merge操作&会将缓存的doc生产一个segment，并再次mmap打开。es周期性refresh时，applyAllDeletes=true,writeAllDeletes=false
+    DirectoryReader reader = writer.getReader(applyAllDeletes, writeAllDeletes); // StandardDirectoryReader
 
     // If in fact no changes took place, return null:
     if (reader.getVersion() == segmentInfos.getVersion()) {
@@ -346,7 +346,7 @@ public final class StandardDirectoryReader extends DirectoryReader {
   public SegmentInfos getSegmentInfos() {
     return segmentInfos;
   }
-
+  // 这个函数决定是否需要refresh
   @Override
   public boolean isCurrent() throws IOException {
     ensureOpen();
@@ -360,8 +360,8 @@ public final class StandardDirectoryReader extends DirectoryReader {
 
       // we loaded SegmentInfos from the directory
       return sis.getVersion() == segmentInfos.getVersion();
-    } else {
-      return writer.nrtIsCurrent(segmentInfos);
+    } else {// 这个函数决定是否需要refresh
+      return writer.nrtIsCurrent(segmentInfos); // 没有暂存的写入&没有更新
     }
   }
 

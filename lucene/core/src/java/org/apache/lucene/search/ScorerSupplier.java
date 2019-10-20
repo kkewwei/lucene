@@ -34,13 +34,13 @@ public abstract class ScorerSupplier {
    * {@link Long#MAX_VALUE}, which will produce a {@link Scorer} that has good
    * iteration capabilities.
    */
-  public abstract Scorer get(long leadCost) throws IOException;
+  public abstract Scorer get(long leadCost) throws IOException; // leadCost可以翻译为调用nextDoc()次数的上限
 
   /**
    * Get an estimate of the {@link Scorer} that would be returned by {@link #get}.
    * This may be a costly operation, so it should only be called if necessary.
    * @see DocIdSetIterator#cost
    */
-  public abstract long cost();
+  public abstract long cost(); //
 
 }

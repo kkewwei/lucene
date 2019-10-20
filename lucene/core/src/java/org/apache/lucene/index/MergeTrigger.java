@@ -26,23 +26,23 @@ public enum MergeTrigger {
   /**
    * Merge was triggered by a segment flush.
    */
-  SEGMENT_FLUSH,
+  SEGMENT_FLUSH, // segment flush
 
   /**
    * Merge was triggered by a full flush. Full flushes
    * can be caused by a commit, NRT reader reopen or a close call on the index writer.
    */
-  FULL_FLUSH,
+  FULL_FLUSH, // 可以被一个commit触发
 
   /**
    * Merge has been triggered explicitly by the user.
    */
-  EXPLICIT,
+  EXPLICIT, // 由用户触发
 
   /**
    * Merge was triggered by a successfully finished merge.
    */
-  MERGE_FINISHED,
+  MERGE_FINISHED, // 一个merge结束会触发新的merge
 
   /**
    * Merge was triggered by a closing IndexWriter.
@@ -52,5 +52,5 @@ public enum MergeTrigger {
   /**
    * Merge was triggered on commit.
    */
-  COMMIT,
+  COMMIT, // 当出现Lucene commit时会触发merge
 }

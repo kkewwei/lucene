@@ -41,7 +41,7 @@ import static org.apache.lucene.util.ByteBlockPool.BYTE_BLOCK_SIZE;
  * </p>
  * 
  * @lucene.internal
- */
+ */ // 一个类HashMap的存储结果，但是存储传统的数组+链表形式，而是只有数组，当有冲突时使用线性探测方法解决。
 public final class BytesRefHash implements Accountable {
   private static final long BASE_RAM_BYTES = RamUsageEstimator.shallowSizeOfInstance(BytesRefHash.class) +
       // size of scratch1
@@ -53,17 +53,17 @@ public final class BytesRefHash implements Accountable {
 
   // the following fields are needed by comparator,
   // so package private to prevent access$-methods:
-  final ByteBlockPool pool;
-  int[] bytesStart;
-
+  final ByteBlockPool pool;   //要存储的值(BytesRef)的最终位置， TermVectorsConsumerPerField.pool和FreqProxTermsWriterPerField.pool是同一个对象
+  int[] bytesStart;  // 实际上的作用为了来找到每个词组在pool中的起始位置，下标是是termId, 存放term长度+term内容。= ParallelPostingsArray.textStarts, 每个域都有一个.
+  // TermVectorsConsumerPerField.BytesRefHash的bytesStart时刻会和FreqProxTermsWriterPerField.BytesRefHash的bytesStart保持一致
   private final BytesRef scratch1 = new BytesRef();
-  private int hashSize;
+  private int hashSize;// 就是ids数组的长度
   private int hashHalfSize;
   private int hashMask;
-  private int count;
-  private int lastCount = -1;
-  private int[] ids;
-  private final BytesStartArray bytesStartArray;
+  private int count;//count是存储的这个文档distinct(单词)的个数
+  private int lastCount = -1;  // TermVectorsConsumerPerField.BytesRefHash的ids在每写完一个doc时，会清空。详见set()函数。lastCount是上个文档的distinct个数
+  private int[] ids; // key根据term的hashcode获得的， 不为0，则说明里面存储的是termId，当hash冲突后，通过探针法解决。所有field之间的term还不共享。一个域内是共享的, 这里在每个文档被写完后，都会调用，清理掉ids
+  private final BytesStartArray bytesStartArray; // PostingsBytesStartArray，对FreqProxTermsWriterPerField和TermVectorsConsumerPerField分别产生一个
   private Counter bytesUsed;
 
   /**
@@ -91,10 +91,10 @@ public final class BytesRefHash implements Accountable {
     this.pool = pool;
     ids = new int[hashSize];
     Arrays.fill(ids, -1);
-    this.bytesStartArray = bytesStartArray;
-    bytesStart = bytesStartArray.init();
+    this.bytesStartArray = bytesStartArray; // 俩都是PostingsBytesStartArray, 最普通的
+    bytesStart = bytesStartArray.init(); // 两个的bytesStart都是从2个PostingsBytesStartArray.init中取的=postingsArray.textStarts。在这里单独生成的
     bytesUsed = bytesStartArray.bytesUsed() == null? Counter.newCounter() : bytesStartArray.bytesUsed();
-    bytesUsed.addAndGet(hashSize * Integer.BYTES);
+    bytesUsed.addAndGet(hashSize * Integer.BYTES); // 注意这里统计ids使用
   }
 
   /**
@@ -142,7 +142,7 @@ public final class BytesRefHash implements Accountable {
     assert bytesStart != null : "bytesStart is null - not initialized";
     int upto = 0;
     for (int i = 0; i < hashSize; i++) {
-      if (ids[i] != -1) {
+      if (ids[i] != -1) { // 把ids不为空的向前摞一摞，紧凑点
         if (upto < i) {
           ids[upto] = ids[i];
           ids[i] = -1;
@@ -161,24 +161,24 @@ public final class BytesRefHash implements Accountable {
    * <p>
    * Note: This is a destructive operation. {@link #clear()} must be called in
    * order to reuse this {@link BytesRefHash} instance.
-   * </p>
-   */
-  public int[] sort() {
+   * </p> // 根据termdId对应的值排序，返回的是termdId
+   */ //  仅仅根据在pool中存储的每个termId的byte从小到大进行排序
+  public int[] sort() { // 返回的是每个termId
     final int[] compact = compact();
     new StringMSBRadixSorter() {
 
       BytesRef scratch = new BytesRef();
 
       @Override
-      protected void swap(int i, int j) {
-        int tmp = compact[i];
+      protected void swap(int i, int j) { // 交换第i和j个termId
+        int tmp = compact[i]; // 仅仅根据在pool中存储的每个termId的byte从小到大进行排序
         compact[i] = compact[j];
         compact[j] = tmp;
       }
 
       @Override
       protected BytesRef get(int i) {
-        pool.setBytesRef(scratch, bytesStart[compact[i]]);
+        pool.setBytesRef(scratch, bytesStart[compact[i]]); // 这里是取出第i个termId的byteValue
         return scratch;
       }
 
@@ -190,7 +190,7 @@ public final class BytesRefHash implements Accountable {
     pool.setBytesRef(scratch1, bytesStart[id]);
     return scratch1.bytesEquals(b);
   }
-
+ // 是否可以将ids收缩
   private boolean shrink(int targetSize) {
     // Cannot use ArrayUtil.shrink because we require power
     // of 2:
@@ -213,11 +213,11 @@ public final class BytesRefHash implements Accountable {
 
   /**
    * Clears the {@link BytesRef} which maps to the given {@link BytesRef}
-   */
+   */  //这里在每个文档被写完后，都会调用，清理掉ids
   public void clear(boolean resetPool) {
     lastCount = count;
     count = 0;
-    if (resetPool) {
+    if (resetPool) { // 跳过
       pool.reset(false, false); // we don't need to 0-fill the buffers
     }
     bytesStart = bytesStartArray.clear();
@@ -225,7 +225,7 @@ public final class BytesRefHash implements Accountable {
       // shrink clears the hash entries
       return;
     }
-    Arrays.fill(ids, -1);
+    Arrays.fill(ids, -1); // 对ids清空
   }
 
   public void clear() {
@@ -254,39 +254,39 @@ public final class BytesRefHash implements Accountable {
    * @throws MaxBytesLengthExceededException
    *           if the given bytes are {@code > 2 +}
    *           {@link ByteBlockPool#BYTE_BLOCK_SIZE}
-   */
-  public int add(BytesRef bytes) {
+   */ //作用是向pool中存放这个bytes
+  public int add(BytesRef bytes) { // 返回给这个term分配id
     assert bytesStart != null : "Bytesstart is null - not initialized";
     final int length = bytes.length;
     // final position
-    final int hashPos = findHash(bytes);
-    int e = ids[hashPos];
-    
+    final int hashPos = findHash(bytes);// 找到当前要存储的bytes所在的有效槽位，若不存在，遍历到后续无值的位置
+    int e = ids[hashPos]; // 所有field之间的term还不共享  1173
+    //如果为-1，则是新的term
     if (e == -1) {
-      // new entry
-      final int len2 = 2 + bytes.length;
+      // new entry    存储的时候，在ByteBlockPool中的结构是：长度+具体的term。至少预留2byte存放长度
+      final int len2 = 2 + bytes.length;// lucene支持的term长度不超过2个字节，长度采用变长整数表示，因此需要申请的存储空间为2 + bytes.length。
       if (len2 + pool.byteUpto > BYTE_BLOCK_SIZE) {
         if (len2 > BYTE_BLOCK_SIZE) {
-          throw new MaxBytesLengthExceededException("bytes can be at most "
+          throw new MaxBytesLengthExceededException("bytes can be at most " // 这里报的我们经常见到的异样
               + (BYTE_BLOCK_SIZE - 2) + " in length; got " + bytes.length);
         }
         pool.nextBuffer();
       }
       final byte[] buffer = pool.buffer;
-      final int bufferUpto = pool.byteUpto;
-      if (count >= bytesStart.length) {
-        bytesStart = bytesStartArray.grow();
+      final int bufferUpto = pool.byteUpto;// 获取内存池的起始可用位置
+      if (count >= bytesStart.length) {// byteStart用来记录termId在内存池中存储的起始位置，
+        bytesStart = bytesStartArray.grow(); // 是通过
         assert count < bytesStart.length + 1 : "count: " + count + " len: "
             + bytesStart.length;
       }
       e = count++;
-
+   // 记录对应termId在ByteStartPool中的起始位置。
       bytesStart[e] = bufferUpto + pool.byteOffset;
 
       // We first encode the length, followed by the
       // bytes. Length is encoded as vInt, but will consume
       // 1 or 2 bytes at most (we reject too-long terms,
-      // above).
+      // above).  // 长度小于128，则长度用一个字节的vInt即可存储。
       if (length < 128) {
         // 1 byte to store length
         buffer[bufferUpto] = (byte) length;
@@ -303,14 +303,14 @@ public final class BytesRefHash implements Accountable {
             length);
       }
       assert ids[hashPos] == -1;
-      ids[hashPos] = e;
+      ids[hashPos] = e; // 记录hashPos对应的属于第几个count。重复的term进不来
 
       if (count == hashHalfSize) {
-        rehash(2 * hashSize, true);
+        rehash(2 * hashSize, true);// rehash，不展开叙述。
       }
       return e;
     }
-    return -(e + 1);
+    return -(e + 1);// 如果不是新的term，则直接返回。返回的是负数
   }
   
   /**
@@ -325,7 +325,7 @@ public final class BytesRefHash implements Accountable {
   public int find(BytesRef bytes) {
     return ids[findHash(bytes)];
   }
-
+  // 探针法
   private int findHash(BytesRef bytes) {
     assert bytesStart != null : "bytesStart is null - not initialized";
 
@@ -333,15 +333,15 @@ public final class BytesRefHash implements Accountable {
 
     // final position
     int hashPos = code & hashMask;
-    int e = ids[hashPos];
-    if (e != -1 && !equals(e, bytes)) {
+    int e = ids[hashPos]; //
+    if (e != -1 && !equals(e, bytes)) { // 没找到
       // Conflict; use linear probe to find an open slot
       // (see LUCENE-5604):
       do {
         code++;
         hashPos = code & hashMask;
         e = ids[hashPos];
-      } while (e != -1 && !equals(e, bytes));
+      } while (e != -1 && !equals(e, bytes)); // 线性探测所有的没空的槽位
     }
     
     return hashPos;
@@ -358,7 +358,7 @@ public final class BytesRefHash implements Accountable {
     // final position
     int code = offset;
     int hashPos = offset & hashMask;
-    int e = ids[hashPos];
+    int e = ids[hashPos]; //这里在每个文档被写完后，都会调用，清理掉ids
     if (e != -1 && bytesStart[e] != offset) {
       // Conflict; use linear probe to find an open slot
       // (see LUCENE-5604):
@@ -368,16 +368,16 @@ public final class BytesRefHash implements Accountable {
         e = ids[hashPos];
       } while (e != -1 && bytesStart[e] != offset);
     }
-    if (e == -1) {
+    if (e == -1) { // 是新的，
       // new entry
       if (count >= bytesStart.length) {
         bytesStart = bytesStartArray.grow();
         assert count < bytesStart.length + 1 : "count: " + count + " len: "
             + bytesStart.length;
       }
-      e = count++;
-      bytesStart[e] = offset;
-      assert ids[hashPos] == -1;
+      e = count++; // 但是这里统计这，一样的
+      bytesStart[e] = offset; // offset是pool所用第e个TermId到的位置。FreqProxTermsWriterPerField是全局的编号，TermVectorsConsumerPerField是局部的编号。
+      assert ids[hashPos] == -1; // 统计的是该域对每个term的重新编号
       ids[hashPos] = e;
 
       if (count == hashHalfSize) {

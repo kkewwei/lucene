@@ -48,7 +48,7 @@ public class MergeState {
   final DocMap[] leafDocMaps;
 
   /** {@link SegmentInfo} of the newly merged segment. */
-  public final SegmentInfo segmentInfo;
+  public final SegmentInfo segmentInfo; // merge合并产生的新Segment相关信息
 
   /** {@link FieldInfos} of the newly merged segment. */
   public FieldInfos mergeFieldInfos;
@@ -78,14 +78,14 @@ public class MergeState {
   public final PointsReader[] pointsReaders;
 
   /** Max docs per reader */
-  public final int[] maxDocs;
+  public final int[] maxDocs; //已经存放每个segment里面的文档数
 
   /** InfoStream for debugging messages. */
   public final InfoStream infoStream;
 
   /** Indicates if the index needs to be sorted **/
   public boolean needsIndexSort;
-
+  // originalReaders包含的SegmentReader
   /** Sole constructor. */
   MergeState(List<CodecReader> originalReaders, SegmentInfo segmentInfo, InfoStream infoStream) throws IOException {
 
@@ -108,7 +108,7 @@ public class MergeState {
 
     int numDocs = 0;
     for(int i=0;i<numReaders;i++) {
-      final CodecReader reader = readers.get(i);
+      final CodecReader reader = readers.get(i); // SegmentReader
 
       maxDocs[i] = reader.maxDoc();
       liveDocs[i] = reader.getLiveDocs();
@@ -119,23 +119,23 @@ public class MergeState {
         normsProducers[i] = normsProducers[i].getMergeInstance();
       }
       
-      docValuesProducers[i] = reader.getDocValuesReader();
+      docValuesProducers[i] = reader.getDocValuesReader(); // PerFieldDocValuesFormat$FieldsReader
       if (docValuesProducers[i] != null) {
-        docValuesProducers[i] = docValuesProducers[i].getMergeInstance();
+        docValuesProducers[i] = docValuesProducers[i].getMergeInstance(); // 重新构造了一个PerFieldDocValuesFormat$FieldsReader
       }
       
-      storedFieldsReaders[i] = reader.getFieldsReader();
+      storedFieldsReaders[i] = reader.getFieldsReader();// CompressingStoredFieldsReader
       if (storedFieldsReaders[i] != null) {
         storedFieldsReaders[i] = storedFieldsReaders[i].getMergeInstance();
       }
       
-      termVectorsReaders[i] = reader.getTermVectorsReader();
+      termVectorsReaders[i] = reader.getTermVectorsReader(); // TermVectorsReader
       if (termVectorsReaders[i] != null) {
         termVectorsReaders[i] = termVectorsReaders[i].getMergeInstance();
       }
       
-      fieldsProducers[i] = reader.getPostingsReader().getMergeInstance();
-      pointsReaders[i] = reader.getPointsReader();
+      fieldsProducers[i] = reader.getPostingsReader().getMergeInstance(); // PerFieldPostingsFormat$FieldsReader
+      pointsReaders[i] = reader.getPointsReader(); // Lucene60PointsReader
       if (pointsReaders[i] != null) {
         pointsReaders[i] = pointsReaders[i].getMergeInstance();
       }

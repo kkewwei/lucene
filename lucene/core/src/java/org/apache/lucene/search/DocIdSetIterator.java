@@ -81,7 +81,7 @@ public abstract class DocIdSetIterator {
         if (doc >= maxDoc) {
           doc = NO_MORE_DOCS;
         }
-        return doc;
+        return doc; // doc自动向前+1
       }
 
       @Override
@@ -194,7 +194,7 @@ public abstract class DocIdSetIterator {
    * <p>
    *
    * @since 2.9
-   */
+   */ //查找第一个，使其doc个数大于target
   public abstract int advance(int target) throws IOException;
 
   /** Slow (linear) implementation of {@link #advance} relying on
