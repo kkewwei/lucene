@@ -84,8 +84,8 @@ public final class Lucene50CompoundFormat extends CompoundFormat {
       // write number of files
       entries.writeVInt(si.files().size()); // 向cfe中写入文件个数
       for (String file : si.files()) { // 会遍历15个文件：fdx/fdt/dvd/dvm/pos/doc/tim/tip/dim/dii/nvm/nvd/fnm
-        
-        // write bytes for file
+
+        // write bytes for file  部分是mma打开，部分是传统方式打开，mmap打开是否还有必要，打开后，try结束后，调用了unmap0关闭打开的文件
         long startOffset = data.getFilePointer();
         try (ChecksumIndexInput in = dir.openChecksumInput(file, IOContext.READONCE)) { // 这里文件打开，使用的mmap打开产生的15个文件
 
@@ -104,7 +104,7 @@ public final class Lucene50CompoundFormat extends CompoundFormat {
           data.writeInt(CodecUtil.FOOTER_MAGIC);
           data.writeInt(0);
           data.writeLong(checksum);
-        }
+        } // try关闭时会调用unmap0()进行关闭，会跑到ByteBufferIndexInput.close()中
         long endOffset = data.getFilePointer();
         
         long length = endOffset - startOffset; // 整个文件的长度

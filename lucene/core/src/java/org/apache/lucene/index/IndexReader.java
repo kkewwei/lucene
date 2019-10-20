@@ -349,7 +349,7 @@ public abstract class IndexReader implements Closeable {
   // IndexableField
   public final Document document(int docID) throws IOException {
     final DocumentStoredFieldVisitor visitor = new DocumentStoredFieldVisitor();
-    document(docID, visitor);
+    document(docID, visitor); // 根据文档内容，获取storedFields
     return visitor.getDocument();
   }
 

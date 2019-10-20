@@ -81,14 +81,14 @@ public abstract class MergePolicy {
    * encapsulates the logic to pause and resume the merge thread
    * or to abort the merge entirely.
    * 
-   * @lucene.experimental */
+   * @lucene.experimental */  // 每次找到一个新的merge，在OneMerge构建时初始化，就会产生一个新的OneMergeProgress。
   public static class OneMergeProgress {
     /** Reason for pausing the merge thread. */
     public enum PauseReason {
       /** Stopped (because of throughput rate set to 0, typically). */
       STOPPED,  // 直接限制为0mb
       /** Temporarily paused because of exceeded throughput rate. */
-      PAUSED, // 比如限制5mb，目前是10mb，那么暂停
+      PAUSED, // 临时性的暂停，由于流量超速
       /** Other reason. */
       OTHER
     };
@@ -99,7 +99,7 @@ public abstract class MergePolicy {
     /**
      * Pause times (in nanoseconds) for each {@link PauseReason}.
      */
-    private final EnumMap<PauseReason, AtomicLong> pauseTimesNS;
+    private final EnumMap<PauseReason, AtomicLong> pauseTimesNS; // STOPPED 还是PAUSED
     
     private volatile boolean aborted;
 
@@ -157,11 +157,11 @@ public abstract class MergePolicy {
       }
 
       long start = System.nanoTime();
-      AtomicLong timeUpdate = pauseTimesNS.get(reason);
+      AtomicLong timeUpdate = pauseTimesNS.get(reason); // 哪种方式开始计数
       pauseLock.lock();
       try {
-        while (pauseNanos > 0 && !aborted && condition.getAsBoolean()) {
-          pauseNanos = pausing.awaitNanos(pauseNanos); // 那么就在这里睡眠多长时间
+        while (pauseNanos > 0 && !aborted && condition.getAsBoolean()) { // 除非限速值发生了改变，否则别人唤醒后再继续睡眠（每次setMBPerSec都会唤醒一次）
+          pauseNanos = pausing.awaitNanos(pauseNanos); // 那么就在这里睡眠多长时间，允许别人唤醒
         }
       } finally {
         pauseLock.unlock();
@@ -171,11 +171,11 @@ public abstract class MergePolicy {
 
     /**
      * Request a wakeup for any threads stalled in {@link #pauseNanos}.
-     */
+     */  //
     public void wakeup() {
       pauseLock.lock();
       try {
-        pausing.signalAll();
+        pausing.signalAll(); //允许别人唤醒
       } finally {
         pauseLock.unlock();
       }

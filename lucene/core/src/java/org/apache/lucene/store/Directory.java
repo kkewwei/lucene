@@ -180,7 +180,7 @@ public abstract class Directory implements Closeable {
   public void copyFrom(Directory from, String src, String dest, IOContext context) throws IOException {
     boolean success = false;
     try (IndexInput is = from.openInput(src, context);
-         IndexOutput os = createOutput(dest, context)) {
+         IndexOutput os = createOutput(dest, context)) { // os产生的是RateLimitedIndexOutput
       os.copyBytes(is, is.length());
       success = true;
     } finally {

@@ -376,7 +376,7 @@ public abstract class ByteBufferIndexInput extends IndexInput implements RandomA
       if (isClone) return;
       
       // tell the guard to invalidate and later unmap the bytebuffers (if supported):
-      guard.invalidateAndUnmap(bufs);
+      guard.invalidateAndUnmap(bufs); // 会调用unmap0()函数
     } finally {
       unsetBuffers();
     }

@@ -437,7 +437,7 @@ final class Lucene80NormsProducer extends NormsProducer implements Cloneable {
 
   @Override
   public void checkIntegrity() throws IOException {
-    CodecUtil.checksumEntireFile(data);
+    CodecUtil.checksumEntireFile(data); // 这里校验的是nvd文件
   }
 
   @Override

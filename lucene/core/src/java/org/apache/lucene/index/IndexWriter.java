@@ -2144,10 +2144,10 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
   public final void maybeMerge() throws IOException {
     maybeMerge(config.getMergePolicy(), MergeTrigger.EXPLICIT, UNBOUNDED_MAX_MERGE_SEGMENTS);
   }
-  // fluhs会触发，mergePolicy=ElasticsearchMergePolicy， MergeTrigger=FULL_FLUSH
+  // IndexWriter.fluhs()会触发，mergePolicy=ElasticsearchMergePolicy， MergeTrigger=FULL_FLUSH
   private final void maybeMerge(MergePolicy mergePolicy, MergeTrigger trigger, int maxNumSegments) throws IOException {
     ensureOpen(false);
-    if (updatePendingMerges(mergePolicy, trigger, maxNumSegments) != null) { // 更新
+    if (updatePendingMerges(mergePolicy, trigger, maxNumSegments) != null) { // 检查是否有需要合并的merge
       mergeScheduler.merge(mergeSource, trigger); //mergeScheduler=InternalEngine$EngineMergeScheduler
     }
   }
@@ -3594,7 +3594,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
         if (infoStream.isEnabled("IW")) {
           infoStream.message("IW", "commit: now prepare");
         }
-        seqNo = prepareCommitInternal(); // 直接电泳需要进来看下
+        seqNo = prepareCommitInternal(); // 需要进来看下
       } else {
         if (infoStream.isEnabled("IW")) {
           infoStream.message("IW", "commit: already prepared");
@@ -3698,7 +3698,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
    * @param triggerMerge if true, we may merge segments (if
    *  deletes or docs were flushed) if necessary
    * @param applyAllDeletes whether pending deletes should also
-   */ // flush
+   */ // 比如shard粒度刷新时间到了，那么会批量fullFlush
   final void flush(boolean triggerMerge, boolean applyAllDeletes) throws IOException {
 
     // NOTE: this method cannot be sync'd because
@@ -4390,7 +4390,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
     // Bind a new segment name here so even with
     // ConcurrentMergePolicy we keep deterministic segment
     // names.
-    final String mergeSegmentName = newSegmentName();
+    final String mergeSegmentName = newSegmentName(); //得到新的segment name
     // We set the min version to null for now, it will be set later by SegmentMerger
     SegmentInfo si = new SegmentInfo(directoryOrig, Version.LATEST, null, mergeSegmentName, -1, false, config.getCodec(),
         Collections.emptyMap(), StringHelper.randomId(), Collections.emptyMap(), config.getIndexSort());
@@ -4514,7 +4514,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
     testPoint("mergeMiddleStart");
     merge.checkAborted();
 
-    Directory mergeDirectory = mergeScheduler.wrapForMerge(merge, directory);
+    Directory mergeDirectory = mergeScheduler.wrapForMerge(merge, directory); // 这里面的mergeDirectory.createOutput()会产生RateLimitedIndexOutput，可以限速
     IOContext context = new IOContext(merge.getStoreMergeInfo());
 
     final TrackingDirectoryWrapper dirWrapper = new TrackingDirectoryWrapper(mergeDirectory);
@@ -5706,7 +5706,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
       this.numDocs = numDocs;
     }
   }
-
+   // 每个shard只有一个
   private static class IndexWriterMergeSource implements MergeScheduler.MergeSource {
     private final IndexWriter writer;
 

@@ -66,7 +66,7 @@ public class MergeState {
   public final DocValuesProducer[] docValuesProducers;
 
   /** FieldInfos being merged */
-  public final FieldInfos[] fieldInfos;
+  public final FieldInfos[] fieldInfos; 
 
   /** Live docs for each reader */
   public final Bits[] liveDocs;

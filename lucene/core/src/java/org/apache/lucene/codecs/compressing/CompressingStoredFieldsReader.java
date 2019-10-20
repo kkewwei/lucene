@@ -79,7 +79,7 @@ public final class CompressingStoredFieldsReader extends StoredFieldsReader {
   private final FieldInfos fieldInfos;
   private final FieldsIndex indexReader; // 引用较大内存资源,是FieldsIndexReader，fdx
   private final long maxPointer; // 所有chunk写完时的fdt中的位置（再后面就是footer部分了）
-  private final IndexInput fieldsStream;// 也是用mmap的打开fdt文件
+  private final IndexInput fieldsStream;// 也是用mmap的打开fdt文件, ByteBufferIndexInput$SingleBufferImpl
   private final int chunkSize;
   private final int packedIntsVersion;
   private final CompressionMode compressionMode;
@@ -376,8 +376,8 @@ public final class CompressingStoredFieldsReader extends StoredFieldsReader {
     // the start pointer at which you can read the compressed documents
     private long startPointer; //保存的是这个chunk存储压缩documents的地方
 
-    private final BytesRef spare = new BytesRef();
-    private final BytesRef bytes = new BytesRef();
+    private final BytesRef spare = new BytesRef(); //读取出来解压前存放的地方
+    private final BytesRef bytes = new BytesRef(); // 读取出来解压后存放的地方
 
     boolean contains(int docID) {
       return docID >= docBase && docID < docBase + chunkDocs;
@@ -458,7 +458,7 @@ public final class CompressingStoredFieldsReader extends StoredFieldsReader {
         }
 
         // Additional validation: only the empty document has a serialized length of 0
-        for (int i = 0; i < chunkDocs; ++i) {
+        for (int i = 0; i < chunkDocs; ++i) { // 账户要是为了检测
           final int len = offsets[i + 1] - offsets[i];
           final int storedFields = numStoredFields[i];
           if ((len == 0) != (storedFields == 0)) {
@@ -470,7 +470,7 @@ public final class CompressingStoredFieldsReader extends StoredFieldsReader {
      // 读取当前读到的地方
       startPointer = fieldsStream.getFilePointer();
 
-      if (merging) {// 读取真正的doc 原始压缩数据
+      if (merging) {// 读取真正的doc原始压缩数据
         final int totalLength = offsets[chunkDocs];
         // decompress eagerly
         if (sliced) {
@@ -511,11 +511,11 @@ public final class CompressingStoredFieldsReader extends StoredFieldsReader {
       if (length == 0) {
         // empty
         documentInput = new ByteArrayDataInput();
-      } else if (merging) {
+      } else if (merging) { // 在之前已经读取了
         // already decompressed
         documentInput = new ByteArrayDataInput(bytes.bytes, bytes.offset + offset, length);
-      } else if (sliced) {
-        fieldsStream.seek(startPointer); //将fdt指针指向当前chunk存储原始数据的地方
+      } else if (sliced) { // 不是merge的话，那么将fdt指针指向当前chunk存储原始数据的地方
+        fieldsStream.seek(startPointer);
         decompressor.decompress(fieldsStream, chunkSize, offset, Math.min(length, chunkSize - offset), bytes);
         documentInput = new DataInput() {
 
@@ -581,7 +581,7 @@ public final class CompressingStoredFieldsReader extends StoredFieldsReader {
 
     final SerializedDocument doc = document(docID); // 获取具体文件内容
 
-    for (int fieldIDX = 0; fieldIDX < doc.numStoredFields; fieldIDX++) {
+    for (int fieldIDX = 0; fieldIDX < doc.numStoredFields; fieldIDX++) { // 读取每一个字段值
       final long infoAndBits = doc.in.readVLong();
       final int fieldNumber = (int) (infoAndBits >>> TYPE_BITS);
       final FieldInfo fieldInfo = fieldInfos.fieldInfo(fieldNumber);
@@ -589,7 +589,7 @@ public final class CompressingStoredFieldsReader extends StoredFieldsReader {
       final int bits = (int) (infoAndBits & TYPE_MASK);
       assert bits <= NUMERIC_DOUBLE: "bits=" + Integer.toHexString(bits);
 
-      switch(visitor.needsField(fieldInfo)) {
+      switch(visitor.needsField(fieldInfo)) { //读取一个
         case YES:
           readField(doc.in, visitor, fieldInfo, bits);// get source部分
           break;
@@ -665,8 +665,8 @@ public final class CompressingStoredFieldsReader extends StoredFieldsReader {
 
   @Override
   public void checkIntegrity() throws IOException {
-    indexReader.checkIntegrity(); //FieldsIndexReader,会去校验fdx
-    CodecUtil.checksumEntireFile(fieldsStream); // 会去校验fdt
+    indexReader.checkIntegrity(); //FieldsIndexReader,会去校验fdx，挑的是fdx文件，文件大小占比不到0.1%，占比非常小
+    CodecUtil.checksumEntireFile(fieldsStream); // 会去校验fdt,也是逐个读取出来（fdt有多大，就读取多少），效率明显很低。
   }
 
   @Override

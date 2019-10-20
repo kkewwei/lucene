@@ -91,11 +91,11 @@ public class ConcurrentMergeScheduler extends MergeScheduler {
   // forcefully pause the larger ones, letting the smaller
   // ones run, up until maxMergeCount merges at which point
   // we forcefully pause incoming threads (that presumably
-  // are the ones causing so much merging).  // shard粒度统计个数
-  private int maxThreadCount = AUTO_DETECT_MERGES_AND_THREADS; //当前正在合并的线程最大值，作用：1.在新合并开始前，会检查合并的线程个数，若新的没堵，旧的合并线程大于maxThreadCount，那么就说明旧的堵了，速度不降。
+  // are the ones causing so much merging).  // Lucene层面，线上默认1
+  private int maxThreadCount = AUTO_DETECT_MERGES_AND_THREADS; //当前正在合并的线程最大值，作用：1.在新合并开始前，会检查合并的线程个数，若新的没堵，旧的合并线程大于maxThreadCount，那么就说明旧的堵了，全局合并速度不变。
   // 2.  新的合并跑起来了，合并线程从大到小排序，接着检查当前大于50M的合并线程个数，大于maxThreadCount个数的次小线程会直接暂停合并。
   // Max number of merges we accept before forcefully
-  // throttling the incoming threads // shard粒度统计个数
+  // throttling the incoming threads // shard粒度统计个数，小于50MB的也包含在内，线上默认6
   private int maxMergeCount = AUTO_DETECT_MERGES_AND_THREADS; // es层面，侧重于目前shard bulk写入能力上的限制.若一限制，写入都会暂停。仅仅限制写入，不会做任何别的处理
 
   /** How many {@link MergeThread}s have kicked off (this is use
@@ -106,7 +106,7 @@ public class ConcurrentMergeScheduler extends MergeScheduler {
   private static final double MIN_MERGE_MB_PER_SEC = 5.0;
 
   /** Ceiling for IO write rate limit (we will never go any higher than this) */
-  private static final double MAX_MERGE_MB_PER_SEC = 10240.0;
+  private static final double MAX_MERGE_MB_PER_SEC = 10240.0; // 10gb/s
 
   /** Initial value for IO write rate limit when doAutoIOThrottle is true */
   private static final double START_MB_PER_SEC = 20.0;
@@ -115,7 +115,7 @@ public class ConcurrentMergeScheduler extends MergeScheduler {
   private static final double MIN_BIG_MERGE_MB = 50.0;
 
   /** Current IO writes throttle rate */
-  protected double targetMBPerSec = START_MB_PER_SEC; // 当doAutoIOThrottle=true时，会维持一个全局的合并速度，只会影响新创建的索引
+  protected double targetMBPerSec = START_MB_PER_SEC; // 会在新增合并段时更新，在updateMergeThreads时会强制运用到所有正在跑的段里面
 
   /** true if we should rate-limit writes for each merge */
   private boolean doAutoIOThrottle = true;
@@ -348,7 +348,7 @@ public class ConcurrentMergeScheduler extends MergeScheduler {
 
       // pause the thread if maxThreadCount is smaller than the number of merge threads.
       final boolean doPause = threadIdx < bigMergeCount - maxThreadCount; // 若最大的超过限制个数的最大的那个几个，直接暂停速度。小于50M的不限速，别的调整规定速度。
-
+      //线上只允许有一个超过50m的merge在进行，其余的全部暂停
       double newMBPerSec;
       if (doPause) { // 大于50MB的合并线程超了，那么直接将超的几个大的线程合并速度降为0
         newMBPerSec = 0.0;
@@ -663,7 +663,7 @@ public class ConcurrentMergeScheduler extends MergeScheduler {
     public MergeThread(MergeSource mergeSource, OneMerge merge) {
       this.mergeSource = mergeSource;
       this.merge = merge;
-      this.rateLimiter = new MergeRateLimiter(merge.getMergeProgress());
+      this.rateLimiter = new MergeRateLimiter(merge.getMergeProgress()); // 每个semgent都会自带一个rateLimiter，并不是全局的
     }
 
     @Override
@@ -748,7 +748,7 @@ public class ConcurrentMergeScheduler extends MergeScheduler {
 
     return false;
   }
-  // 大于50M的合并的段个数来限速。新和旧一样大小，说旧的合并慢了，则提速。旧被阻塞，则速度不变。新旧都没问题，则降速合并
+  // 大于50M的合并的段个数来限速。根据当前正在进行的合并速度，修改全局保存的速度（只对新merge有效）。
   /** Tunes IO throttle when a new merge starts. */ // 只有在新产生一个Merge线程对象时，会去检查下
   private synchronized void updateIOThrottle(OneMerge newMerge, MergeRateLimiter rateLimiter) throws IOException {
     if (doAutoIOThrottle == false) { // 默认自动限速
@@ -772,7 +772,7 @@ public class ConcurrentMergeScheduler extends MergeScheduler {
     boolean curBacklog = false; // 检查已经的合并是否被阻塞了
 
     if (newBacklog == false) { // 新的没有阻塞
-      if (mergeThreads.size() > maxThreadCount) { // 若大于50M的索引合并个数超过限制
+      if (mergeThreads.size() > maxThreadCount) { // 若大于50M的索引合并个数超过maxThreadCount限制（1个）
         // If there are already more than the maximum merge threads allowed, count that as backlog:
         curBacklog = true; // 旧的阻塞了
       } else {
@@ -809,7 +809,7 @@ public class ConcurrentMergeScheduler extends MergeScheduler {
       }
     } else { // 若新旧合并都没有问题
       // We are not falling behind: decrease IO throttle by 10%
-      targetMBPerSec /= 1.10; // 那么降速10%
+      targetMBPerSec /= 1.10; // 那么降速10%，合并没阻塞的话，那么就以最低速度合并5MB/s
       if (targetMBPerSec < MIN_MERGE_MB_PER_SEC) {
         targetMBPerSec = MIN_MERGE_MB_PER_SEC;
       }

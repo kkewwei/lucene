@@ -83,7 +83,7 @@ public final class DirectWriter {
   private void flush() throws IOException {
     encoder.encode(nextValues, 0, nextBlocks, 0, iterations);
     final int blockCount = (int) PackedInts.Format.PACKED.byteCount(PackedInts.VERSION_CURRENT, off, bitsPerValue);
-    output.writeBytes(nextBlocks, blockCount); // 每个文档的termId压缩存储起来了  dvd
+    output.writeBytes(nextBlocks, blockCount); // 每个文档的termId压缩存储起来了  dvd。在merge阶段就是限速写入的
     Arrays.fill(nextValues, 0L); // 清空
     off = 0;
   }

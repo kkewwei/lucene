@@ -57,7 +57,7 @@ import org.apache.lucene.util.IOUtils;
 public final class Lucene84PostingsWriter extends PushPostingsWriterBase {
 
   IndexOutput docOut;// 保留包含每个Term的文档列表
-  IndexOutput posOut;// Term在文章中出现的位置信息
+  IndexOutput posOut;// Term在文章中出现的位置信息，merge阶段，也是RateLimitedIndexOutput
   IndexOutput payOut;// offset偏移和payload附加信息
 
   final static IntBlockTermState emptyState = new IntBlockTermState();

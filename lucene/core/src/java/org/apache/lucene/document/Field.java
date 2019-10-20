@@ -484,7 +484,7 @@ public class Field implements IndexableField {
     }
 
     if (!fieldType().tokenized()) {
-      if (stringValue() != null) {
+      if (stringValue() != null) { // 是否是StringValue
         if (!(reuse instanceof StringTokenStream)) {
           // lazy init the TokenStream as it is heavy to instantiate
           // (attributes,...) if not needed
@@ -492,7 +492,7 @@ public class Field implements IndexableField {
         }
         ((StringTokenStream) reuse).setValue(stringValue());
         return reuse;
-      } else if (binaryValue() != null) {
+      } else if (binaryValue() != null) { // 是binaryValue
         if (!(reuse instanceof BinaryTokenStream)) {
           // lazy init the TokenStream as it is heavy to instantiate
           // (attributes,...) if not needed

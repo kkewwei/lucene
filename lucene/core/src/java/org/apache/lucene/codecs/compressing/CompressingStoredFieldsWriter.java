@@ -77,7 +77,7 @@ public final class CompressingStoredFieldsWriter extends StoredFieldsWriter {
 
   private final String segment;// _0
   private FieldsIndexWriter indexWriter; //向_fdx写数据wtriter=CompressingStoredFieldsIndexWriter
-  private IndexOutput fieldsStream;// 向fdt中写入数据,RateLimitedIndexOutput
+  private IndexOutput fieldsStream;// 只有在merge阶段，向fdt中写入数据时，,才是RateLimitedIndexOutput
 
   private Compressor compressor;
   private final CompressionMode compressionMode;
@@ -110,7 +110,7 @@ public final class CompressingStoredFieldsWriter extends StoredFieldsWriter {
 
     boolean success = false; // 创建_0.fdx和_0.fdt文件
     try {
-      fieldsStream = directory.createOutput(IndexFileNames.segmentFileName(segment, segmentSuffix, FIELDS_EXTENSION), context); // fdt文件
+      fieldsStream = directory.createOutput(IndexFileNames.segmentFileName(segment, segmentSuffix, FIELDS_EXTENSION), context); // fdt文件，合并时将产生RateLimitedIndexOutput
       CodecUtil.writeIndexHeader(fieldsStream, formatName, VERSION_CURRENT, si.getId(), segmentSuffix);
       assert CodecUtil.indexHeaderLength(formatName, segmentSuffix) == fieldsStream.getFilePointer();
       // 里面会建立俩新文件名_eg7_Lucene85FieldsIndex-doc_ids_0.tmp及_eg7_Lucene85FieldsIndexfile_pointers_1.tmp
@@ -535,7 +535,7 @@ public final class CompressingStoredFieldsWriter extends StoredFieldsWriter {
 
       final int maxDoc = mergeState.maxDocs[readerIndex]; // 这个segment的文档ID
       final Bits liveDocs = mergeState.liveDocs[readerIndex];
-       // 一般跳过if
+       // 一般跳过if，因为版本不一致，只能读取每一个字段值
       // if its some other format, or an older version of this format, or safety switch:
       if (matchingFieldsReader == null || matchingFieldsReader.getVersion() != VERSION_CURRENT || BULK_MERGE_ENABLED == false) {
         // naive merge...
@@ -555,7 +555,7 @@ public final class CompressingStoredFieldsWriter extends StoredFieldsWriter {
       } else if (matchingFieldsReader.getCompressionMode() == compressionMode &&
                  matchingFieldsReader.getChunkSize() == chunkSize && 
                  matchingFieldsReader.getPackedIntsVersion() == PackedInts.VERSION_CURRENT &&
-                 liveDocs == null && // 没有删除的文档
+                 liveDocs == null && // 没有删除的文档,是不是只要有一条delete数据，那么就进行删除
                  !tooDirty(matchingFieldsReader)) { // 没有脏chunk,脏chunk占比1%
         // optimized merge, raw byte copy
         // its not worth fine-graining this if there are deletions.

@@ -392,7 +392,7 @@ public class MMapDirectory extends FSDirectory {
   
   private static BufferCleaner newBufferCleaner(final Class<?> unmappableBufferClass, final MethodHandle unmapper) {
     assert Objects.equals(methodType(void.class, ByteBuffer.class), unmapper.type());
-    return (String resourceDescription, ByteBuffer buffer) -> {
+    return (String resourceDescription, ByteBuffer buffer) -> { // mmap函数关闭时，会跑到这里调动unmap0()进行释放
       if (!buffer.isDirect()) {
         throw new IllegalArgumentException("unmapping only works with direct buffers");
       }
@@ -401,7 +401,7 @@ public class MMapDirectory extends FSDirectory {
       }
       final Throwable error = AccessController.doPrivileged((PrivilegedAction<Throwable>) () -> {
         try {
-          unmapper.invokeExact(buffer);
+          unmapper.invokeExact(buffer); // 会跑到FileChannelImpl$Unmaper.run()里面调用unmap0()函数释放映射
           return null;
         } catch (Throwable t) {
           return t;

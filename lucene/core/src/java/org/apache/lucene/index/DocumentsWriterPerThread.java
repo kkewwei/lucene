@@ -238,7 +238,7 @@ final class DocumentsWriterPerThread {// 由ThreadState拥有
         if (!allDocsIndexed && !aborted) {
           // the iterator threw an exception that is not aborting
           // go and mark all docs from this block as deleted
-          deleteLastDocs(numDocsInRAM - docsInRamBefore);
+          deleteLastDocs(numDocsInRAM - docsInRamBefore); //循环抛出了异常，但是数据并没有丢弃，，于是标记这个文档为delete
         }
       }
     } finally {

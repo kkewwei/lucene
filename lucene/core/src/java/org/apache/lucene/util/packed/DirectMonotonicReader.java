@@ -83,8 +83,8 @@ public final class DirectMonotonicReader extends LongValues implements Accountab
    *  @see DirectMonotonicReader#getInstance(Meta, RandomAccessInput) */
   public static Meta loadMeta(IndexInput metaIn, long numValues, int blockShift) throws IOException {
     Meta meta = new Meta(numValues, blockShift); // 3个chunk，只有一个
-    for (int i = 0; i < meta.numBlocks; ++i) { //该block多少个chunk
-      meta.mins[i] = metaIn.readLong(); // 每个chun的
+    for (int i = 0; i < meta.numBlocks; ++i) { //循环每个block,该block多少个chunk
+      meta.mins[i] = metaIn.readLong(); // 每个chunK的
       meta.avgs[i] = Float.intBitsToFloat(metaIn.readInt());
       meta.offsets[i] = metaIn.readLong(); // 这个block在data中的起始位置
       meta.bpvs[i] = metaIn.readByte(); // byteRequire
@@ -109,9 +109,9 @@ public final class DirectMonotonicReader extends LongValues implements Accountab
   }
 
   private final int blockShift; // 一个block最多放多少个chunk,一般都是1024个
-  private final LongValues[] readers;
-  private final long[] mins; // ，每个block的
-  private final float[] avgs;
+  private final LongValues[] readers; // 一个元素就是一个block，每个元素（例如DirectPackedReader4）里面每个元素代表一个chunk的buffer
+  private final long[] mins; // ，每个block里面所有元素相对最小值
+  private final float[] avgs; // 每个block里面所有元素的相对平均值
   private final byte[] bpvs; // requireBit
   private final int nonZeroBpvs;
 
@@ -134,12 +134,12 @@ public final class DirectMonotonicReader extends LongValues implements Accountab
   }
 
   @Override
-  public long get(long index) { //index是文档id,返回的是这个chunk的文档数
+  public long get(long index) { //index是文档id,返回的是这个chunk的文档个数
     final int block = (int) (index >>> blockShift); // 在第几个block上
     final long blockIndex = index & ((1 << blockShift) - 1); // 这个block内第几个chunk
     final long delta = readers[block].get(blockIndex); // 从fdx中读偏移量
     return mins[block] + (long) (avgs[block] * blockIndex) + delta; // 返回这chunk对应的数字
-  } //
+  }
 
   /** Get lower/upper bounds for the value at a given index without hitting the direct reader. */
   private long[] getBounds(long index) { // index=第i个chunk

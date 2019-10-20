@@ -500,7 +500,7 @@ final class DefaultIndexingChain extends DocConsumer {
       boolean first = fp.fieldGen != fieldGen; // 这个文档中这个域不是重复写入？
       fp.invert(docID, field, first); //创建倒排索引
 
-      if (first) { // 域是第一次写入，就得放进来
+      if (first) { // 该域是该segment第一次写入，就得放进来
         fields[fieldCount++] = fp;  // 这里才是真正存放，和fieldHash存放的是一个对象，
         fp.fieldGen = fieldGen;
       }
@@ -723,7 +723,7 @@ final class DefaultIndexingChain extends DocConsumer {
     // Make sure we have a PerField allocated
     final int hashPos = name.hashCode() & hashMask; // //计算哈希值
     PerField fp = fieldHash[hashPos]; // //找到哈希表中对应的位置
-    while (fp != null && !fp.fieldInfo.name.equals(name)) { //链式哈希表
+    while (fp != null && !fp.fieldInfo.name.equals(name)) { //链式哈希表(碰撞发）
       fp = fp.next;
     }
 
@@ -801,7 +801,7 @@ final class DefaultIndexingChain extends DocConsumer {
     // Lazy init'd:
     NormValuesWriter norms;  // NormValuesWriter
     
-    // reused
+    // reused  segment级别同一个Field共享的
     TokenStream tokenStream;
     private final InfoStream infoStream;
     private final Analyzer analyzer;
@@ -856,7 +856,7 @@ final class DefaultIndexingChain extends DocConsumer {
      *  if this is the first time we are seeing this field
      *  name in this document. */
     public void invert(int docID, IndexableField field, boolean first) throws IOException {// PerFieldl里面开始
-      if (first) {// 第一次该字段被写入
+      if (first) {// 在这个文档中第一次看到这个域
         // First time we're seeing this field (indexed) in
         // this document:
         invertState.reset(); // 每次写入一个新的文档，这里都会被清空
@@ -879,7 +879,7 @@ final class DefaultIndexingChain extends DocConsumer {
        * but rather a finally that takes note of the problem.
        */
       boolean succeededInProcessingField = false;
-      try (TokenStream stream = tokenStream = field.tokenStream(analyzer, tokenStream)) { // 进行了分词
+      try (TokenStream stream = tokenStream = field.tokenStream(analyzer, tokenStream)) { // 进行了分词，跑入了Field.tokenStream()
         // reset the TokenStream to the first token
         stream.reset();
         invertState.setAttributeSource(stream); // 设置放到invertState中，可以获取很多分词后的参数信息，是lucene自带特性

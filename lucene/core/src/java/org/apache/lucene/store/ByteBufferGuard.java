@@ -42,8 +42,8 @@ final class ByteBufferGuard {
   }
   
   private final String resourceDescription; //就是普通描述介绍
-  private final BufferCleaner cleaner;
-  
+  private final BufferCleaner cleaner; // 清理者
+
   /** Not volatile; see comments on visibility below! */
   private boolean invalidated = false;
   
@@ -74,9 +74,9 @@ final class ByteBufferGuard {
       // and we count on this behavior.
       barrier.lazySet(0);
       // we give other threads a bit of time to finish reads on their ByteBuffer...:
-      Thread.yield();
+      Thread.yield(); // 告诉其他线程，要关闭了。
       // finally unmap the ByteBuffers:
-      for (ByteBuffer b : bufs) {
+      for (ByteBuffer b : bufs) {// 针对DirectByteBuffer，会跑到MMapDirectory.newBufferCleaner()定义的freeBuffer
         cleaner.freeBuffer(resourceDescription, b);
       }
     }

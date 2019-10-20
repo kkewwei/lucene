@@ -40,7 +40,7 @@ public final class TrackingDirectoryWrapper extends FilterDirectory {
 
   @Override
   public IndexOutput createOutput(String name, IOContext context) throws IOException {
-    IndexOutput output = in.createOutput(name, context); // 产生_c.si文件
+    IndexOutput output = in.createOutput(name, context); // 产生_c.si文件,合并时也是RateLimitedIndexOutput
     createdFileNames.add(name); // 记录已经创建的文件，包括fdt和si
     return output;
   }

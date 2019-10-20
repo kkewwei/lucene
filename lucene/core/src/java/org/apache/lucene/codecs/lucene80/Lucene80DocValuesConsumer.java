@@ -74,7 +74,7 @@ final class Lucene80DocValuesConsumer extends DocValuesConsumer implements Close
     try {
       this.state = state;
       String dataName = IndexFileNames.segmentFileName(state.segmentInfo.name, state.segmentSuffix, dataExtension);
-      data = state.directory.createOutput(dataName, state.context);
+      data = state.directory.createOutput(dataName, state.context); // 产生的是ByteSizeCachingDirectory,在merge阶段就变成了RateLimitedIndexOutput
       CodecUtil.writeIndexHeader(data, dataCodec, Lucene80DocValuesFormat.VERSION_CURRENT, state.segmentInfo.getId(), state.segmentSuffix);
       String metaName = IndexFileNames.segmentFileName(state.segmentInfo.name, state.segmentSuffix, metaExtension);
       meta = state.directory.createOutput(metaName, state.context);

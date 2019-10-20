@@ -534,7 +534,7 @@ public final class CodecUtil {
    * <p>
    * Note that this method may be slow, as it must process the entire file.
    * If you just need to extract the checksum value, call {@link #retrieveChecksum}.
-   */ // check末尾长度
+   */ // check末尾长度，
   public static long checksumEntireFile(IndexInput input) throws IOException {
     IndexInput clone = input.clone(); // copy一份ByteBufferIndexInput$SingleBufferImpl
     clone.seek(0); // 设置其中的position

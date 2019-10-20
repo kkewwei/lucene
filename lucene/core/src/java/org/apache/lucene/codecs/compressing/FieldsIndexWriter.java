@@ -109,7 +109,7 @@ public final class FieldsIndexWriter implements Closeable {
     CodecUtil.writeFooter(docsOut); // docsOut= _n_Lucene85FieldsIndexfile-doc_ids_0.tmp
     CodecUtil.writeFooter(filePointersOut); // filePointersOut= _n_Lucene85FieldsIndexfile_pointers_1.tmp
     IOUtils.close(docsOut, filePointersOut);
-
+    //metaOut和dataOut都是RateLimitedIndexOutput()
     try (IndexOutput metaOut = dir.createOutput(IndexFileNames.segmentFileName(name, suffix, extension + FIELDS_META_EXTENSION_SUFFIX), ioContext); // 构建.fdm文件， 存放byte[]的元数据
         IndexOutput dataOut = dir.createOutput(IndexFileNames.segmentFileName(name, suffix, extension + FIELDS_INDEX_EXTENSION_SUFFIX), ioContext)) { // 构建.fdx文件， 存放byte[]的具体数据 
 
@@ -159,7 +159,7 @@ public final class FieldsIndexWriter implements Closeable {
           if (maxPointer < fp) {
             throw new CorruptIndexException("File pointers don't add up", filePointersIn);
           }
-          filePointers.add(maxPointer);
+          filePointers.add(maxPointer); // 尾部加了maxPointer
           filePointers.finish();
         } catch (Throwable e) {
           priorE = e;

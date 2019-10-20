@@ -102,7 +102,7 @@ final class SegmentMerger {
     if (mergeState.infoStream.isEnabled("SM")) {
       t0 = System.nanoTime();
     }
-    int numMerged = mergeFields();// StoredFields合并，可能会发生merge中断
+    int numMerged = mergeFields();// StoredFields合并，可能会发生merge中断,使用的是RateLimitedIndexOutput
     if (mergeState.infoStream.isEnabled("SM")) {
       long t1 = System.nanoTime();
       mergeState.infoStream.message("SM", ((t1-t0)/1000000) + " msec to merge stored fields [" + numMerged + " docs]");
