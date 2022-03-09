@@ -49,7 +49,7 @@ import org.apache.lucene.util.RamUsageEstimator;
 import org.apache.lucene.util.compress.LZ4;
 import org.apache.lucene.util.packed.DirectMonotonicReader;
 import org.apache.lucene.util.packed.DirectReader;
-
+ // 查询
 /** reader for {@link Lucene80DocValuesFormat} */
 final class Lucene80DocValuesProducer extends DocValuesProducer implements Closeable {
   private final Map<String,NumericEntry> numerics = new HashMap<>();
@@ -61,10 +61,10 @@ final class Lucene80DocValuesProducer extends DocValuesProducer implements Close
   private final IndexInput data;
   private final int maxDoc;
   private int version = -1;
-
+  // segment加载的时候就会进来
   /** expert: instantiates a new reader */
   Lucene80DocValuesProducer(SegmentReadState state, String dataCodec, String dataExtension, String metaCodec, String metaExtension) throws IOException {
-    String metaName = IndexFileNames.segmentFileName(state.segmentInfo.name, state.segmentSuffix, metaExtension);
+    String metaName = IndexFileNames.segmentFileName(state.segmentInfo.name, state.segmentSuffix, metaExtension);// dvm
     this.maxDoc = state.segmentInfo.maxDoc();
     ramBytesUsed = RamUsageEstimator.shallowSizeOfInstance(getClass());
 
@@ -119,7 +119,7 @@ final class Lucene80DocValuesProducer extends DocValuesProducer implements Close
       if (info == null) {
         throw new CorruptIndexException("Invalid field number: " + fieldNumber, meta);
       }
-      byte type = meta.readByte();
+      byte type = meta.readByte();// 可看Lucene80DocValuesConsumer.addSortedSetField
       if (type == Lucene80DocValuesFormat.NUMERIC) {
         numerics.put(info.name, readNumeric(meta));
       } else if (type == Lucene80DocValuesFormat.BINARY) {
@@ -135,19 +135,19 @@ final class Lucene80DocValuesProducer extends DocValuesProducer implements Close
       }
     }
   }
-
+  // 这个是读取NUMERIC类型，启动时读取dvm文件
   private NumericEntry readNumeric(ChecksumIndexInput meta) throws IOException {
     NumericEntry entry = new NumericEntry();
     readNumeric(meta, entry);
     return entry;
   }
-
+  // 可以看下Lucene80DocValuesConsumer.doAddSortedField()，从dvm中读取
   private void readNumeric(ChecksumIndexInput meta, NumericEntry entry) throws IOException {
-    entry.docsWithFieldOffset = meta.readLong();
-    entry.docsWithFieldLength = meta.readLong();
-    entry.jumpTableEntryCount = meta.readShort();
-    entry.denseRankPower = meta.readByte();
-    entry.numValues = meta.readLong();
+    entry.docsWithFieldOffset = meta.readLong(); // 若每个文档id都有该字段，那么不用存储docId编号，该值为-1。
+    entry.docsWithFieldLength = meta.readLong(); // // 若每个文档id都有该字段，那么不用存储docId编号，该值为0。
+    entry.jumpTableEntryCount = meta.readShort(); // -1
+    entry.denseRankPower = meta.readByte(); // -1 写死了的
+    entry.numValues = meta.readLong(); // 文档个数
     int tableSize = meta.readInt();
     if (tableSize > 256) {
       throw new CorruptIndexException("invalid table size: " + tableSize, meta);
@@ -171,7 +171,7 @@ final class Lucene80DocValuesProducer extends DocValuesProducer implements Close
     entry.valuesLength = meta.readLong();
     entry.valueJumpTableOffset = meta.readLong();
   }
-
+  // 这个是读取BINARY类型，启动时读取dvm文件
   private BinaryEntry readBinary(ChecksumIndexInput meta) throws IOException {
     BinaryEntry entry = new BinaryEntry();
     entry.dataOffset = meta.readLong();
@@ -203,27 +203,27 @@ final class Lucene80DocValuesProducer extends DocValuesProducer implements Close
     }
     return entry;
   }
-
+  // 可看 Lucene80DocValuesConsumer.doAddsortedField()，从dvm中读取，在节点启动的时候就读取，读取SORTED_SET类型
   private SortedEntry readSorted(ChecksumIndexInput meta) throws IOException {
     SortedEntry entry = new SortedEntry();
-    entry.docsWithFieldOffset = meta.readLong();
-    entry.docsWithFieldLength = meta.readLong();
-    entry.jumpTableEntryCount = meta.readShort();
-    entry.denseRankPower = meta.readByte();
-    entry.numDocsWithField = meta.readInt();
-    entry.bitsPerValue = meta.readByte();
-    entry.ordsOffset = meta.readLong();
-    entry.ordsLength = meta.readLong();
+    entry.docsWithFieldOffset = meta.readLong(); // docId存放起始位置
+    entry.docsWithFieldLength = meta.readLong(); // docId存放长度
+    entry.jumpTableEntryCount = meta.readShort(); // 记录多少个block
+    entry.denseRankPower = meta.readByte();  //密度，默认9（1<<9=512个文档一个rank)
+    entry.numDocsWithField = meta.readInt(); // 文档个数
+    entry.bitsPerValue = meta.readByte(); // 每个value的存储占用的 长度
+    entry.ordsOffset = meta.readLong();//  排序好的termId在dvd中存放的起始位置
+    entry.ordsLength = meta.readLong();//termId在dvd中写结束位置
     readTermDict(meta, entry);
     return entry;
   }
-
+   // 参考Lucene80DocValuesProducer.doAddSortedField，节点启动时，读取dvm的整个文件
   private SortedSetEntry readSortedSet(ChecksumIndexInput meta) throws IOException {
     SortedSetEntry entry = new SortedSetEntry();
-    byte multiValued = meta.readByte();
+    byte multiValued = meta.readByte();// dvm
     switch (multiValued) {
-      case 0: // singlevalued
-        entry.singleValueEntry = readSorted(meta);
+      case 0: // singlevalued  一般跑这里
+        entry.singleValueEntry = readSorted(meta);// 一般要进来，每个文档的该域只有只有一个value
         return entry;
       case 1: // multivalued
         break;
@@ -246,27 +246,27 @@ final class Lucene80DocValuesProducer extends DocValuesProducer implements Close
     readTermDict(meta, entry);
     return entry;
   }
-
+  // 可查看 Lucene80DocValuesConsumer.addTermsDict
   private static void readTermDict(ChecksumIndexInput meta, TermsDictEntry entry) throws IOException {
-    entry.termsDictSize = meta.readVLong();
-    entry.termsDictBlockShift = meta.readInt();
-    final int blockShift = meta.readInt();
-    final long addressesSize = (entry.termsDictSize + (1L << entry.termsDictBlockShift) - 1) >>> entry.termsDictBlockShift;
-    entry.termsAddressesMeta = DirectMonotonicReader.loadMeta(meta, addressesSize, blockShift);
-    entry.maxTermLength = meta.readInt();
-    entry.termsDataOffset = meta.readLong();
-    entry.termsDataLength = meta.readLong();
-    entry.termsAddressesOffset = meta.readLong();
-    entry.termsAddressesLength = meta.readLong();
-    entry.termsDictIndexShift = meta.readInt();
-    final long indexSize = (entry.termsDictSize + (1L << entry.termsDictIndexShift) - 1) >>> entry.termsDictIndexShift;
-    entry.termsIndexAddressesMeta = DirectMonotonicReader.loadMeta(meta, 1 + indexSize, blockShift);
-    entry.termsIndexOffset = meta.readLong();
-    entry.termsIndexLength = meta.readLong();
-    entry.termsIndexAddressesOffset = meta.readLong();
-    entry.termsIndexAddressesLength = meta.readLong();
-  }
-
+    entry.termsDictSize = meta.readVLong(); // 多少个独立的词（相同词算一个）
+    entry.termsDictBlockShift = meta.readInt();//4 一级索引，每1<<4个次会产生一个索引
+    final int blockShift = meta.readInt();//16 ，存储的时候是个二维byte[]，一维存储大小为32kb=1<<16
+    final long addressesSize = (entry.termsDictSize + (1L << entry.termsDictBlockShift) - 1) >>> entry.termsDictBlockShift;// 一级索引多少个节点
+    entry.termsAddressesMeta = DirectMonotonicReader.loadMeta(meta, addressesSize, blockShift);// 从dvm加载一级索引（每16个词在dvd中存放起始位置）的元数据
+    entry.maxTermLength = meta.readInt();// 最长的那个词长度
+    entry.termsDataOffset = meta.readLong();// 向dvd中开始写原始值（每个词的相同前缀长度及后缀）的起始位置
+    entry.termsDataLength = meta.readLong();// // dvd中所有value的长度
+    entry.termsAddressesOffset = meta.readLong();// 开始向dvd写一级索引（每16个词的在dvd中存放）的起始位置
+    entry.termsAddressesLength = meta.readLong();// dvd中一级索引的长度
+    entry.termsDictIndexShift = meta.readInt();// 10， 二级索引区间1<<10=1024    （开始二级索引信息）// 二级索引由两部分构成，一部分是第1024*x个词的相同前缀内容，第二部分是第1024*x个词和第1024*x-1个词的相同前缀累加值（数组会放在dvm和dvd中）
+    final long indexSize = (entry.termsDictSize + (1L << entry.termsDictIndexShift) - 1) >>> entry.termsDictIndexShift;//二级索引多少个节点
+    entry.termsIndexAddressesMeta = DirectMonotonicReader.loadMeta(meta, 1 + indexSize, blockShift);// 从dvm中加载二级索引第二部分（第1024*x个词和第1024*x-1个词的相同前缀累加值）的元数据部分
+    entry.termsIndexOffset = meta.readLong();// 在dvd中存放的第二级索引第一部分（第1024*x个词的相同前缀内容）存放的起始位置
+    entry.termsIndexLength = meta.readLong();// 在dvd中存放的第二级索引第一部分（第1024*x个词的相同前缀内容）存放的长度
+    entry.termsIndexAddressesOffset = meta.readLong();// 从dvd中加载二级索引第二部分（第1024*x个词和第1024*x-1个词的相同前缀累加值）的数据部分
+    entry.termsIndexAddressesLength = meta.readLong();// 从dvd中加载二级索引第二部分（第1024*x个词和第1024*x-1个词的相同前缀累加值）的数据部分长度
+  } // profix1 value, profix2 value,, profix2 value,
+  // 这个是读取SORTED_NUMBER类型
   private SortedNumericEntry readSortedNumeric(ChecksumIndexInput meta) throws IOException {
     SortedNumericEntry entry = new SortedNumericEntry();
     readNumeric(meta, entry);
@@ -290,7 +290,7 @@ final class Lucene80DocValuesProducer extends DocValuesProducer implements Close
     long[] table;
     int blockShift;
     byte bitsPerValue;
-    long docsWithFieldOffset;
+    long docsWithFieldOffset;// 若每个文档id都有该字段，那么不用存储docId编号，该值为-1。
     long docsWithFieldLength;
     short jumpTableEntryCount;
     byte denseRankPower;
@@ -319,45 +319,45 @@ final class Lucene80DocValuesProducer extends DocValuesProducer implements Close
     int docsPerChunkShift;
     int maxUncompressedChunkSize;
   }
-
+  // 在节点启动时会去dvm加载文件所有数据
   private static class TermsDictEntry {
-    long termsDictSize;
+    long termsDictSize;// 多少个独立的词（相同词算一个）
     int termsDictBlockShift;
-    DirectMonotonicReader.Meta termsAddressesMeta;
+    DirectMonotonicReader.Meta termsAddressesMeta;// 从dvm加载一级索引（每16个词在dvd中存放起始位置）的元数据
     int maxTermLength;
-    long termsDataOffset;
+    long termsDataOffset;// 向dvd中开始写原始值（每个词的相同前缀长度及后缀）的起始位置
     long termsDataLength;
-    long termsAddressesOffset;
-    long termsAddressesLength;
+    long termsAddressesOffset;// 开始向dvd写一级索引（每16个词的在dvd中存放）的起始位置
+    long termsAddressesLength;// dvd写一级索引的长度
     int termsDictIndexShift;
-    DirectMonotonicReader.Meta termsIndexAddressesMeta;
-    long termsIndexOffset;
+    DirectMonotonicReader.Meta termsIndexAddressesMeta; // 从dvm中加载二级索引第二部分（第1024*x个词和第1024*x-1个词的相同前缀累加值）的元数据部分
+    long termsIndexOffset;// 在dvd中存放的第二级索引第一部分（第1024*x个词的相同前缀内容）存放的起始位置
     long termsIndexLength;
-    long termsIndexAddressesOffset;
-    long termsIndexAddressesLength;
-  }
+    long termsIndexAddressesOffset; // 从dvd中加载二级索引第二部分（第1024*x个词和第1024*x-1个词的相同前缀累加值）的数据部分
+    long termsIndexAddressesLength; // 二级索引的长度
+  } // dvd中映射二级索引第一部分是在 Lucene80DocValuesProducer$TermsDict构造函数中操作的
 
   private static class SortedEntry extends TermsDictEntry {
-    long docsWithFieldOffset;
-    long docsWithFieldLength;
-    short jumpTableEntryCount;
-    byte denseRankPower;
-    int numDocsWithField;
-    byte bitsPerValue;
-    long ordsOffset;
-    long ordsLength;
+    long docsWithFieldOffset; //
+    long docsWithFieldLength; // dvd中存储docId部分使用的总长度
+    short jumpTableEntryCount; // 返回多少个block
+    byte denseRankPower;  // -1
+    int numDocsWithField;// 文档个数
+    byte bitsPerValue;// 每个value的存储占用的 长度
+    long ordsOffset;// //  排序好的termId在dvd中存放的起始位置
+    long ordsLength;// 排序好的termId在dvd中存放的长度
   }
-
+  // 节点启动时，读取的dvm中整个文件。
   private static class SortedSetEntry extends TermsDictEntry {
     SortedEntry singleValueEntry;
     long docsWithFieldOffset;
-    long docsWithFieldLength;
-    short jumpTableEntryCount;
+    long docsWithFieldLength;// dvd中存储docId部分使用的总长度
+    short jumpTableEntryCount; //返回多少个block
     byte denseRankPower;
     int numDocsWithField;
     byte bitsPerValue;
-    long ordsOffset;
-    long ordsLength;
+    long ordsOffset;//  排序好的termId在dvd中存放的起始位置
+    long ordsLength;// 排序好的termId在dvd中存放的长度
     DirectMonotonicReader.Meta addressesMeta;
     long addressesOffset;
     long addressesLength;
@@ -892,7 +892,7 @@ final class Lucene80DocValuesProducer extends DocValuesProducer implements Close
       return DocValues.emptySorted();
     }
 
-    final LongValues ords;
+    final LongValues ords;// 映射的是dvd中存放排序好的termId
     if (entry.bitsPerValue == 0) {
       ords = new LongValues() {
         @Override
@@ -901,10 +901,10 @@ final class Lucene80DocValuesProducer extends DocValuesProducer implements Close
         }
       };
     } else {
-      final RandomAccessInput slice = data.randomAccessSlice(entry.ordsOffset, entry.ordsLength);
+      final RandomAccessInput slice = data.randomAccessSlice(entry.ordsOffset, entry.ordsLength);// 读取对应的dvd
       ords = DirectReader.getInstance(slice, entry.bitsPerValue);
     }
-
+     // 每个文档都有个该域
     if (entry.docsWithFieldOffset == -1) {
       // dense
       return new BaseSortedDocValues(entry, data) {
@@ -945,7 +945,7 @@ final class Lucene80DocValuesProducer extends DocValuesProducer implements Close
           return (int) ords.get(doc);
         }
       };
-    } else {
+    } else {    // 部分文档都有个该域，需要使用稠密稀疏存储
       // sparse
       final IndexedDISI disi = new IndexedDISI(data, entry.docsWithFieldOffset, entry.docsWithFieldLength,
           entry.jumpTableEntryCount, entry.denseRankPower, entry.numDocsWithField);
@@ -955,12 +955,12 @@ final class Lucene80DocValuesProducer extends DocValuesProducer implements Close
         public int nextDoc() throws IOException {
           return disi.nextDoc();
         }
-
+        // 当前正在读取的docId
         @Override
         public int docID() {
           return disi.docID();
         }
-
+        // 返回的是总文档数
         @Override
         public long cost() {
           return disi.cost();
@@ -986,8 +986,8 @@ final class Lucene80DocValuesProducer extends DocValuesProducer implements Close
 
   private static abstract class BaseSortedDocValues extends SortedDocValues {
 
-    final SortedEntry entry;
-    final IndexInput data;
+    final SortedEntry entry;// Lucene80DocValuesProduer$StoredEntry
+    final IndexInput data;// 映射dvd部分
     final TermsEnum termsEnum;
 
     BaseSortedDocValues(SortedEntry entry, IndexInput data) throws IOException {
@@ -1020,7 +1020,7 @@ final class Lucene80DocValuesProducer extends DocValuesProducer implements Close
 
     @Override
     public TermsEnum termsEnum() throws IOException {
-      return new TermsDict(entry, data);
+      return new TermsDict(entry, data);//
     }
   }
 
@@ -1063,40 +1063,40 @@ final class Lucene80DocValuesProducer extends DocValuesProducer implements Close
       return new TermsDict(entry, data);
     }
   }
-
+  // 会在AggregationPhase.preProcess()中产生
   private static class TermsDict extends BaseTermsEnum {
 
-    final TermsDictEntry entry;
-    final LongValues blockAddresses;
-    final IndexInput bytes;
+    final TermsDictEntry entry; // Lucene80DocValuesProduer$StoredEntry
+    final LongValues blockAddresses;// 结合了一级索引（每16个词在dvd中存放的起始位置）dvm和dvd中得知，可以容易读取一级索引的值
+    final IndexInput bytes;//映射dvd中termId原始值的内容
     final long blockMask;
-    final LongValues indexAddresses;
-    final IndexInput indexBytes;
-    final BytesRef term;
-    long ord = -1;
-
+    final LongValues indexAddresses;// 结合了二级索引第二部分（每第1024x个词和第1024x-1个词相同前缀长度）dvm和dvd中得知，可以容易读取二级第二部分索引的值
+    final IndexInput indexBytes;//映射了在dvd中存放的第二级索引第一部分（第1024*x个词的相同前缀内容）的值
+    final BytesRef term;// 临时变量，为了方便读取一级索引中每个词的内容
+    long ord = -1; // 当前docValue读取到第几个词了
+     // 主要是做映射，并没有真正读取值
     TermsDict(TermsDictEntry entry, IndexInput data) throws IOException {
       this.entry = entry;
-      RandomAccessInput addressesSlice = data.randomAccessSlice(entry.termsAddressesOffset, entry.termsAddressesLength);
-      blockAddresses = DirectMonotonicReader.getInstance(entry.termsAddressesMeta, addressesSlice);
+      RandomAccessInput addressesSlice = data.randomAccessSlice(entry.termsAddressesOffset, entry.termsAddressesLength);// dvd文件一级索引
+      blockAddresses = DirectMonotonicReader.getInstance(entry.termsAddressesMeta, addressesSlice);// 结合了一级索引（每16个词在dvd中存放的起始位置）dvm和dvd中得知，可以容易读取一级索引每个block的值
       bytes = data.slice("terms", entry.termsDataOffset, entry.termsDataLength);
       blockMask = (1L << entry.termsDictBlockShift) - 1;
       RandomAccessInput indexAddressesSlice = data.randomAccessSlice(entry.termsIndexAddressesOffset, entry.termsIndexAddressesLength);
-      indexAddresses = DirectMonotonicReader.getInstance(entry.termsIndexAddressesMeta, indexAddressesSlice);
-      indexBytes = data.slice("terms-index", entry.termsIndexOffset, entry.termsIndexLength);
-      term = new BytesRef(entry.maxTermLength);
+      indexAddresses = DirectMonotonicReader.getInstance(entry.termsIndexAddressesMeta, indexAddressesSlice);// 结合了二级索引第二部分（每第1024x个词和第1024x-1个词相同前缀长度）dvm和dvd中得知，可以容易读取二级第二部分索引的值
+      indexBytes = data.slice("terms-index", entry.termsIndexOffset, entry.termsIndexLength);//映射了在dvd中存放的第二级索引第一部分（第1024*x个词的相同前缀内容）的值
+      term = new BytesRef(entry.maxTermLength);// 最大那个词的长度
     }
 
-    @Override
+    @Override // 读取每个docValue中词的内容词的原始值。可见 Lucene80DocValuesConsumer.addTermsDict每个词的存储过程
     public BytesRef next() throws IOException {
-      if (++ord >= entry.termsDictSize) {
+      if (++ord >= entry.termsDictSize) {// 读取每个独立的词
         return null;
       }
-      if ((ord & blockMask) == 0L) {
+      if ((ord & blockMask) == 0L) {// 每第16个词，可以读取该词的原始值
         term.length = bytes.readVInt();
         bytes.readBytes(term.bytes, 0, term.length);
-      } else {
-        final int token = Byte.toUnsignedInt(bytes.readByte());
+      } else { // 
+        final int token = Byte.toUnsignedInt(bytes.readByte());// 读取一位，记录该词的相同前缀长度及不同后缀长度
         int prefixLength = token & 0x0F;
         int suffixLength = 1 + (token >>> 4);
         if (prefixLength == 15) {
@@ -1106,7 +1106,7 @@ final class Lucene80DocValuesProducer extends DocValuesProducer implements Close
           suffixLength += bytes.readVInt();
         }
         term.length = prefixLength + suffixLength;
-        bytes.readBytes(term.bytes, prefixLength, suffixLength);
+        bytes.readBytes(term.bytes, prefixLength, suffixLength);// 存放是不同后缀。复用前面一个词的前缀部分
       }
       return term;
     }
@@ -1380,9 +1380,9 @@ final class Lucene80DocValuesProducer extends DocValuesProducer implements Close
 
   @Override
   public SortedSetDocValues getSortedSet(FieldInfo field) throws IOException {
-    SortedSetEntry entry = sortedSets.get(field.name);
+    SortedSetEntry entry = sortedSets.get(field.name);//Lucene80DocValueProducer$SortedSetEntry
     if (entry.singleValueEntry != null) {
-      return DocValues.singleton(getSorted(entry.singleValueEntry));
+      return DocValues.singleton(getSorted(entry.singleValueEntry));// 主要去映射docId部分
     }
 
     final RandomAccessInput slice = data.randomAccessSlice(entry.ordsOffset, entry.ordsLength);

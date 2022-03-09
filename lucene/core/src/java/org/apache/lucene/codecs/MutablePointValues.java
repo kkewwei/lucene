@@ -34,7 +34,7 @@ public abstract class MutablePointValues extends PointValues { //points的顺序
   public abstract byte getByteAt(int i, int k);
 
   /** Return the doc ID of the i-th value. */
-  public abstract int getDocID(int i);
+  public abstract int getDocID(int i);// 返回docId
 
   /** Swap the i-th and j-th values. */
   public abstract void swap(int i, int j);

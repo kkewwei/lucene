@@ -32,9 +32,9 @@ import static org.apache.lucene.util.fst.FST.Arc.BitTable;
 abstract class FSTEnum<T> {
   protected final FST<T> fst;
 
-  @SuppressWarnings({"rawtypes","unchecked"}) protected FST.Arc<T>[] arcs = new FST.Arc[10];
+  @SuppressWarnings({"rawtypes","unchecked"}) protected FST.Arc<T>[] arcs = new FST.Arc[10];//
   // outputs are cumulative
-  @SuppressWarnings({"rawtypes","unchecked"}) protected T[] output = (T[]) new Object[10];
+  @SuppressWarnings({"rawtypes","unchecked"}) protected T[] output = (T[]) new Object[10]; // 和arcs对应的output
 
   protected final T NO_OUTPUT;
   protected final FST.BytesReader fstReader;

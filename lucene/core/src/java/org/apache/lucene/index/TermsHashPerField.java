@@ -37,7 +37,7 @@ import org.apache.lucene.util.IntBlockPool;
 abstract class TermsHashPerField implements Comparable<TermsHashPerField> { // 本来就是可以对比的
   private static final int HASH_INIT_SIZE = 4;
 
-  private final TermsHashPerField nextPerField;// TermVectorsConsumerPerField
+  private final TermsHashPerField nextPerField;// TermVectorsConsumerPerField或者FreqProxTermsWriterPerField
   private final IntBlockPool intPool; //用于存储分 指向每个 Token 在 bytePool 中 freq 和 prox 信息的偏移量。如果不足时,从 DocumentsWriter 的 freeIntBlocks 分配
   final ByteBlockPool bytePool; // 写入词项位置信息, 用于存储 freq, prox 信息
   // for each term we store an integer per stream that points into the bytePool above
@@ -45,16 +45,16 @@ abstract class TermsHashPerField implements Comparable<TermsHashPerField> { // �
   // in the terms stream. The start address for the stream is stored in postingsArray.byteStarts[termId]
   // This is initialized in the #addTerm method, either to a brand new per term stream if the term is new or
   // to the addresses where the term stream was written to when we saw it the last time.
-  private int[] termStreamAddressBuffer;
-  private int streamAddressOffset;
-  private final int streamCount;
+  private int[] termStreamAddressBuffer;// 就是intPool.buffer当前buffer
+  private int streamAddressOffset;//
+  private final int streamCount; // 默认为2
   private final String fieldName;
   final IndexOptions indexOptions;
   /* This stores the actual term bytes for postings and offsets into the parent hash in the case that this
   * TermsHashPerField is hashing term vectors.*/
   private final BytesRefHash bytesHash;
-
-  ParallelPostingsArray postingsArray;
+  // TermVectorsConsumerPerField.postingsArray在每写完一个文档后，都会被置位null，详见TermVectorsConsumerPerField.termVectorsPostingsArray
+  ParallelPostingsArray postingsArray; //FreqProxTermsWriterPerField或者TermVectorsConsumerPerField
   private int lastDocID; // only with assert
 
   /** streamCount: how many streams this field stores per term.
@@ -71,7 +71,7 @@ abstract class TermsHashPerField implements Comparable<TermsHashPerField> { // �
     PostingsBytesStartArray byteStarts = new PostingsBytesStartArray(this, bytesUsed);
     bytesHash = new BytesRefHash(termBytePool, HASH_INIT_SIZE, byteStarts); // 每个field都有一个
   }
-    // TermVectorsConsumerPerField里面的这个日志会清空，但是FreqProxTermsWriterPerField里面的不会清空
+    // 每写完一个文档，TermVectorsConsumerPerField里面的这个值就会清空，但是FreqProxTermsWriterPerField里面的不会清空
   void reset() { // 仅仅清了bytesHash，别的都没有清理。
     bytesHash.clear(false);// 若写完一个文档，就会去清理nextTermsHash中的ids
     sortedTermIDs = null;
@@ -79,7 +79,7 @@ abstract class TermsHashPerField implements Comparable<TermsHashPerField> { // �
       nextPerField.reset(); // 永远都不会进来
     }
   }
-  // 在TermVectorsConsumerPerField.finish中会调用
+  // 在TermVectorsConsumerPerField.finish中会调用，而FreqProxTermsWriterPerField是在segment flush到磁盘时候调用的
   final void initReader(ByteSliceReader reader, int termID, int stream) {
     assert stream < streamCount;
     int streamStartOffset = postingsArray.addressOffset[termID];
@@ -89,8 +89,8 @@ abstract class TermsHashPerField implements Comparable<TermsHashPerField> { // �
                 postingsArray.byteStarts[termID]+stream*ByteBlockPool.FIRST_LEVEL_SIZE,// 第termID个term在bytePool中第stream中取值
                 streamAddressBuffer[offsetInAddressBuffer+stream]);// 可用位置
   }
-
-  private int[] sortedTermIDs;// 对termId进行排序，应该是按照字母从小向大排序的。在finishDocument时候就会调用
+  // 每写完一个文档，TermVectorsConsumerPerField里面的这个值就会清空，但是FreqProxTermsWriterPerField里面的不会清空
+  private int[] sortedTermIDs;// 对termId进行排序，应该是按照字母从小向大排序的。
 
   /** Collapse the hash table and sort in-place; also sets
    * this.sortedTermIDs to the results
@@ -113,20 +113,20 @@ abstract class TermsHashPerField implements Comparable<TermsHashPerField> { // �
     sortedTermIDs = null;
     bytesHash.reinit();
   }
-
+  // 进行进一步的调用，首先词典结构是第一次调用，然后然是词频向量，是下一步调用
   private boolean doNextCall;// 在es中通过"term_vector": "with_positions_offsets"等方式开启，默认关闭，在lucene中通过ieldType.setStoreTermVectors(true)开启
 
   // Secondary entry point (for 2nd & subsequent TermsHash),
   // because token text has already been "interned" into
   // textStart, so we hash by textStart.  term vectors use
-  // this API.
+  // this API. // 词向量使用这个api
   private void add(int textStart, final int docID) throws IOException { //第二次进入，textStart代表postingsArray.textStarts中第termId起始位置
-    int termID = bytesHash.addByPoolOffset(textStart); // 只是当前文档，当前域的局部字段编号
-    if (termID >= 0) {      // New posting
+    int termID = bytesHash.addByPoolOffset(textStart); // 只是当前文档，当前域的局部字段编号。（TermVectorsConsumerPerField会自己产生自己的termId）
+    if (termID >= 0) {      // New posting  新词
       // First time we are seeing this token since we last
       // flushed the hash.
       initStreamSlices(termID, docID);
-    } else {
+    } else {  // 词已经存在了
       positionStreamSlice(termID, docID);
     }
   }
@@ -178,30 +178,30 @@ abstract class TermsHashPerField implements Comparable<TermsHashPerField> { // �
     //System.out.println("add term=" + termBytesRef.utf8ToString() + " doc=" + docState.docID + " termID=" + termID);
     if (termID >= 0) { // New posting// 新的term
       // Init stream slices
-      initStreamSlices(termID, docID);
+      initStreamSlices(termID, docID);// 把架子搭起来，比如构建stream0,stream1
     } else {// 这说明已经索引过此词项(再次在原始文档中出现)
       termID = positionStreamSlice(termID, docID);
     }//并没有再次存放termsId...
-    if (doNextCall) { // 为啥会在TermVectorsConsumerPerField中重复来一次add，前面分明已经记录了
+    if (doNextCall) { // 默认记录词典信息，若设置了词向量，则更进一步设置词向量
       nextPerField.add(postingsArray.textStarts[termID], docID);// 进入TermVectorsConsumerPerField.add(termId),也就是本类上面的函数
     }// postingsArray.textStarts[termID]实际等价于bytesHash里面的bytesStart[termID]
   }
 
   private int positionStreamSlice(int termID, final int docID) throws IOException {
     termID = (-termID) - 1;// 获得真实的termId
-    int intStart = postingsArray.addressOffset[termID];
+    int intStart = postingsArray.addressOffset[termID];// 绝对位置
     termStreamAddressBuffer = intPool.buffers[intStart >> IntBlockPool.INT_BLOCK_SHIFT];// 是哪个buffer
-    streamAddressOffset = intStart & IntBlockPool.INT_BLOCK_MASK;
+    streamAddressOffset = intStart & IntBlockPool.INT_BLOCK_MASK;// 哪个buffer哪个位置
     addTerm(termID, docID);
     return termID;
   }
 
   final void writeByte(int stream, byte b) {
-    int streamAddress = streamAddressOffset + stream;
+    int streamAddress = streamAddressOffset + stream;// stream在intPool上的起始相对位置
     int upto = termStreamAddressBuffer[streamAddress];// 记录的是bytePool.buffers中的某个slice的绝对起始位置
     byte[] bytes = bytePool.buffers[upto >> ByteBlockPool.BYTE_BLOCK_SHIFT]; // 获得这个存储空间
     assert bytes != null;
-    int offset = upto & ByteBlockPool.BYTE_BLOCK_MASK; // budder相对位置
+    int offset = upto & ByteBlockPool.BYTE_BLOCK_MASK; // buffer相对位置
     if (bytes[offset] != 0) { // 不为0代表是下一level的长度，需要扩容。这里就是扩容
       // End of slice; allocate a new one
       offset = bytePool.allocSlice(bytes, offset);
@@ -209,7 +209,7 @@ abstract class TermsHashPerField implements Comparable<TermsHashPerField> { // �
       termStreamAddressBuffer[streamAddress] = offset + bytePool.byteOffset;
     }
     bytes[offset] = b;
-    (termStreamAddressBuffer[streamAddress])++;// 这个位置已经被写入了一条数据，存储前进一位
+    (termStreamAddressBuffer[streamAddress])++;//比较重要，这个streamId当前已经写到位置（下次可用位置）
   }
 
   final void writeBytes(int stream, byte[] b, int offset, int len) {
@@ -249,9 +249,9 @@ abstract class TermsHashPerField implements Comparable<TermsHashPerField> { // �
 
     @Override
     public int[] init() {
-      if (perField.postingsArray == null) {
-        perField.postingsArray = perField.createPostingsArray(2);
-        perField.newPostingsArray(); //  注意这里的赋值，
+      if (perField.postingsArray == null) { //  TermVectorsConsumerPerField时每个新的文档写入，都会赋值。
+        perField.postingsArray = perField.createPostingsArray(2); // TermVectorsConsumerPerField
+        perField.newPostingsArray(); // 给TermVectorsConsumerPerField.termVectorsPostingsArray或者FreqProxTermsWriterPerField.freqProxPostingsArray赋值
         bytesUsed.addAndGet(perField.postingsArray.size * perField.postingsArray.bytesPerPosting()); // 注意这里统计
       }
       return perField.postingsArray.textStarts;
@@ -267,12 +267,12 @@ abstract class TermsHashPerField implements Comparable<TermsHashPerField> { // �
       return postingsArray.textStarts;
     }
 
-    @Override  // 在每个文档写完后，TermVectorsConsumerPerField的都会去清理
+    @Override  // 在每个文档写完后，TermVectorsConsumerPerField的都会去清理，FreqProxTermsWriterPerField的不会去清理
     public int[] clear() {
       if (perField.postingsArray != null) {
         bytesUsed.addAndGet(-(perField.postingsArray.size * perField.postingsArray.bytesPerPosting()));
         perField.postingsArray = null;
-        perField.newPostingsArray(); // 直接将postingsArray置null
+        perField.newPostingsArray(); // 置位,因为postingsArray为null了，在termVectorsPostingsArray也会变为null
       }
       return null;
     }

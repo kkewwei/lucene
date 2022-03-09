@@ -114,7 +114,7 @@ public abstract class DocValuesConsumer implements Closeable {
    * @param field field information
    * @param valuesProducer produces the values to write
    * @throws IOException if an I/O error occurred.
-   */
+   */ // 刷新的时候才进来
   public abstract void addSortedSetField(FieldInfo field, DocValuesProducer valuesProducer) throws IOException;
   
   /** Merges in the fields from the readers in 

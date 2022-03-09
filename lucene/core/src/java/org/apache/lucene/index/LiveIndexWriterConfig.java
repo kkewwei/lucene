@@ -40,8 +40,8 @@ import org.apache.lucene.util.Version;
 public class LiveIndexWriterConfig {
   
   private final Analyzer analyzer;
-  // Lucene提供的默认FlushPolicy的实现FlushByRamOrCountsPolicy中允许DocumentsWriterPerThread使用的最大文档数上限，超过则触发Flush。
-  private volatile int maxBufferedDocs; //以内存满了会刷新
+  // Lucene提供的默认FlushPolicy的实现FlushByRamOrCountsPolicy中允许DocumentsWriterPerThread使用的最大文档数上限，超过则触发lucen Flush(es refresh)。
+  private volatile int maxBufferedDocs; //内存满了会刷新
   private volatile double ramBufferSizeMB; // 16, Lucene提供的默认FlushPolicy的实现FlushByRamOrCountsPolicy中允许DocumentsWriterPerThread使用的最大内存上限，超过则触发flush。ES目的是不想使用Lucene实现的。es本身使用单个分片（有问题）indices.memory.index_buffer_size设置，默认10%
   private volatile IndexReaderWarmer mergedSegmentWarmer;
 
@@ -72,7 +72,7 @@ public class LiveIndexWriterConfig {
   protected volatile IndexingChain indexingChain;
 
   /** {@link Codec} used to write new segments. */
-  protected volatile Codec codec;
+  protected volatile Codec codec;//Lucene86Codec
 
   /** {@link InfoStream} for debugging messages. */
   protected volatile InfoStream infoStream;
@@ -92,8 +92,8 @@ public class LiveIndexWriterConfig {
   protected volatile int perThreadHardLimitMB; // 除了FlushPolicy能决定Flush外，Lucene还会有一个指标强制限制DocumentsWriterPerThread占用的内存大小，当超过阈值则强制flush。
 
   /** True if segment flushes should use compound file format */
-  protected volatile boolean useCompoundFile = IndexWriterConfig.DEFAULT_USE_COMPOUND_FILE_SYSTEM; // 默认合并
-  
+  protected volatile boolean useCompoundFile = IndexWriterConfig.DEFAULT_USE_COMPOUND_FILE_SYSTEM; //flush产生的segment是否该是复合文件
+   // 针对merge阶段产生的段是否使用复合文件，在MergePolicy.useCompoundFile()中判断，根据
   /** True if calls to {@link IndexWriter#close()} should first do a commit. */
   protected boolean commitOnClose = IndexWriterConfig.DEFAULT_COMMIT_ON_CLOSE;
 
@@ -125,7 +125,7 @@ public class LiveIndexWriterConfig {
     similarity = IndexSearcher.getDefaultSimilarity();
     mergeScheduler = new ConcurrentMergeScheduler();
     indexingChain = DocumentsWriterPerThread.defaultIndexingChain;
-    codec = Codec.getDefault();
+    codec = Codec.getDefault();// Lucene86Codec
     if (codec == null) {
       throw new NullPointerException();
     }

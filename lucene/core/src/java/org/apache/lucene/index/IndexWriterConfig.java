@@ -63,7 +63,7 @@ public final class IndexWriterConfig extends LiveIndexWriterConfig {
     /** 
      * Creates a new index or overwrites an existing one. 
      */
-    CREATE,
+    CREATE, // 写一个新的索引，若存在，则覆盖掉
     
     /** 
      * Opens an existing index. 
@@ -74,7 +74,7 @@ public final class IndexWriterConfig extends LiveIndexWriterConfig {
      * Creates a new index if one does not exist,
      * otherwise it opens the index and documents will be appended. 
      */
-    CREATE_OR_APPEND 
+    CREATE_OR_APPEND // 存在则追加
   }
 
   /** Denotes a flush trigger is disabled. */

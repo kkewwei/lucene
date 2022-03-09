@@ -36,8 +36,8 @@ final class Lucene84ScoreSkipReader extends Lucene84SkipReader {
   private final Impacts impacts;
   private int numLevels = 1;
   private final MutableImpactList[] perLevelImpacts;
-
-  public Lucene84ScoreSkipReader(IndexInput skipStream, int maxSkipLevels,
+  // 会从BlockImpactsDocsEnum对象初始化跑进来
+  public Lucene84ScoreSkipReader(IndexInput skipStream, int maxSkipLevels,//maxSkipLevels=10
       boolean hasPos, boolean hasOffsets, boolean hasPayloads) {
     super(skipStream, maxSkipLevels, hasPos, hasOffsets, hasPayloads);
     this.impactData = new byte[maxSkipLevels][];
@@ -71,7 +71,7 @@ final class Lucene84ScoreSkipReader extends Lucene84SkipReader {
       }
     };
   }
-
+  // target是文档号
   @Override
   public int skipTo(int target) throws IOException {
     int result = super.skipTo(target);

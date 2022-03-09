@@ -29,7 +29,7 @@ import org.apache.lucene.util.ArrayUtil;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.IOUtils;
 import org.apache.lucene.util.RamUsageEstimator;
-// 整个segment共享一个
+// ，每个DocumentsWriterPerThread都拥有单独的一个
 class TermVectorsConsumer extends TermsHash {
   TermVectorsWriter writer; // CompressingTermVectorsWriter, tvd文件。写完一个segment 落盘后就置空
 
@@ -46,8 +46,8 @@ class TermVectorsConsumer extends TermsHash {
   boolean hasVectors;
   private int numVectorFields;// perFields的个数, 该文档总共有几个field，每个文档写入时置位
   int lastDocID;// 存储的上一个docId
-  private TermVectorsConsumerPerField[] perFields = new TermVectorsConsumerPerField[1];// 每个域都会有一个。每个文档写完就会清空一次
-  // 整个segment共享一个
+  private TermVectorsConsumerPerField[] perFields = new TermVectorsConsumerPerField[1];// 每个域都会有一个。每个文档写完就会清空一次所有的字段
+
   TermVectorsConsumer(DocumentsWriterPerThread docWriter) {
     super(docWriter, false, null);
     this.docWriter = docWriter;
@@ -55,7 +55,7 @@ class TermVectorsConsumer extends TermsHash {
   // 在segment产生时就会调用
   @Override
   void flush(Map<String, TermsHashPerField> fieldsToFlush, final SegmentWriteState state, Sorter.DocMap sortMap, NormsProducer norms) throws IOException {
-    if (writer != null) {
+    if (writer != null) { // 确定不为空
       int numDocs = state.segmentInfo.maxDoc();
       assert numDocs > 0;
       // At least one doc in this run had term vectors enabled
@@ -141,7 +141,7 @@ class TermVectorsConsumer extends TermsHash {
   public TermsHashPerField addField(FieldInvertState invertState, FieldInfo fieldInfo) {
     return new TermVectorsConsumerPerField(invertState, this, fieldInfo);
   }
-  // 在单个文档写文的时候，每个域都会调用这里
+  // 在单个文档写完的时候，每个域都会调用这里
   void addFieldToFlush(TermVectorsConsumerPerField fieldToFlush) {
     if (numVectorFields == perFields.length) { // 满了，该扩容了。
       int newSize = ArrayUtil.oversize(numVectorFields + 1, RamUsageEstimator.NUM_BYTES_OBJECT_REF);

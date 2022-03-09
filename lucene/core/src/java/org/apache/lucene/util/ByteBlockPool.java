@@ -123,7 +123,7 @@ public final class ByteBlockPool implements Accountable {
   /** index into the buffers array pointing to the current buffer used as the head */
   private int bufferUpto = -1;  // Which buffer we are upto，二元数据的第一元指针，当前使用的哪里了  当前块的第几个byte[]
   /** Where we are in head buffer */
-  public int byteUpto = BYTE_BLOCK_SIZE;  //byte[]内的偏移量，当前buffer内可分配的起始位置。初始化时已经用完一个byte[]。接着还要使用的话，就重新创建byte[]
+  public int byteUpto = BYTE_BLOCK_SIZE;  //byte[]内的偏移量，当前buffer内可分配的起始位置。初始化时假定已经用完一个byte[]。接着还要使用的话，就重新创建byte[]
 
   /** Current head buffer */
   public byte[] buffer;  //当前块
@@ -199,10 +199,10 @@ public final class ByteBlockPool implements Accountable {
     if (1+bufferUpto == buffers.length) {
       byte[][] newBuffers = new byte[ArrayUtil.oversize(buffers.length+1,//根据当前机器64/32位和对象引用占用字节数获得最新长度
                                                         NUM_BYTES_OBJECT_REF)][];
-      System.arraycopy(buffers, 0, newBuffers, 0, buffers.length); // 只是拷贝了数组引用，并没有copy数组
+      System.arraycopy(buffers, 0, newBuffers, 0, buffers.length); // 只是拷贝了数组引用，并没有copy数组。这里体现了ByteBlockPool的优势
       buffers = newBuffers;
     } //
-    buffer = buffers[1+bufferUpto] = allocator.getByteBlock();//allocator分配器负责初始化buffers中每个数组的大小
+    buffer = buffers[1+bufferUpto] = allocator.getByteBlock();//allocator分配器负责初始化buffers中每个数组的大小, 一次申请32kb
     bufferUpto++;//buffers写入位置+1
 
     byteUpto = 0;//buffer写入位置
@@ -212,11 +212,11 @@ public final class ByteBlockPool implements Accountable {
   /**
    * Allocates a new slice with the given size. 
    * @see ByteBlockPool#FIRST_LEVEL_SIZE
-   */ // 需要产生一个新的slice
+   */ // 需要产生一个新的slice，申请多少，就给多少，绝不给对
   public int newSlice(final int size) { //最后一个只能是size-1个byte可用，第size个字符存的是当前slice的level
-    if (byteUpto > BYTE_BLOCK_SIZE-size) // 当前buffer装得下
-      nextBuffer();
-    final int upto = byteUpto;
+    if (byteUpto > BYTE_BLOCK_SIZE-size) // 当前buffer装不下
+      nextBuffer();// 那么这个buffer剩余空间全部作废
+    final int upto = byteUpto;// 若buffer换新的了，则该值为0
     byteUpto += size;
     buffer[byteUpto-1] = 16;//赋值为16 调用时 会从byteUpto开始写入，当遇到buffer[pos]位置不为0 时，会调用allocSlice方法 通过 16&15得到当前NEXT_LEVEL_ARRAY中level
     return upto; //申请的slice的相对起始位置
@@ -247,13 +247,13 @@ public final class ByteBlockPool implements Accountable {
   // https://www.iteye.com/blog/hxraid-642737 import
   /**
    * Creates a new byte slice with the given starting size and 
-   * returns the slices offset in the pool.
+   * returns the slices offset in the pool. slice是当前buffer
    */  // 对当前slice继续扩容到下一个级别。由于即将分配的点slice[upto]是level节点，需要再对该slice扩容一个新的slice加上去。返回当前buffer节点内的可用节点
   public int allocSlice(final byte[] slice, final int upto) {
     //slice[upto]初始为16 在写入slice的时候 初始一定都为0 遇到不为0的就是slice的结束位置
     final int level = slice[upto] & 15;  // //可根据块的结束符来得到块所在的层次。从而我们可以推断，每个层次的块都有不同的结束符，第1层为16，第2层位17，第3层18，依次类推。大于第
     final int newLevel = NEXT_LEVEL_ARRAY[level]; // 从数组中得到下一个层次及下一层块的大小。
-    final int newSize = LEVEL_SIZE_ARRAY[newLevel];
+    final int newSize = LEVEL_SIZE_ARRAY[newLevel];// 第九层还是第九层
     // 如果当前缓存总量不够大，则从DocumentsWriter的freeByteBlocks中分配。
     // Maybe allocate another block
     if (byteUpto > BYTE_BLOCK_SIZE-newSize) { // 当前buffer不够分了，则丢弃当前buffer剩余所有未使用的
@@ -373,7 +373,7 @@ public final class ByteBlockPool implements Accountable {
    * value crosses a boundary, a fresh copy will be returned.
    * On the contrary to {@link #setBytesRef(BytesRef, int)}, this does not
    * expect the length to be encoded with the data.
-   */  // 从当前BytePool中的offset处读取ref长度的内容
+   */  // 从当前BytePool中的offset处读取ref长度的内容，放入ref中
   public void setRawBytesRef(BytesRef ref, final long offset) {
     int bufferIndex = (int) (offset >> BYTE_BLOCK_SHIFT);
     int pos = (int) (offset & BYTE_BLOCK_MASK);
@@ -382,7 +382,7 @@ public final class ByteBlockPool implements Accountable {
       ref.offset = pos; // 把这个buffer给拿过来，只是自己保存了它的属性值而已
     } else {
       ref.bytes = new byte[ref.length];
-      ref.offset = 0;
+      ref.offset = 0;// 从下一个
       readBytes(offset, ref.bytes, 0, ref.length);
     }
   }

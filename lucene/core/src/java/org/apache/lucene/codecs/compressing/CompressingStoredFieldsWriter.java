@@ -51,9 +51,9 @@ import static org.apache.lucene.search.DocIdSetIterator.NO_MORE_DOCS;
 /**
  * {@link StoredFieldsWriter} impl for {@link CompressingStoredFieldsFormat}.
  * @lucene.experimental
- */ // fdt: 每个chunk
+ */ //    单个文档形式的，tvd和fdt都是一样存储方式
 public final class CompressingStoredFieldsWriter extends StoredFieldsWriter {
-  // Lucene8.5.2中会产生三个文件fdt、fdm、fdx。 fdm存放byte[]的元数据，fdx存放byte[]的具体数据
+  // Lucene8.5.2中会产生三个文件fdt、fdm、fdx。 fdm存放byte[]的元数据，fdx存放byte[]的具体数据,fdt存放元数据
   /** Extension of stored fields file */
   public static final String FIELDS_EXTENSION = "fdt";// 存数据的
   /** Extension of stored fields index */

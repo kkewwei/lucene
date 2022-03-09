@@ -136,7 +136,7 @@ final class DocumentsWriterPerThread {// 由ThreadState拥有
   
   // Updates for our still-in-RAM (to be flushed next) segment
   private final BufferedUpdates pendingUpdates; // 快照的是deleteSlice映射的长度。和DocumentsWriterDeleteQueue中globalSlice与globalBufferedUpdates作用一样
-  private final SegmentInfo segmentInfo;     // Current segment we are working on  我们正在工作的segment
+  private final SegmentInfo segmentInfo;     // Current segment we are working on  我们正在工作的segment。同DocumentsWriterPerThread生命周期一样
   private boolean aborted = false;   // True if we aborted
   private SetOnce<Boolean> flushPending = new SetOnce<>(); // 等待刷新.比如es索引周期性refresh的话，就将当前正在写入的
   private volatile long lastCommittedBytesUsed;
@@ -144,11 +144,11 @@ final class DocumentsWriterPerThread {// 由ThreadState拥有
 
   private final FieldInfos.Builder fieldInfos;
   private final InfoStream infoStream; // LoggerInfoStream，控制了lucene日志在es中打印
-  private int numDocsInRAM;  // 该DWPT在内存中写的数据量，索引结构已经建立。每刷新一次，该对象就新产生一个
+  private int numDocsInRAM;  // 该DWPT在内存中写的数据量，索引结构已经建立。每es flush一次，该对象就新产生一个
   final DocumentsWriterDeleteQueue deleteQueue; // 一个DocuentsWriter会私下产生一个DocumentsWriterFlushQueue
   private final DeleteSlice deleteSlice; //每个DocumentsWriterPerThread自己拥有的
   private final NumberFormat nf = NumberFormat.getInstance(Locale.ROOT);
-  final Allocator byteBlockAllocator; // 默认使用DirectTrackingAllocator，两者都记录了内存使用情况
+  final Allocator byteBlockAllocator; // 默认使用DirectTrackingAllocator，和IntBlockAllocator使用同一个SerialCounter统计内存使用情况。
   final IntBlockPool.Allocator intBlockAllocator;  // IntBlockAllocator ，可以统计byte申请的内存大小
   private final AtomicLong pendingNumDocs;
   private final LiveIndexWriterConfig indexWriterConfig;
@@ -219,7 +219,7 @@ final class DocumentsWriterPerThread {// 由ThreadState拥有
       if (INFO_VERBOSE && infoStream.isEnabled("DWPT")) {
         infoStream.message("DWPT", Thread.currentThread().getName() + " update delTerm=" + deleteNode + " docID=" + numDocsInRAM + " seg=" + segmentInfo.name);
       } // 该文档写入之前的文档数，为了删除时只删除该文档写入前已经写入的文档。对之后写入的文档，都不再删除了
-      final int docsInRamBefore = numDocsInRAM; // 当前DocumentsWriterPerThread内保存的还没有刷新到磁盘的文档。每次磁盘刷新后，docId从0开始数数。
+      final int docsInRamBefore = numDocsInRAM; // 当前DocumentsWriterPerThread内保存的还没有刷新到磁盘的文档。每次es flush后，会随着DocumentsWriterPerThread一起消失
       boolean allDocsIndexed = false;
       try {
         for (Iterable<? extends IndexableField> doc : docs) {
@@ -375,7 +375,7 @@ final class DocumentsWriterPerThread {// 由ThreadState拥有
         softDeletedDocs = consumer.getHasDocValues(getIndexWriterConfig().getSoftDeletesField());
       } else {
         softDeletedDocs = null; // 到这里
-      }// 主要是是这里
+      }// flush主要是是这里
       sortMap = consumer.flush(flushState); // 进去呀，有较大的写入（在落盘前，若有删除，会标志哪些文档不需要删除，下面会有live文件生成）
       if (softDeletedDocs == null) {
         flushState.softDelCountOnFlush = 0; // 这里

@@ -51,7 +51,7 @@ import org.apache.lucene.util.RamUsageEstimator;
 // https://blog.csdn.net/RovisuKi/article/details/99943543
 /** Default general purpose indexing chain, which handles
  *  indexing all types of fields. */ // 写入链的起始位置，重点类。每个semgent落盘时，DocumentsWriterPerThread.DefaultIndexingChain就置空了，下次用的时候再生成
-final class DefaultIndexingChain extends DocConsumer {
+final class DefaultIndexingChain extends DocConsumer {//被DocumentsWriterPerThread所拥有的，以DocumentsWriterPerThread为单一索引
   final Counter bytesUsed;// 是从DocumentsWriterPerThread.bytesUsed中传递过来的
   final DocumentsWriterPerThread docWriter; // DocumentsWriterPerThread
   final FieldInfos.Builder fieldInfos;
@@ -183,12 +183,12 @@ final class DefaultIndexingChain extends DocConsumer {
     return sorter.sort(state.segmentInfo.maxDoc(), comparators.toArray(new IndexSorter.DocComparator[0]));
   }
 
-  @Override
+  @Override // 确认了，这里都会落盘
   public Sorter.DocMap flush(SegmentWriteState state) throws IOException {
 
     // NOTE: caller (DocumentsWriterPerThread) handles
     // aborting on any exception from this method
-    Sorter.DocMap sortMap = maybeSortSegment(state); // 为null，没用
+    Sorter.DocMap sortMap = maybeSortSegment(state); // 为null，函数无用
     int maxDoc = state.segmentInfo.maxDoc();
     long t0 = System.nanoTime();
     writeNorms(state, sortMap);// 写入nvm文件
@@ -271,7 +271,7 @@ final class DefaultIndexingChain extends DocConsumer {
             }
             if (pointsWriter == null) { //
               // lazy init
-              PointsFormat fmt = state.segmentInfo.getCodec().pointsFormat(); // Lucene60PointsFormat
+              PointsFormat fmt = state.segmentInfo.getCodec().pointsFormat(); // Lucene86PointsFormat
               if (fmt == null) {
                 throw new IllegalStateException("field=\"" + perField.fieldInfo.name + "\" was indexed as points but codec does not support points");
               }
@@ -404,10 +404,10 @@ final class DefaultIndexingChain extends DocConsumer {
 
     // Rehash
     int newHashMask = newHashSize-1;
-    for(int j=0;j<fieldHash.length;j++) {
+    for(int j=0;j<fieldHash.length;j++) {// 链表
       PerField fp0 = fieldHash[j];
       while(fp0 != null) {
-        final int hashPos2 = fp0.fieldInfo.name.hashCode() & newHashMask;
+        final int hashPos2 = fp0.fieldInfo.name.hashCode() & newHashMask; // 全部重新hash一次
         PerField nextFP0 = fp0.next; // 头插法
         fp0.next = newHashArray[hashPos2];
         newHashArray[hashPos2] = fp0;
@@ -457,7 +457,7 @@ final class DefaultIndexingChain extends DocConsumer {
     // (i.e., we cannot have more than one TokenStream
     // running "at once"):
 
-    termsHash.startDocument();// 每写完一个，
+    termsHash.startDocument();// 每写完一个文档，都会清空一次TermVectorsConsumer里面缓存的上一个文档里面的所有字段信息
     // 也是蛮重要的。写fdt和fdx。若block刷新后，storedFieldWriter=null后，就是这里初始化一个新的文档
     startStoredFields(docID);
     try {
@@ -565,7 +565,7 @@ final class DefaultIndexingChain extends DocConsumer {
                                          + "for a field that is not indexed (field=\"" + name + "\")");
     }
   }
-
+   // 放入内存阶段
   /** Called from processDocument to index one field's point */
   private void indexPoint(int docID, PerField fp, IndexableField field) {
     int pointDimensionCount = field.fieldType().pointDimensionCount(); //多少个维度
@@ -781,13 +781,13 @@ final class DefaultIndexingChain extends DocConsumer {
     final FieldInfo fieldInfo;  //
     final Similarity similarity;
     // 只有设置了倒排索引，才会给这些变量赋值
-    FieldInvertState invertState; // 统计倒排信息, 每个field都有一个，每个文档都会独享一个，在进入域分词的时候会被清空
+    FieldInvertState invertState; // 统计倒排信息，每个field都会独享一个(每个文档统计使用前，都会清空该字段值)，在进入域分词的时候会被清空
     TermsHashPerField termsHashPerField;  // FreqProxTermsWriterPerField, 里面包含了TermVectorsConsumer和TermVectorsConsumerPerField
 
     // Non-null if this field ever had doc values in this
     // segment:
-    DocValuesWriter<?> docValuesWriter;// 一个段该域所有文档共享一个该字段。每次刷新到磁盘时会清空
-
+    DocValuesWriter<?> docValuesWriter;// 一个段该域所有文档共享一个该字段。每次刷新到磁盘时会清空。第一次写入时就会构建该对象SortedSetDocValuesWriter
+    // 会在放入内存阶段初始化
     // Non-null if this field ever had points in this segment:
     PointValuesWriter pointValuesWriter; // 一个段该域拥有这一个， flush完后，就会清空
 
@@ -812,7 +812,7 @@ final class DefaultIndexingChain extends DocConsumer {
       this.similarity = similarity;
       this.infoStream = infoStream;
       this.analyzer = analyzer;
-      if (invert) {// 若设置了
+      if (invert) {// 若设置了存储倒排索引
         setInvertState();
       }
     }
@@ -921,7 +921,7 @@ final class DefaultIndexingChain extends DocConsumer {
           invertState.lastStartOffset = startOffset;
 
           try {
-            invertState.length = Math.addExact(invertState.length, invertState.termFreqAttribute.getTermFrequency());
+            invertState.length = Math.addExact(invertState.length, invertState.termFreqAttribute.getTermFrequency());     // 相加
           } catch (ArithmeticException ae) {
             throw new IllegalArgumentException("too many tokens for field \"" + field.name() + "\"");
           }

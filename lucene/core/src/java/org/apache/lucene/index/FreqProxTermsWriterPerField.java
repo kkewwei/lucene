@@ -111,7 +111,7 @@ final class FreqProxTermsWriterPerField extends TermsHashPerField {// segment内
       fieldState.maxTermFrequency = Math.max(1, fieldState.maxTermFrequency);
     } else { // 需要存储词频信息
       postings.lastDocCodes[termID] = docID << 1;
-      postings.termFreqs[termID] = getTermFreq();
+      postings.termFreqs[termID] = getTermFreq();// 只是先记录下来，但是位置和偏移量信息，已经存入缓存结构中了
       if (hasProx) { // TermVectorsConsumerPerField和FreqProxTermsWriterPerField都会调用newTerm()存储 offset, proc三样
         writeProx(termID, fieldState.position); // 向stream1中存储了proxCode
         if (hasOffsets) {
@@ -143,7 +143,7 @@ final class FreqProxTermsWriterPerField extends TermsHashPerField {// segment内
         postings.lastDocIDs[termID] = docID;
         fieldState.uniqueTermCount++;
       }
-    } else if (docID != postings.lastDocIDs[termID]) {// 不是同一个文档了了，那么开始进行收集词频等信息
+    } else if (docID != postings.lastDocIDs[termID]) {// 不是同一个文档了了，那么开始进行收集词频等信息。并将词频信息落盘
       assert docID > postings.lastDocIDs[termID]:"id: "+docID + " postings ID: "+ postings.lastDocIDs[termID] + " termID: "+termID;
       // Term not yet seen in the current doc but previously
       // seen in other doc(s) since the last flush
@@ -153,7 +153,7 @@ final class FreqProxTermsWriterPerField extends TermsHashPerField {// segment内
       if (1 == postings.termFreqs[termID]) {  // 词频为1
         writeVInt(0, postings.lastDocCodes[termID]|1); // 注意最后一位是1，就存了一位。所以存储时需要左移动一位
       } else {
-        writeVInt(0, postings.lastDocCodes[termID]);
+        writeVInt(0, postings.lastDocCodes[termID]); // 看newTerms里面的 docID << 1
         writeVInt(0, postings.termFreqs[termID]);
       }
 
@@ -172,7 +172,7 @@ final class FreqProxTermsWriterPerField extends TermsHashPerField {// segment内
         assert !hasOffsets;
       }
       fieldState.uniqueTermCount++;
-    } else { // 一个doc还没有写完
+    } else { // 一个doc还没有写完，那么始终是统计词频
       postings.termFreqs[termID] = Math.addExact(postings.termFreqs[termID], getTermFreq()); // 词频想加
       fieldState.maxTermFrequency = Math.max(fieldState.maxTermFrequency, postings.termFreqs[termID]);
       if (hasProx) { // 继续统计post
@@ -185,7 +185,7 @@ final class FreqProxTermsWriterPerField extends TermsHashPerField {// segment内
   }
 
   private int getTermFreq() {
-    int freq = termFreqAtt.getTermFrequency(); // 获取词频
+    int freq = termFreqAtt.getTermFrequency(); // 默认获取词频,每次一定是1
     if (freq != 1) {
       if (hasProx) {
         throw new IllegalStateException("field \"" + getFieldName() + "\": cannot index positions while using custom TermFrequencyAttribute");

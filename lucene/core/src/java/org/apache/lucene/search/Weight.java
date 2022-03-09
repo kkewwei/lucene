@@ -177,7 +177,7 @@ public abstract class Weight implements SegmentCacheable {
    * @throws IOException if there is a low-level I/O error
    */
   public BulkScorer bulkScorer(LeafReaderContext context) throws IOException {
-
+    // 可能跑到TermQuery$TermWeight.scorer()
     Scorer scorer = scorer(context); // 可以返回ConstantScoreScorer
     if (scorer == null) {
       // No docs match
@@ -219,7 +219,7 @@ public abstract class Weight implements SegmentCacheable {
         return DocIdSetIterator.NO_MORE_DOCS;
       } else { // 进来
         int doc = scorer.docID();
-        if (doc < min) {
+        if (doc < min) {// 文档号码
           if (twoPhase == null) { // 都会跑到这里
             doc = iterator.advance(min); // 文档Id向后找一个
           } else {

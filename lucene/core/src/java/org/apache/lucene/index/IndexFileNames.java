@@ -78,7 +78,7 @@ public final class IndexFileNames {
       if (ext.length() > 0) {
         res.append('.').append(ext);
       }
-      return res.toString();
+      return res.toString(); // 比如ddd_8.liv格式
     }
   }
 
@@ -162,7 +162,7 @@ public final class IndexFileNames {
     // segment_gen.ext
     // segment_codec_suffix.ext
     // segment_gen_codec_suffix.ext
-    if (parts.length == 2 || parts.length == 4) {
+    if (parts.length == 2 || parts.length == 4) { //_n_lucene80_0.dev
       return Long.parseLong(parts[1], Character.MAX_RADIX);
     } else {
       return 0;

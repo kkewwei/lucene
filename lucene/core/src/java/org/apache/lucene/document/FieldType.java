@@ -42,7 +42,7 @@ public class FieldType implements IndexableFieldType  {
   private boolean frozen; // 字段设置不再允许修改
   private DocValuesType docValuesType = DocValuesType.NONE;
   private int dimensionCount;// 有几个维度
-  private int indexDimensionCount;// 有几个数字
+  private int indexDimensionCount;// 有几个数字，
   private int dimensionNumBytes;// 每个维度的长度,int为4位，long为8位
   private Map<String, String> attributes;
 
@@ -338,7 +338,7 @@ public class FieldType implements IndexableFieldType  {
 
   @Override
   public int pointDimensionCount() {
-    return dimensionCount;
+    return dimensionCount;// 维度个数
   }
 
   @Override

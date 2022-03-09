@@ -91,7 +91,7 @@ public abstract class PushPostingsWriterBase extends PostingsWriterBase {
     this.fieldInfo = fieldInfo;
     indexOptions = fieldInfo.getIndexOptions();
 
-    writeFreqs = indexOptions.compareTo(IndexOptions.DOCS_AND_FREQS) >= 0;
+    writeFreqs = indexOptions.compareTo(IndexOptions.DOCS_AND_FREQS) >= 0;//确认是否存储了
     writePositions = indexOptions.compareTo(IndexOptions.DOCS_AND_FREQS_AND_POSITIONS) >= 0;
     writeOffsets = indexOptions.compareTo(IndexOptions.DOCS_AND_FREQS_AND_POSITIONS_AND_OFFSETS) >= 0;        
     writePayloads = fieldInfo.hasPayloads();
@@ -114,7 +114,7 @@ public abstract class PushPostingsWriterBase extends PostingsWriterBase {
       }
     }
   }
-  // 处理的是该词在每个文档中的词频及startOffset&endOffset
+  // 处理的是该词在每个文档中的词频及startOffset&endOffset，存储到doc(跳表)、pos，pay文件中
   @Override
   public final BlockTermState writeTerm(BytesRef term, TermsEnum termsEnum, FixedBitSet docsSeen, NormsProducer norms) throws IOException {
     NumericDocValues normValues;
@@ -127,14 +127,14 @@ public abstract class PushPostingsWriterBase extends PostingsWriterBase {
     postingsEnum = termsEnum.postings(postingsEnum, enumFlags); // 读取了该词的stream1,stream2   FreqProxTermsEnum
     assert postingsEnum != null;
 
-    int docFreq = 0;
-    long totalTermFreq = 0; //该文档总的词频
+    int docFreq = 0; // 该词在多少个文档中出现过
+    long totalTermFreq = 0; //该文档在该segment中出现的总词频
     while (true) { // 从内存中的倒排索引获取此term的所有数据，按doc的维度遍历处理该词所在的每个doc的词频及offset
       int docID = postingsEnum.nextDoc();// 读取这个term的第一个docID。每次读取一批文档
       if (docID == PostingsEnum.NO_MORE_DOCS) {
         break;
       }
-      docFreq++; // 该词在多少个文档中出现过
+      docFreq++;
       docsSeen.set(docID); // 在这个文档中可见
       int freq;
       if (writeFreqs) {
@@ -143,7 +143,7 @@ public abstract class PushPostingsWriterBase extends PostingsWriterBase {
       } else {
         freq = -1;
       } // 首先检查上一批block是否处理完了，处理完了则建立调表节点。然后检查是否达到一个block，达到了，则将DocId、freq压缩到doc文件中
-      startDoc(docID, freq); // 会检查上批block是否已经处理完成了。保存freq。
+      startDoc(docID, freq); // 会检查上批block是否已经处理完成了。保存freq。只会对doc文件建立跳表
 
       if (writePositions) {
         for(int i=0;i<freq;i++) { // 对每个词的每个position都读取出来
@@ -158,7 +158,7 @@ public abstract class PushPostingsWriterBase extends PostingsWriterBase {
             startOffset = -1;
             endOffset = -1;
           } // 检查是否达到一个block的词个数，达到就开始存储DeltaPostion、DeltaStartOffset、length
-          addPosition(pos, payload, startOffset, endOffset); // 保存增量的freq。
+          addPosition(pos, payload, startOffset, endOffset); // 保存增量的freq。跑到Lucene84PostingsWriter
         }
       }
       //
@@ -169,7 +169,7 @@ public abstract class PushPostingsWriterBase extends PostingsWriterBase {
       return null;
     } else { // 开始落文件
       BlockTermState state = newTermState(); // 给这个block赋予一些元数据
-      state.docFreq = docFreq; // 存在多少个文档中
+      state.docFreq = docFreq; // 该词在多少文档中出现过
       state.totalTermFreq = writeFreqs ? totalTermFreq : -1; // 该词总共出现的次数
       finishTerm(state); // 当前term读取完了。将跳表信息填入doc
       return state;

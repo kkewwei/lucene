@@ -51,10 +51,10 @@ import org.apache.lucene.util.packed.PackedInts;
 
 /**
  * {@link TermVectorsWriter} for {@link CompressingTermVectorsFormat}.
- * @lucene.experimental
+ * @lucene.experimental // 单个文档形式的，tvd和fdt都是一样存储方式
  */ // 对应Term vector索引的Writer，底层是压缩Block格式。每次刷新一次就清空一次，下次再写入时，再重新生成
 public final class CompressingTermVectorsWriter extends TermVectorsWriter {
-
+   // 会产生tvd、tvm、tvx。和CompressingStoredFieldsWriter 的fdt、fdm、fdx的作用是一样的。
   // hard limit on the maximum number of documents per chunk
   static final int MAX_DOCUMENTS_PER_CHUNK = 128;
 
@@ -74,7 +74,7 @@ public final class CompressingTermVectorsWriter extends TermVectorsWriter {
   static final int FLAGS_BITS = PackedInts.bitsRequired(POSITIONS | OFFSETS | PAYLOADS);
 
   private final String segment;
-  private FieldsIndexWriter indexWriter; // 就是CompressingStoredFieldsIndexWriter
+  private FieldsIndexWriter indexWriter; // 就是FieldsIndexWriter
   private IndexOutput vectorsStream;// _0.tvd
 
   private final CompressionMode compressionMode;
@@ -192,12 +192,12 @@ public final class CompressingTermVectorsWriter extends TermVectorsWriter {
   }
 
   private int numDocs; // total number of docs seen ，目前总共写入的文档数
-  private final Deque<DocData> pendingDocs; // pending docs  将tv写入别的对象中了的个数，128个文档会刷新一次，刷完后会再次清空
+  private final Deque<DocData> pendingDocs; // pending docs  将tv写入别的对象中了的个数，每128个文档会清空一次
   private DocData curDoc; // current document, 能放很多FieldData。
   private FieldData curField; // current field, 每个文档每个域都会生成一个
   private final BytesRef lastTerm; // 当前文档当前域的上一个词，写完了这个域就清空了
   private int[] positionsBuf, startOffsetsBuf, lengthsBuf, payloadLengthsBuf; // 存放所有词（相同词算两次）的位置信息，起始位置offset、词的长度，。。。。。。一个segment共享一个
-  private final GrowableByteArrayDataOutput termSuffixes; // buffered term suffixes // 只存储这个词不相同的后缀，一个链共享一个，每128个文档刷新一次才清理一次
+  private final GrowableByteArrayDataOutput termSuffixes; // buffered term suffixes // 只存储这个词不相同的后缀，一个链共享一个，每128个文档会清空一次
   private final GrowableByteArrayDataOutput payloadBytes; // buffered term payloads
   private final BlockPackedWriter writer;  // BlockPackedWriter
   //是在写入完成时，还没有调用commit时调该函数
@@ -316,13 +316,13 @@ public final class CompressingTermVectorsWriter extends TermVectorsWriter {
     return termSuffixes.getPosition() >= chunkSize // 不相同的尾长累加>4k
         || pendingDocs.size() >= MAX_DOCUMENTS_PER_CHUNK;  // 每个term个数达到128个
   }
-  // 如果一个chunk满了，会向磁盘中刷, 刷新的东西还是蛮多的，很重要的函数
+  // 如果一个chunk满了(128个分片或者16kb)，会向磁盘中刷, 刷新的东西还是蛮多的，很重要的函数
   private void flush() throws IOException {
     final int chunkDocs = pendingDocs.size();
     assert chunkDocs > 0 : chunkDocs;
 
-    // write the index file， 暂时放在缓存中，等1024次后在一起刷到tvx中
-    indexWriter.writeIndex(chunkDocs, vectorsStream.getFilePointer()); // 刷新tvx文件
+    // write the index file， 写入_ids_0.tmp  _pointers_1.tmp中
+    indexWriter.writeIndex(chunkDocs, vectorsStream.getFilePointer());
 
     final int docBase = numDocs - chunkDocs;
     vectorsStream.writeVInt(docBase); // 写入tvd
@@ -335,7 +335,7 @@ public final class CompressingTermVectorsWriter extends TermVectorsWriter {
       // unique field numbers (sorted)
       final int[] fieldNums = flushFieldNums(); //存储该chunk的distinct的域编号，并返回这些distinct
       // offsets in the array of unique field numbers
-      flushFields(totalFields, fieldNums);// 存储每个文档每个域的编号
+      flushFields(totalFields, fieldNums);// 存储每个文档每个域在distinct中的序号
       // flags (does the field have positions, offsets, payloads?)
       flushFlags(totalFields, fieldNums); // 写入一个block每个的字段标志位，该域的标志位（POSITIONS|OFFSETS|PAYLOADS）。若字段标志位相同，只用写一次的
       // number of terms of each field
@@ -369,7 +369,7 @@ public final class CompressingTermVectorsWriter extends TermVectorsWriter {
       vectorsStream.writeVInt(numFields);
       return numFields;
     } else {
-      writer.reset(vectorsStream); // 将writer目标写入地址改为vectorsStream
+      writer.reset(vectorsStream); // 从头开始统计
       int totalFields = 0; // 该chunk所有文档域个数的累加
       for (DocData dd : pendingDocs) {
         writer.add(dd.numFields);
@@ -382,7 +382,7 @@ public final class CompressingTermVectorsWriter extends TermVectorsWriter {
 
   /** Returns a sorted array containing unique field numbers */
   private int[] flushFieldNums() throws IOException {
-    SortedSet<Integer> fieldNums = new TreeSet<>();
+    SortedSet<Integer> fieldNums = new TreeSet<>(); // 所有文档，所有涉及到的域num全部弄出来
     for (DocData dd : pendingDocs) {
       for (FieldData fd : dd.fields) {
         fieldNums.add(fd.fieldNum); // 每个文档域的编号，按照红黑树存储distint的节点
@@ -413,8 +413,8 @@ public final class CompressingTermVectorsWriter extends TermVectorsWriter {
 
   private void flushFields(int totalFields, int[] fieldNums) throws IOException {
     final PackedInts.Writer writer = PackedInts.getWriterNoHeader(vectorsStream, PackedInts.Format.PACKED, totalFields, PackedInts.bitsRequired(fieldNums.length - 1), 1);
-    for (DocData dd : pendingDocs) {
-      for (FieldData fd : dd.fields) {
+    for (DocData dd : pendingDocs) { // 遍历每个文档
+      for (FieldData fd : dd.fields) {// 遍历每个域
         final int fieldNumIndex = Arrays.binarySearch(fieldNums, fd.fieldNum); // 二叉搜索这个第几个数，fieldNums从小到大排序
         assert fieldNumIndex >= 0;
         writer.add(fieldNumIndex);
@@ -435,14 +435,14 @@ public final class CompressingTermVectorsWriter extends TermVectorsWriter {
         assert fieldNumOff >= 0;
         if (fieldFlags[fieldNumOff] == -1) {
           fieldFlags[fieldNumOff] = fd.flags;
-        } else if (fieldFlags[fieldNumOff] != fd.flags) {
+        } else if (fieldFlags[fieldNumOff] != fd.flags) { // 若flags不一样，说明有问题了
           nonChangingFlags = false;
           break outer;
         }
       }
     }
 
-    if (nonChangingFlags) {
+    if (nonChangingFlags) { //
       // write one flag per field num
       vectorsStream.writeVInt(0); // 标志一样
       final PackedInts.Writer writer = PackedInts.getWriterNoHeader(vectorsStream, PackedInts.Format.PACKED, fieldFlags.length, FLAGS_BITS, 1);
@@ -496,7 +496,7 @@ public final class CompressingTermVectorsWriter extends TermVectorsWriter {
       }
     }
     writer.finish();
-    writer.reset(vectorsStream);
+    writer.reset(vectorsStream); // 重置
     for (DocData dd : pendingDocs) {
       for (FieldData fd : dd.fields) {
         for (int i = 0; i < fd.numTerms; ++i) {// 该域有几个单独的词

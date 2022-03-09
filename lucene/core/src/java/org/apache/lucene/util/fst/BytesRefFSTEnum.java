@@ -23,7 +23,7 @@ import org.apache.lucene.util.ArrayUtil;
 import org.apache.lucene.util.BytesRef;
 
 /** Enumerates all input (BytesRef) + output pairs in an
- *  FST.
+ *  FST. // 枚举fst结构中的所有输入输出
  *
   * @lucene.experimental
 */

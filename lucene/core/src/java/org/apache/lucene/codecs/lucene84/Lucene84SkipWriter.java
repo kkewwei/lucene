@@ -49,7 +49,7 @@ import org.apache.lucene.store.IndexOutput;
  *
  */
 final class Lucene84SkipWriter extends MultiLevelSkipListWriter {
-  private int[] lastSkipDoc;
+  private int[] lastSkipDoc;// 该级别上次建立跳表元素的文档id(8*x)一个原始为1级别，最大10级别.
   private long[] lastSkipDocPointer;
   private long[] lastSkipPosPointer;
   private long[] lastSkipPayPointer;
@@ -59,8 +59,8 @@ final class Lucene84SkipWriter extends MultiLevelSkipListWriter {
   private final IndexOutput posOut;
   private final IndexOutput payOut;
 
-  private int curDoc;
-  private long curDocPointer;
+  private int curDoc; // 当前跳表元素写入时，当前docID
+  private long curDocPointer;// 当前跳表元素写入时，当前doc的位置
   private long curPosPointer;
   private long curPayPointer;
   private int curPosBufferUpto;
@@ -101,9 +101,9 @@ final class Lucene84SkipWriter extends MultiLevelSkipListWriter {
   // is pretty slow for rare terms in large segments as we have to fill O(log #docs in segment) of junk.
   // this is the vast majority of terms (worst case: ID field or similar).  so in resetSkip() we save 
   // away the previous pointers, and lazy-init only if we need to buffer skip data for the term.
-  private boolean initialized;
-  long lastDocFP;
-  long lastPosFP;
+  private boolean initialized; // 仅仅对超过128个文档的词建立倒排索引，因为初始化比较慢
+  long lastDocFP; //
+  long lastPosFP; //
   long lastPayFP;
 
   @Override
@@ -124,7 +124,7 @@ final class Lucene84SkipWriter extends MultiLevelSkipListWriter {
   }
   
   private void initSkip() {
-    if (!initialized) {
+    if (!initialized) { // 懒惰初始化，初始化比较浪费时间
       super.resetSkip();
       Arrays.fill(lastSkipDoc, 0);
       Arrays.fill(lastSkipDocPointer, lastDocFP);
@@ -163,7 +163,7 @@ final class Lucene84SkipWriter extends MultiLevelSkipListWriter {
   }
 
   private final ByteBuffersDataOutput freqNormOut = ByteBuffersDataOutput.newResettableInstance();
-
+  // 写达到一个跳表文档时（128*x个文档）
   @Override
   protected void writeSkipData(int level, IndexOutput skipBuffer) throws IOException {
 

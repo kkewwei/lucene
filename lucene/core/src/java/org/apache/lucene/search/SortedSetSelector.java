@@ -79,7 +79,7 @@ public class SortedSetSelector {
       return singleton;
     } else {
       switch(selector) { //
-        case MIN: return new MinValue(sortedSet); // 默认为这个
+        case MIN: return new MinValue(sortedSet); // 默认为这个，根据每个域最小的那个值排序
         case MAX: return new MaxValue(sortedSet);
         case MIDDLE_MIN: return new MiddleMinValue(sortedSet);
         case MIDDLE_MAX: return new MiddleMaxValue(sortedSet);
@@ -93,7 +93,7 @@ public class SortedSetSelector {
   static class MinValue extends SortedDocValues {
     final SortedSetDocValues in;
     private int ord; // 取出的是当前域其中一个同名字段的termId, 这里取出的是最小的那个
-    
+    // 这个词排第4小
     MinValue(SortedSetDocValues in) {
       this.in = in;
     }
@@ -153,7 +153,7 @@ public class SortedSetSelector {
 
     private void setOrd() throws IOException {
       if (docID() != NO_MORE_DOCS) {
-        ord = (int) in.nextOrd();
+        ord = (int) in.nextOrd(); // 这个词排第4小
       } else {
         ord = (int) NO_MORE_ORDS;
       }

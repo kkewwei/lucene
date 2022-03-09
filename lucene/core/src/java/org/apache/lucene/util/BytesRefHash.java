@@ -54,15 +54,15 @@ public final class BytesRefHash implements Accountable {
   // the following fields are needed by comparator,
   // so package private to prevent access$-methods:
   final ByteBlockPool pool;   //要存储的值(BytesRef)的最终位置， TermVectorsConsumerPerField.pool和FreqProxTermsWriterPerField.pool是同一个对象
-  int[] bytesStart;  // 实际上的作用为了来找到每个词组在pool中的起始位置，下标是是termId, 存放term长度+term内容。= ParallelPostingsArray.textStarts, 每个域都有一个.
+  int[] bytesStart;  // 实际上的作用为了来找到每个词组在pool中的起始位置（pool绝对位置），下标是是termId, 存放term长度+term内容。= ParallelPostingsArray.textStarts, 每个域都有一个.
   // TermVectorsConsumerPerField.BytesRefHash的bytesStart时刻会和FreqProxTermsWriterPerField.BytesRefHash的bytesStart保持一致
   private final BytesRef scratch1 = new BytesRef();
   private int hashSize;// 就是ids数组的长度
   private int hashHalfSize;
-  private int hashMask;
+  private int hashMask; //
   private int count;//count是存储的这个文档distinct(单词)的个数
   private int lastCount = -1;  // TermVectorsConsumerPerField.BytesRefHash的ids在每写完一个doc时，会清空。详见set()函数。lastCount是上个文档的distinct个数
-  private int[] ids; // key根据term的hashcode获得的， 不为0，则说明里面存储的是termId，当hash冲突后，通过探针法解决。所有field之间的term还不共享。一个域内是共享的, 这里在每个文档被写完后，都会调用，清理掉ids
+  private int[] ids; // key根据term的hashcode获得的， 不为0，则说明里面存储的是termId。每个文档被写完后，TermVectorsConsumerPerField的都会清理掉ids
   private final BytesStartArray bytesStartArray; // PostingsBytesStartArray，对FreqProxTermsWriterPerField和TermVectorsConsumerPerField分别产生一个
   private Counter bytesUsed;
 
@@ -164,7 +164,7 @@ public final class BytesRefHash implements Accountable {
    * </p> // 根据termdId对应的值排序，返回的是termdId
    */ //  仅仅根据在pool中存储的每个termId的byte从小到大进行排序
   public int[] sort() { // 返回的是每个termId
-    final int[] compact = compact();
+    final int[] compact = compact();//在ids数组中次的的编号顺序
     new StringMSBRadixSorter() {
 
       BytesRef scratch = new BytesRef();
@@ -183,7 +183,7 @@ public final class BytesRefHash implements Accountable {
       }
 
     }.sort(0, count);
-    return compact;
+    return compact; //
   }
 
   private boolean equals(int id, BytesRef b) {
@@ -264,7 +264,7 @@ public final class BytesRefHash implements Accountable {
     //如果为-1，则是新的term
     if (e == -1) {
       // new entry    存储的时候，在ByteBlockPool中的结构是：长度+具体的term。至少预留2byte存放长度
-      final int len2 = 2 + bytes.length;// lucene支持的term长度不超过2个字节，长度采用变长整数表示，因此需要申请的存储空间为2 + bytes.length。
+      final int len2 = 2 + bytes.length;// lucene支持的term长度不超过2个字节，长度采用变长整数表示，因此需要申请的存储空间为2 + bytes.length。(申请俩不定用俩)
       if (len2 + pool.byteUpto > BYTE_BLOCK_SIZE) {
         if (len2 > BYTE_BLOCK_SIZE) {
           throw new MaxBytesLengthExceededException("bytes can be at most " // 这里报的我们经常见到的异样
@@ -296,7 +296,7 @@ public final class BytesRefHash implements Accountable {
             length);
       } else {
         // 2 byte to store length
-        buffer[bufferUpto] = (byte) (0x80 | (length & 0x7f));
+        buffer[bufferUpto] = (byte) (0x80 | (length & 0x7f)); // 高位为1
         buffer[bufferUpto + 1] = (byte) ((length >> 7) & 0xff);
         pool.byteUpto += length + 2;
         System.arraycopy(bytes.bytes, bytes.offset, buffer, bufferUpto + 2,
@@ -353,13 +353,13 @@ public final class BytesRefHash implements Accountable {
    *  directly and instead reference the byte[] term
    *  already stored by the postings BytesRefHash.  See
    *  add(int textStart) in TermsHashPerField. */
-  public int addByPoolOffset(int offset) {
+  public int addByPoolOffset(int offset) { //只有词向量使用这个api
     assert bytesStart != null : "Bytesstart is null - not initialized";
     // final position
     int code = offset;
     int hashPos = offset & hashMask;
     int e = ids[hashPos]; //这里在每个文档被写完后，都会调用，清理掉ids
-    if (e != -1 && bytesStart[e] != offset) {
+    if (e != -1 && bytesStart[e] != offset) { // 使用线性冲突法解决这个问题
       // Conflict; use linear probe to find an open slot
       // (see LUCENE-5604):
       do {
@@ -378,7 +378,7 @@ public final class BytesRefHash implements Accountable {
       e = count++; // 但是这里统计这，一样的
       bytesStart[e] = offset; // offset是pool所用第e个TermId到的位置。FreqProxTermsWriterPerField是全局的编号，TermVectorsConsumerPerField是局部的编号。
       assert ids[hashPos] == -1; // 统计的是该域对每个term的重新编号
-      ids[hashPos] = e;
+      ids[hashPos] = e;//随机产生一个,就是自己随机产生的一个
 
       if (count == hashHalfSize) {
         rehash(2 * hashSize, false);

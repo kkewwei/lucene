@@ -221,7 +221,7 @@ final class ForUtil {
   void encode(long[] longs, int bitsPerValue, DataOutput out) throws IOException {
     final int nextPrimitive;
     final int numLongs;
-    if (bitsPerValue <= 8) {
+    if (bitsPerValue <= 8) { // 小于8位，就用8位，是不是还存在浪费
       nextPrimitive = 8;
       numLongs = BLOCK_SIZE / 8;
       collapse8(longs);
@@ -285,7 +285,7 @@ final class ForUtil {
       }
     }
 
-    for (int i = 0; i < numLongsPerShift; ++i) {
+    for (int i = 0; i < numLongsPerShift; ++i) { // 开始向文件写了
       // Java longs are big endian and we want to read little endian longs, so we need to reverse bytes
       long l = Long.reverseBytes(tmp[i]);
       out.writeLong(l);

@@ -179,23 +179,23 @@ public class Lucene86SegmentInfoFormat extends SegmentInfoFormat {
       }
 
       assert version.prerelease == 0;
-      output.writeInt(si.maxDoc());
+      output.writeInt(si.maxDoc()); // 最大文档数
 
-      output.writeByte((byte) (si.getUseCompoundFile() ? SegmentInfo.YES : SegmentInfo.NO));
-      output.writeMapOfStrings(si.getDiagnostics());
+      output.writeByte((byte) (si.getUseCompoundFile() ? SegmentInfo.YES : SegmentInfo.NO));//是否使用compoundFile
+      output.writeMapOfStrings(si.getDiagnostics());//诊断信息
       Set<String> files = si.files();
       for (String file : files) {
         if (!IndexFileNames.parseSegmentName(file).equals(si.name)) {
           throw new IllegalArgumentException("invalid files: expected segment=" + si.name + ", got=" + files);
         }
       }
-      output.writeSetOfStrings(files);
+      output.writeSetOfStrings(files);//写这个segment涉及到的具体文件名
       output.writeMapOfStrings(si.getAttributes());
 
       Sort indexSort = si.getIndexSort();
       int numSortFields = indexSort == null ? 0 : indexSort.getSort().length;
       output.writeVInt(numSortFields);
-      for (int i = 0; i < numSortFields; ++i) {
+      for (int i = 0; i < numSortFields; ++i) {// 每个字段的属性
         SortField sortField = indexSort.getSort()[i];
         IndexSorter sorter = sortField.getIndexSorter();
         if (sorter == null) {

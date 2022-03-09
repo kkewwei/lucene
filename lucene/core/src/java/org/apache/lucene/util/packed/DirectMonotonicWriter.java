@@ -42,7 +42,7 @@ public final class DirectMonotonicWriter {
   final long numValues;
   final long baseDataPointer;
   final long[] buffer; // 最大存放1<<10个元素。（默认就是当前刷新时，一个block的最大文档数，最大为2^10(StoredField刷新时)）
-  int bufferSize;  // 缓存的数据个数，就是buffer里面的有效个数。通过改动bufferSize可以清空buffer
+  int bufferSize;  // 缓存的数据个数，就是buffer里面的有效个数。通过改动bufferSize可以清空buffer,最大1024个元素，一压酥
   long count;
   boolean finished;
 
@@ -97,11 +97,11 @@ public final class DirectMonotonicWriter {
       meta.writeByte((byte) 0);
     } else {
       final int bitsRequired = DirectWriter.unsignedBitsRequired(maxDelta); // 需要几位
-      DirectWriter writer = DirectWriter.getInstance(data, bufferSize, bitsRequired);
+      DirectWriter writer = DirectWriter.getInstance(data, bufferSize, bitsRequired);// 
       for (int i = 0; i < bufferSize; ++i) {
         writer.add(buffer[i]); // 每个chunk与理论平均值之间的差距
       }
-      writer.finish();
+      writer.finish();// 数据写入data中
       meta.writeByte((byte) bitsRequired); // 写入需要的byte个数
     }
     bufferSize = 0;

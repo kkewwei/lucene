@@ -31,7 +31,7 @@ import org.apache.lucene.util.FixedBitSet;
 import org.apache.lucene.util.IOUtils;
 // 写_X.tim,_X.tip, _X.doc, _X.pos文件。
 final class FreqProxTermsWriter extends TermsHash {
- // segment内固定
+ // segment内固定，，每个DocumentsWriterPerThread都拥有单独的一个
   public FreqProxTermsWriter(DocumentsWriterPerThread docWriter, TermsHash termVectors) {
     super(docWriter, true, termVectors);
   }
@@ -68,7 +68,7 @@ final class FreqProxTermsWriter extends TermsHash {
   @Override
   public void flush(Map<String,TermsHashPerField> fieldsToFlush, final SegmentWriteState state,
       Sorter.DocMap sortMap, NormsProducer norms) throws IOException {
-    super.flush(fieldsToFlush, state, sortMap, norms); // tvd、tvm文件
+    super.flush(fieldsToFlush, state, sortMap, norms); // tvd、tvm文件构建过程
 
     // Gather all fields that saw any postings:
     List<FreqProxTermsWriterPerField> allFields = new ArrayList<>(); // 就四个域

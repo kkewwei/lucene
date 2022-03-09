@@ -129,18 +129,18 @@ public final class SegmentInfos implements Cloneable, Iterable<SegmentCommitInfo
   static final int VERSION_CURRENT = VERSION_86;
 
   /** Used to name new segments. */
-  public long counter;
+  public long counter;// 新segment编号
   
   /** Counts how often the index has been changed.  */
   public long version; // index被修改过的次数
 
-  private long generation;     // generation of the "segments_N" for the next commit
+  private long generation;     // generation of the "segments_N" for the next commit 当前generation，下个segment是generation+1
   private long lastGeneration; // generation of the "segments_N" file we last successfully read
                                // or wrote; this is normally the same as generation except if
                                // there was an IOException that had interrupted a commit
 
   /** Opaque Map&lt;String, String&gt; that user can specify during IndexWriter.commit */
-  public Map<String,String> userData = Collections.emptyMap();
+  public Map<String,String> userData = Collections.emptyMap(); // history_uuid / local_checkpoint / max_seq_np / max_unsafe_auto_id_timestamp min_rrtained_seq_no  translog_uuid
   // userData:history_uuid,local_checkpoint,max_seq_no,max_unsafe_auto_id_timestamp, tanslog_uuid
   private List<SegmentCommitInfo> segments = new ArrayList<>(); // 目前产生的segment(里面包含了SegmentInfo)
   
@@ -284,7 +284,7 @@ public final class SegmentInfos implements Cloneable, Iterable<SegmentCommitInfo
    */ // 从segments_1中读取这个所有segments的元数据，然后再去遍历所有的_n.si的内容，获取每个segment的元数据信息
   public static final SegmentInfos readCommit(Directory directory, String segmentFileName) throws IOException {
 
-    long generation = generationFromSegmentsFileName(segmentFileName);
+    long generation = generationFromSegmentsFileName(segmentFileName); // segments_n,读取n
     //System.out.println(Thread.currentThread() + ": SegmentInfos.readCommit " + segmentFileName);
     try (ChecksumIndexInput input = directory.openChecksumInput(segmentFileName, IOContext.READ)) {// 打开文件的方式也分好几种，NIO和MMAP方式, 会检查是否有必要使用mmapp打开，详见HybridDirectory.useDelegate
       try {
@@ -465,12 +465,12 @@ public final class SegmentInfos implements Cloneable, Iterable<SegmentCommitInfo
 
   // Only true after prepareCommit has been called and
   // before finishCommit is called
-  boolean pendingCommit;
+  boolean pendingCommit; // 等待被确认finishCommit
 
   private void write(Directory directory) throws IOException {
 
     long nextGeneration = getNextPendingGeneration(); // 获取下一个
-    String segmentFileName = IndexFileNames.fileNameFromGeneration(IndexFileNames.PENDING_SEGMENTS,
+    String segmentFileName = IndexFileNames.fileNameFromGeneration(IndexFileNames.PENDING_SEGMENTS, // 先写入到pending_segments_n中
                                                                    "",
                                                                    nextGeneration);
 
@@ -499,7 +499,7 @@ public final class SegmentInfos implements Cloneable, Iterable<SegmentCommitInfo
       }
     }
   }
-
+  // es调用flush会触发到这里:这是写segments_n的过程，可看IndexWriter.commit()。si文件写入过程可以查看Lucene86SegmentInfoFormat.java。
   /** Write ourselves to the provided {@link IndexOutput} */
   public void write(IndexOutput out) throws IOException {
     CodecUtil.writeIndexHeader(out, "segments", VERSION_CURRENT, 
@@ -513,7 +513,7 @@ public final class SegmentInfos implements Cloneable, Iterable<SegmentCommitInfo
 
     out.writeLong(version);
     out.writeVLong(counter); // write counter
-    out.writeInt(size());
+    out.writeInt(size()); // 多少个segment
 
     if (size() > 0) {
 
@@ -578,7 +578,7 @@ public final class SegmentInfos implements Cloneable, Iterable<SegmentCommitInfo
         out.writeSetOfStrings(e.getValue());
       }
     }
-    out.writeMapOfStrings(userData);
+    out.writeMapOfStrings(userData);// 最后写userData
     CodecUtil.writeFooter(out);
   }
 
@@ -815,9 +815,9 @@ public final class SegmentInfos implements Cloneable, Iterable<SegmentCommitInfo
         files.add(segmentFileName);
       }
     }
-    final int size = size(); // 遍历产生的segment
+    final int size = size(); // 遍历所有的segments
     for(int i=0;i<size;i++) {
-      final SegmentCommitInfo info = info(i);
+      final SegmentCommitInfo info = info(i);// 涉及到的所有文件
       files.addAll(info.files());
     }
     
@@ -826,13 +826,13 @@ public final class SegmentInfos implements Cloneable, Iterable<SegmentCommitInfo
 
   /** Returns the committed segments_N filename. */
   final String finishCommit(Directory dir) throws IOException {
-    if (pendingCommit == false) {
+    if (pendingCommit == false) {// 已经完成了
       throw new IllegalStateException("prepareCommit was not called");
     }
     boolean success = false;
     final String dest;
     try {
-      final String src = IndexFileNames.fileNameFromGeneration(IndexFileNames.PENDING_SEGMENTS, "", generation); // pending_segments_r
+      final String src = IndexFileNames.fileNameFromGeneration(IndexFileNames.PENDING_SEGMENTS, "", generation); // pending_segments_n，新产生的
       dest = IndexFileNames.fileNameFromGeneration(IndexFileNames.SEGMENTS, "", generation);//segments_r
       dir.rename(src, dest);
       dir.syncMetaData();
@@ -884,7 +884,7 @@ public final class SegmentInfos implements Cloneable, Iterable<SegmentCommitInfo
   public Map<String,String> getUserData() {
     return userData;
   }
-
+  // 会在IndexWriter.prepareCommitInternal()调用
   /** Sets the commit data. */
   public void setUserData(Map<String,String> data, boolean doIncrementVersion) {
     if (data == null) {
@@ -901,8 +901,8 @@ public final class SegmentInfos implements Cloneable, Iterable<SegmentCommitInfo
    *  generation, version, counter so that future commits
    *  remain write once.
    */
-  void replace(SegmentInfos other) {
-    rollbackSegmentInfos(other.asList());
+  void replace(SegmentInfos other) { // 使用旧的segments_n来代替
+    rollbackSegmentInfos(other.asList());// 里面的所有semgent给替换了
     lastGeneration = other.lastGeneration;
   }
 

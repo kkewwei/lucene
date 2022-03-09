@@ -100,51 +100,51 @@ final class IndexedDISI extends DocIdSetIterator {
   
   private static final int BLOCK_SIZE = 65536;   // The number of docIDs that a single block represents
 
-  private static final int DENSE_BLOCK_LONGS = BLOCK_SIZE/Long.SIZE; // 1024
+  private static final int DENSE_BLOCK_LONGS = BLOCK_SIZE/Long.SIZE; // 1024  使用long存储，需要多少个long
   public static final byte DEFAULT_DENSE_RANK_POWER = 9; // Every 512 docIDs / 8 longs
 
-  static final int MAX_ARRAY_LENGTH = (1 << 12) - 1;
-
+  static final int MAX_ARRAY_LENGTH = (1 << 12) - 1;// 4095
+  // 写dvd文件
   private static void flush(
       int block, FixedBitSet buffer, int cardinality, byte denseRankPower, IndexOutput out) throws IOException {
     assert block >= 0 && block < 65536;
-    out.writeShort((short) block);
+    out.writeShort((short) block); // 第几个block
     assert cardinality > 0 && cardinality <= 65536;
-    out.writeShort((short) (cardinality - 1));
-    if (cardinality > MAX_ARRAY_LENGTH) {
+    out.writeShort((short) (cardinality - 1)); // 这个block多少个词
+    if (cardinality > MAX_ARRAY_LENGTH) { // 若大于4095个词，使用
       if (cardinality != 65536) { // all docs are set
-        if (denseRankPower != -1) {
-          final byte[] rank = createRank(buffer, denseRankPower);
+        if (denseRankPower != -1) { // 512个词，产生一个二级索引（rank，记录累加的文档数），512个词/64=8个long
+          final byte[] rank = createRank(buffer, denseRankPower);//使用rank结构（structure）实现在block的稠密度为DENSE中的word之间的跳转
           out.writeBytes(rank, rank.length);
         }
         for (long word : buffer.getBits()) {
-          out.writeLong(word);
+          out.writeLong(word);// 存储这个long
         }
       }
     } else {
       BitSetIterator it = new BitSetIterator(buffer, cardinality);
       for (int doc = it.nextDoc(); doc != DocIdSetIterator.NO_MORE_DOCS; doc = it.nextDoc()) {
-        out.writeShort((short) doc);
+        out.writeShort((short) doc);// 或者存储short
       }
     }
   }
-
+   // 使用rank结构（structure）实现在block的稠密度为DENSE中的word之间的跳转
   // Creates a DENSE rank-entry (the number of set bits up to a given point) for the buffer.
   // One rank-entry for every {@code 2^denseRankPower} bits, with each rank-entry using 2 bytes.
   // Represented as a byte[] for fast flushing and mirroring of the retrieval representation.
   private static byte[] createRank(FixedBitSet buffer, byte denseRankPower) {
-    final int longsPerRank = 1 << (denseRankPower-6);
-    final int rankMark = longsPerRank-1;
+    final int longsPerRank = 1 << (denseRankPower-6);// 需要几个long，来产生一个索引（rank）
+    final int rankMark = longsPerRank-1; // 只要检查每存储7个long，就产生一个（rank）
     final int rankIndexShift = denseRankPower-7; // 6 for the long (2^6) + 1 for 2 bytes/entry
-    final byte[] rank = new byte[DENSE_BLOCK_LONGS >> rankIndexShift];
+    final byte[] rank = new byte[DENSE_BLOCK_LONGS >> rankIndexShift]; // 每多少个long,产生一个二级索引（rank）
     final long[] bits = buffer.getBits();
     int bitCount = 0;
-    for (int word = 0 ; word < DENSE_BLOCK_LONGS ; word++) {
-      if ((word & rankMark) == 0) { // Every longsPerRank longs
-        rank[word >> rankIndexShift] = (byte)(bitCount>>8);
-        rank[(word >> rankIndexShift)+1] = (byte)(bitCount & 0xFF);
+    for (int word = 0 ; word < DENSE_BLOCK_LONGS ; word++) {// 需要多少个long来存储，就遍历多少次
+      if ((word & rankMark) == 0) { // Every longsPerRank longs,  每存储8个long(64*8=512个文档)
+        rank[word >> rankIndexShift] = (byte)(bitCount>>8);//  一个block最多存储2^16个文档，需要16位存储，高8位
+        rank[(word >> rankIndexShift)+1] = (byte)(bitCount & 0xFF);// 低8位
       }
-      bitCount += Long.bitCount(bits[word]);
+      bitCount += Long.bitCount(bits[word]); // 累加文档数
     }
     return rank;
   }
@@ -179,22 +179,22 @@ final class IndexedDISI extends DocIdSetIterator {
    * @throws IOException if there was an error writing to out.
    * @return the number of jump-table entries following the blocks, -1 for no entries.
    *         This should be stored in meta and used when creating an instance of IndexedDISI.
-   */
+   */// out: dvd文件中写文档id，每个block是划分好了固定区间，为了保证同一批处理的数据，都落到同一个区间，返回多少个block
   static short writeBitSet(DocIdSetIterator it, IndexOutput out, byte denseRankPower) throws IOException {
     final long origo = out.getFilePointer(); // All jumps are relative to the origo
     if ((denseRankPower < 7 || denseRankPower > 15) && denseRankPower != -1) {
       throw new IllegalArgumentException("Acceptable values for denseRankPower are 7-15 (every 128-32768 docIDs). " +
           "The provided power was " + denseRankPower + " (every " + (int)Math.pow(2, denseRankPower) + " docIDs)");
     }
-    int totalCardinality = 0;
-    int blockCardinality = 0;
-    final FixedBitSet buffer = new FixedBitSet(1<<16);
-    int[] jumps = new int[ArrayUtil.oversize(1, Integer.BYTES*2)];
+    int totalCardinality = 0; //所有block存在多少个词
+    int blockCardinality = 0; // 当前block存在多少个词
+    final FixedBitSet buffer = new FixedBitSet(1<<16);// 66636个词，稀疏矩阵存储每个文档id
+    int[] jumps = new int[ArrayUtil.oversize(1, Integer.BYTES*2)]; // 首先用4位来存储，实现在block之间的跳转
     int prevBlock = -1;
-    int jumpBlockIndex = 0;
-
+    int jumpBlockIndex = 0;// 当前这个block是第几个block
+    // 文档号是递增的
     for (int doc = it.nextDoc(); doc != DocIdSetIterator.NO_MORE_DOCS; doc = it.nextDoc()) {
-      final int block = doc >>> 16;
+      final int block = doc >>> 16; // 每个block区间docId间隔65536
       if (prevBlock != -1 && block != prevBlock) {
         // Track offset+index from previous block up to current
         jumps = addJumps(jumps, out.getFilePointer()-origo, totalCardinality, jumpBlockIndex, prevBlock+1);
@@ -207,10 +207,10 @@ final class IndexedDISI extends DocIdSetIterator {
         blockCardinality = 0;
       }
       buffer.set(doc & 0xFFFF);
-      blockCardinality++;
+      blockCardinality++; // 看存在于多少个block
       prevBlock = block;
     }
-    if (blockCardinality > 0) {
+    if (blockCardinality > 0) { // 当前block还有这么多文档位建立
       jumps = addJumps(jumps, out.getFilePointer()-origo, totalCardinality, jumpBlockIndex, prevBlock+1);
       totalCardinality += blockCardinality;
       flush(prevBlock, buffer, blockCardinality, denseRankPower, out);
@@ -222,7 +222,7 @@ final class IndexedDISI extends DocIdSetIterator {
     // To avoid creating 65K jump-table entries, only a single entry is created pointing to the offset of the
     // NO_MORE_DOCS block, with the jumpBlockIndex set to the logical EMPTY block after all real blocks.
     jumps = addJumps(jumps, out.getFilePointer()-origo, totalCardinality, lastBlock, lastBlock+1);
-    buffer.set(DocIdSetIterator.NO_MORE_DOCS & 0xFFFF);
+    buffer.set(DocIdSetIterator.NO_MORE_DOCS & 0xFFFF); // 将NO_MORE_DOCS置位最后一个block
     flush(DocIdSetIterator.NO_MORE_DOCS >>> 16, buffer, 1, denseRankPower, out);
     // offset+index jump-table stored at the end
     return flushBlockJumps(jumps, lastBlock+1, out, origo);
@@ -233,8 +233,8 @@ final class IndexedDISI extends DocIdSetIterator {
     assert offset < Integer.MAX_VALUE : "Logically the offset should not exceed 2^30 but was >= Integer.MAX_VALUE";
     jumps = ArrayUtil.grow(jumps, (endBlock+1)*2);
     for (int b = startBlock; b < endBlock; b++) {
-      jumps[b*2] = index;
-      jumps[b*2+1] = (int) offset;
+      jumps[b*2] = index; // 当前segment docValue中所有block中，当前该block第一个词是第几个写入文档（总的block打通统计）
+      jumps[b*2+1] = (int) offset; // 在dvd中的偏移量
     }
     return jumps;
   }
@@ -257,12 +257,12 @@ final class IndexedDISI extends DocIdSetIterator {
   // Members are pkg-private to avoid synthetic accessors when accessed from the `Method` enum
 
   /** The slice that stores the {@link DocIdSetIterator}. */
-  final IndexInput slice;
+  final IndexInput slice; // 映射docIds中非尾部跳表前面的内容
   final int jumpTableEntryCount;
   final byte denseRankPower;
-  final RandomAccessInput jumpTable; // Skip blocks of 64K bits
+  final RandomAccessInput jumpTable; // Skip blocks of 64K bits   映射jumps部分
   final byte[] denseRankTable;
-  final long cost;
+  final long cost;// 存储的总文档数
 
   /**
    * This constructor always creates a new blockSlice and a new jumpTable from in, to ensure that operations are
@@ -278,8 +278,8 @@ final class IndexedDISI extends DocIdSetIterator {
    * @param cost normally the number of logical docIDs.
    */
   IndexedDISI(IndexInput in, long offset, long length, int jumpTableEntryCount, byte denseRankPower, long cost) throws IOException {
-    this(createBlockSlice(in,"docs", offset, length, jumpTableEntryCount),
-        createJumpTable(in, offset, length, jumpTableEntryCount),
+    this(createBlockSlice(in,"docs", offset, length, jumpTableEntryCount),// 没有映射block中存储jumps的内容
+        createJumpTable(in, offset, length, jumpTableEntryCount),// 映射jumps的内容
         jumpTableEntryCount, denseRankPower, cost);
   }
 

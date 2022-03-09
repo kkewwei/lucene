@@ -78,7 +78,7 @@ abstract class TermsHash { // FreqProxTermsWriter或者TermVectorsConsumer，Ter
     if (nextTermsHash != null) {
       Map<String,TermsHashPerField> nextChildFields = new HashMap<>();
       for (final Map.Entry<String,TermsHashPerField> entry : fieldsToFlush.entrySet()) { // segment范围内就4个域
-        nextChildFields.put(entry.getKey(), entry.getValue().getNextPerField());
+        nextChildFields.put(entry.getKey(), entry.getValue().getNextPerField()); // 构建自己的字段名->Field
       }// 写tvd/tvm文件
       nextTermsHash.flush(nextChildFields, state, sortMap, norms);// 跑到TermVectorsConsumer那里，完成termVector相关的刷新工作
     }

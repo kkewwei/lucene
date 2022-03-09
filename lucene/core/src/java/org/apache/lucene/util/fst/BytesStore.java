@@ -35,20 +35,20 @@ class BytesStore extends DataOutput implements Accountable {
         RamUsageEstimator.shallowSizeOfInstance(BytesStore.class)
       + RamUsageEstimator.shallowSizeOfInstance(ArrayList.class);
 
-  private final List<byte[]> blocks = new ArrayList<>(); // 实际存储数据的地方，
+  private final List<byte[]> blocks = new ArrayList<>(); // 实际存储数据的地方，每个元数据32kb
 
   private final int blockSize; // blocks里面存放的一个数组大小
-  private final int blockBits; // 个数组的长度
+  private final int blockBits; // 个数组的长度，15位，32kb
   private final int blockMask;
 
   private byte[] current;  // 当前正在写入的byte[]。
-  private int nextWrite; //   当前byte[]正写到的地方
+  private int nextWrite; //   当前byte[]可写的位置
 
-  public BytesStore(int blockBits) {
+  public BytesStore(int blockBits) {// 默认15位
     this.blockBits = blockBits;
-    blockSize = 1 << blockBits;
+    blockSize = 1 << blockBits;// 一个block的大小
     blockMask = blockSize-1;
-    nextWrite = blockSize;
+    nextWrite = blockSize;// 写满了
   }
 
   /** Pulls bytes from the provided IndexInput.  */

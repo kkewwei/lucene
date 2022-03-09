@@ -54,13 +54,13 @@ final class ByteSliceReader extends DataInput {
     buffer = pool.buffers[bufferUpto];
     upto = startIndex & ByteBlockPool.BYTE_BLOCK_MASK;
 
-    final int firstSize = ByteBlockPool.LEVEL_SIZE_ARRAY[0];
-    // 就是在一个buffer之内
+    final int firstSize = ByteBlockPool.LEVEL_SIZE_ARRAY[0];// 5
+    // 就是在一个slice之内
     if (startIndex+firstSize >= endIndex) {
       // There is only this one slice to read
       limit = endIndex & ByteBlockPool.BYTE_BLOCK_MASK;
-    } else //
-      limit = upto+firstSize-4; // 说的是跳过那4个byte
+    } else // 多级sliceallocSlice
+      limit = upto+firstSize-4; // 说的是跳过那4个byte(往前推4位)
   }
 
   public boolean eof() {
@@ -73,7 +73,7 @@ final class ByteSliceReader extends DataInput {
     assert !eof();
     assert upto <= limit;
     if (upto == limit)
-      nextSlice();
+      nextSlice(); //这个buffer读完了，接着到下一个buffer
     return buffer[upto++];
   }
 
@@ -94,9 +94,9 @@ final class ByteSliceReader extends DataInput {
 
     return size;
   }
-
+   // 读取的时候调用，确定了肯定有多个slice
   public void nextSlice() {
-
+    // 下一个级别，读取4位组成的地址
     // Skip to our next slice
     final int nextIndex = ((buffer[limit]&0xff)<<24) + ((buffer[1+limit]&0xff)<<16) + ((buffer[2+limit]&0xff)<<8) + (buffer[3+limit]&0xff);
 

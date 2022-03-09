@@ -75,7 +75,7 @@ public final class RateLimitedIndexOutput extends IndexOutput {
   
   private void checkRate() throws IOException {// 检查是否需要merge中断
     if (bytesSinceLastPause > currentMinPauseCheckBytes) {
-      rateLimiter.pause(bytesSinceLastPause);
+      rateLimiter.pause(bytesSinceLastPause);// 每次写多检查一次，是否需要暂停
       bytesSinceLastPause = 0;
       currentMinPauseCheckBytes = rateLimiter.getMinPauseCheckBytes(); // 实时算出来的：当前限速下，写入速度*25ms的数据量就检查一次
     }    

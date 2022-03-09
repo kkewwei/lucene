@@ -42,7 +42,7 @@ import org.apache.lucene.store.Directory;
 
 // TODO: this is now a poor name, because this class also represents a
 // point-in-time view from an NRT reader
-public abstract class IndexCommit implements Comparable<IndexCommit> {
+public abstract class IndexCommit implements Comparable<IndexCommit> { // 一个提交点，主要能体现当时lucene层面落盘情况
 
   /**
    * Get the segments file (<code>segments_N</code>) associated 

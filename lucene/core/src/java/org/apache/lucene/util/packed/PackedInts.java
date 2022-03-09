@@ -56,7 +56,7 @@ public class PackedInts {
   /**
    * No memory overhead at all, but the returned implementation may be slow.
    */
-  public static final float COMPACT = 0f;
+  public static final float COMPACT = 0f;//压缩时，一点内存都不占用
 
   /**
    * Default amount of memory to use for bulk operations.
@@ -118,7 +118,7 @@ public class PackedInts {
       }
 
       @Override
-      public float overheadPerValue(int bitsPerValue) {
+      public float overheadPerValue(int bitsPerValue) { // 10位
         assert isSupported(bitsPerValue);
         final int valuesPerBlock = 64 / bitsPerValue;  // 因为Format.PACKED_SINGLE_BLOCK的存储格式是使用一个long存储多个数字，这个valuesPerBlock就是表示一个long可以包含多少个数字
         final int overhead = 64 % bitsPerValue; // 这个表示余数，即在存储了上面的valuesPerBlock个数字后，64位还剩余多少个，也就是额外消耗的空间
@@ -168,7 +168,7 @@ public class PackedInts {
      */  // 需要几个long存储这些count
     public int longCount(int packedIntsVersion, int valueCount, int bitsPerValue) {
       assert bitsPerValue >= 0 && bitsPerValue <= 64 : bitsPerValue;
-      final long byteCount = byteCount(packedIntsVersion, valueCount, bitsPerValue); // 使用byte可以存储几个人
+      final long byteCount = byteCount(packedIntsVersion, valueCount, bitsPerValue); // 使用byte可以存储几个人(会跑到子类定义中)
       assert byteCount < 8L * Integer.MAX_VALUE;
       if ((byteCount % 8) == 0) {
         return (int) (byteCount / 8);
@@ -231,7 +231,7 @@ public class PackedInts {
    * <p>
    * If you don't know how many values you are going to write, use
    * <code>valueCount = -1</code>.
-   */
+   */ // 默认acceptableOverheadRatio：0
   public static FormatAndBits fastestFormatAndBits(int valueCount, int bitsPerValue, float acceptableOverheadRatio) {
     if (valueCount == -1) {
       valueCount = Integer.MAX_VALUE;
@@ -261,7 +261,7 @@ public class PackedInts {
     } else {//如果不满足上面的条件，就看另一个格式，即PACKED_SINGLE_BLOCK的格式，看看这个可以吗，不过这个格式是有条件的
       for (int bpv = bitsPerValue; bpv <= maxBitsPerValue; ++bpv) {//尝试所有可能的bitPerValue。
         if (Format.PACKED_SINGLE_BLOCK.isSupported(bpv)) {//如果这个数量的是可以被支持的，即这个格式的使用是有条件的。下一篇博客中会查看下这个方法的意义
-          float overhead = Format.PACKED_SINGLE_BLOCK.overheadPerValue(bpv);//当前的消耗率
+          float overhead = Format.PACKED_SINGLE_BLOCK.overheadPerValue(bpv);//没存一个数，需要浪费多少空间
           float acceptableOverhead = acceptableOverheadPerValue + bitsPerValue - bpv;//本来的可以接受的上限
           if (overhead <= acceptableOverhead) {//如果现在的上线可以满足条件，即小于原来的上限
             actualBitsPerValue = bpv;
@@ -375,7 +375,7 @@ public class PackedInts {
     /**
      * The number of values that can be stored in {@link #longBlockCount()} long
      * blocks.
-     */
+     */ //若用long来存储数据，一个block可以存储多少个bitsPerValue长度的数据
     int longValueCount();
 
     /**

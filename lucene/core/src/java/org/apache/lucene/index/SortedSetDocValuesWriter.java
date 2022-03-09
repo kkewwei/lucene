@@ -38,14 +38,14 @@ import static org.apache.lucene.util.ByteBlockPool.BYTE_BLOCK_SIZE;
  *  int ord, then flushes when segment flushes. */
 class SortedSetDocValuesWriter extends DocValuesWriter<SortedSetDocValues> {
   final BytesRefHash hash;// 真正存放value值的地方，每个value都是唯一的
-  private PackedLongValues.Builder pending; // stream of all termIDs 存储每个文档每个域termId，相同Id的算两个。在未刷新前，所有文档相同域的值都会放到这里
-  private PackedLongValues.Builder pendingCounts; // termIDs per doc 对一个文档所有域弄完docValue后，统计这个文档这个域的个数。pendingCounts统计的是每个文档中同名字段的个数，而pending统计的是每个同名字段的termId
+  private PackedLongValues.Builder pending; // stream of all termIDs pending[5]=8 第5（整个segment该段所有vale排序）个写入的词的termId=8
+  private PackedLongValues.Builder pendingCounts; // termIDs per doc pendingCounts[2]=4  第2次写入文档有4个词
   private DocsWithFieldSet docsWithField; // 写一个文档的域，存放一个docId
   private final Counter iwBytesUsed; // 最终使用的都是同一个
   private long bytesUsed; // this only tracks differences in 'pending' and 'pendingCounts'
   private final FieldInfo fieldInfo;
   private int currentDoc = -1; // 正在处理每个doc的field
-  private int currentValues[] = new int[8]; // 下标就是个递增的编号，值是对DocValue里面的value分配的一个termId，根据这个id去hash里面映射value。默认
+  private int currentValues[] = new int[8]; // 每一位都是写入的一个term的termId，相同的也统计termId
   private int currentUpto; // 当前文档当前域存放的第几个词（重复的词算两个，一般一个文档一个域只有一个词，排除），作为currentValues的下标。每写完一个文档的一个域，就清0，把数据转到pending中了，currentValues数据就全部丢失了
   private int maxCount;
   //
@@ -93,24 +93,24 @@ class SortedSetDocValuesWriter extends DocValuesWriter<SortedSetDocValues> {
     if (currentDoc == -1) { // 目前是提交commit时候内存中的文档数
       return;
     }
-    Arrays.sort(currentValues, 0, currentUpto); // 按照termId排序
+    Arrays.sort(currentValues, 0, currentUpto); // 按照termId排序.已经排好序了
     int lastValue = -1;
     int count = 0; // 一个文档中，同名的域有几个
     for (int i = 0; i < currentUpto; i++) { // 最大只能为0
       int termID = currentValues[i];
       // if it's not a duplicate
-      if (termID != lastValue) {
+      if (termID != lastValue) {// 重复存储算一个，会压缩存储
         pending.add(termID); // record the term id
         count++;
       }
       lastValue = termID;
     }
-    // record the number of unique term ids for this doc
-    pendingCounts.add(count);
+    // record the number of unique term ids for this doc 会压缩存储
+    pendingCounts.add(count);//该文档该域有几个value, 每个value是存在pending中的
     maxCount = Math.max(maxCount, count);
-    currentUpto = 0; // 这里清0了
-    docsWithField.add(currentDoc); // 存起来
-  }
+    currentUpto = 0; // 每写完一个文档就清0了
+    docsWithField.add(currentDoc); // 正在处理的文档数
+  }// 根据docsWithField记录文档id,右pendingCounts记录每个文档有多少个词，然后依次从pending找到对应的termId
 
   private void addOneValue(BytesRef value) {
     int termID = hash.add(value); // hash本类会专门产生一个, 整个域作为一个词来获取termId
@@ -168,7 +168,7 @@ class SortedSetDocValuesWriter extends DocValuesWriter<SortedSetDocValues> {
       finishCurrentDoc();
       int valueCount = hash.size();
       finalOrds = pending.build();
-      finalOrdCounts = pendingCounts.build();
+      finalOrdCounts = pendingCounts.build();// 每个文档的个数
       finalSortedValues = hash.sort();
       finalOrdMap = new int[valueCount];
     }
@@ -180,28 +180,28 @@ class SortedSetDocValuesWriter extends DocValuesWriter<SortedSetDocValues> {
 
   @Override
   public void flush(SegmentWriteState state, Sorter.DocMap sortMap, DocValuesConsumer dvConsumer) throws IOException {
-    final int valueCount = hash.size();
+    final int valueCount = hash.size();// 总共多少个value,
     final PackedLongValues ords;
     final PackedLongValues ordCounts;
-    final int[] sortedValues;
-    final int[] ordMap;
+    final int[] sortedValues;// 按照byte排序。sortedValues[3]=2: 排在第3位的次的termId为2
+    final int[] ordMap; //比如ordMap[0]=ord, 第一个值排在了第五位
 
     if (finalOrds == null) { // 进来
       assert finalOrdCounts == null && finalSortedValues == null && finalOrdMap == null;
       finishCurrentDoc();
-      ords = pending.build(); // PackedLongValues，全部压缩到ords中了，  存放的是这个域所有的termId, 依次存放，相同算两个，每个文档每个域只有一个termid, 写入顺序
-      ordCounts = pendingCounts.build(); // 全部压缩存储到了ordCounts中    存放的是这个域在这个文档有几个同名的域，都是1
-      sortedValues = hash.sort(); // 所有文档这个域的distinct(termId)的排序，按照byte排序
+      ords = pending.build(); // PackedLongValues，全部压缩到ords中了，  pending[5]=8 第5（整个segment该段所有vale排序）个写入的词的termId=8
+      ordCounts = pendingCounts.build(); // pendingCounts[2]=4  第2次写入文档有4个词
+      sortedValues = hash.sort(); // 按照byte排序。sortedValues[3]=2: 排在第3位的次的termId为2
       ordMap = new int[valueCount]; // 每个termId->编号， 与sortedValues映射关系刚好相反.
       for(int ord=0;ord<valueCount;ord++) {
-        ordMap[sortedValues[ord]] = ord; //// 比如ordMap[0]的值termid, 该termid对应的value就是该域第一个写入的文档值
+        ordMap[sortedValues[ord]] = ord; // 比如ordMap[0]=5, 第0个termId排在第5位
       }// 只存储了a,b,c,d按照顺序，想知道第三个写入的数据是哪个？就需要使用[a,b,c,d]中第ordMap[3]就是写入时第三个。
     } else {
       ords = finalOrds;
       ordCounts = finalOrdCounts;
       sortedValues = finalSortedValues;
       ordMap = finalOrdMap;
-    }
+    } //  根据docsWithField记录文档id，由ordCounts记录每个文档有多少个词，然后依次从pending找到对应的termId
 
     final long[][] sorted;
     if (sortMap != null) { // 为null
@@ -229,27 +229,27 @@ class SortedSetDocValuesWriter extends DocValuesWriter<SortedSetDocValues> {
   }
 
   private static class BufferedSortedSetDocValues extends SortedSetDocValues {
-    final int[] sortedValues;
-    final int[] ordMap; // 词（相同词算两个）
+    final int[] sortedValues;// sortedValues[3]=2: 排在第3位的次的termId为2
+    final int[] ordMap; // 词（相同词算两个）// 比如ordMap[0]=5, 第0个termId排在第5位
     final BytesRefHash hash;
     final BytesRef scratch = new BytesRef();
     final PackedLongValues.Iterator ordsIter;
-    final PackedLongValues.Iterator ordCountsIter;
-    final DocIdSetIterator docsWithField;
-    final int currentDoc[]; // 存放的是当前文档该域多个value的termId值，默认length=1
+    final PackedLongValues.Iterator ordCountsIter; //
+    final DocIdSetIterator docsWithField;// docsWithField[2]=5, 第2次写入的是第5个文档
+    final int currentDoc[]; // currentDoc[3]=4 这个域的第三个value的term排第4位
     
     private int ordCount;
     private int ordUpto;
 
     public BufferedSortedSetDocValues(int[] sortedValues, int[] ordMap, BytesRefHash hash, PackedLongValues ords, PackedLongValues ordCounts, int maxCount, DocIdSetIterator docsWithField) {
       this.currentDoc = new int[maxCount];
-      this.sortedValues = sortedValues; // 所有文档这个域的distinct(termId)的排序之后的termId
-      this.ordMap = ordMap; // 存放的是下标->termIde，比如ordMap[0]的值termid, 该termid对应的value就是该域第一个写入的文档值
+      this.sortedValues = sortedValues; // sortedValues[3]=2: 排在第3位的次的termId为2
+      this.ordMap = ordMap; // // // 比如ordMap[0]=5, 第0个termId排在第5位
       this.hash = hash;
-      this.ordsIter = ords.iterator();    //  存放的是这个域所有的termId, 依次存放，相同算两个，每个文档每个域只有一个termid
-      this.ordCountsIter = ordCounts.iterator();   //  存放的是这个域在这个文档有几个同名的域，都是1, 这里会进行解压缩
-      this.docsWithField = docsWithField;
-    }
+      this.ordsIter = ords.iterator(); //   pending[5]=8 第5（整个segment该段所有vale排序）个写入的词的termId=8
+      this.ordCountsIter = ordCounts.iterator(); //   ordCountsIter[2]=4  第2次写入文档有4个词
+      this.docsWithField = docsWithField;//  docsWithField[2]=5, 第2次写入的是文档id为5
+    }// // 根据docsWithField记录文档id,右pendingCounts记录每个文档有多少个词，然后依次从pending找到对应的termId
 
     @Override
     public int docID() {
@@ -258,14 +258,14 @@ class SortedSetDocValuesWriter extends DocValuesWriter<SortedSetDocValues> {
     // nextDoc和nextOrd是配合使用的，先通过nextDoc给currentDoc赋值，然后在nextOrd中才能够遍历取值
     @Override
     public int nextDoc() throws IOException {
-      int docID = docsWithField.nextDoc(); // DocIdSetIterator
+      int docID = docsWithField.nextDoc(); // 下一个文档的id号码
       if (docID != NO_MORE_DOCS) {
         ordCount = (int) ordCountsIter.next(); // 该文档同名域的个数，
         assert ordCount > 0;
         for (int i = 0; i < ordCount; i++) {//然后遍历该文档所有同名域的termID
-          currentDoc[i] = ordMap[Math.toIntExact(ordsIter.next())]; // 解码出来，就是域的多个value的写入顺序
-        }
-        Arrays.sort(currentDoc, 0, ordCount); // 基本没用，为了应对terms那种的数组存放
+          currentDoc[i] = ordMap[Math.toIntExact(ordsIter.next())]; // 首先获得termId, 然后存放词大小排第几
+        }//currentDoc[3]=4 这个域的第三个value的term排第4位
+        Arrays.sort(currentDoc, 0, ordCount); // 第0个词当前排总词的第4，第1个词当前排总词的第2
         ordUpto = 0;
       }
       return docID;
@@ -301,7 +301,7 @@ class SortedSetDocValuesWriter extends DocValuesWriter<SortedSetDocValues> {
     }
 
     @Override
-    public BytesRef lookupOrd(long ord) {
+    public BytesRef lookupOrd(long ord) { // ord：第几小的词
       assert ord >= 0 && ord < ordMap.length: "ord=" + ord + " is out of bounds 0 .. " + (ordMap.length-1);
       hash.get(sortedValues[Math.toIntExact(ord)], scratch);  // 按照termid对应的term顺序排序后的
       return scratch;

@@ -101,7 +101,7 @@ public interface IndexableFieldType {
   // lucene默认是关闭的
   /**
    * If this is positive (representing the number of point dimensions), the field is indexed as a point.
-   */ // 该维度的个数
+   */ // 该维度的个数，只要该值不为空，就说明是point存储，有几个维度
   public int pointDimensionCount();
 
   /**

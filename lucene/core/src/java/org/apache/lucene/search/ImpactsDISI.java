@@ -125,7 +125,7 @@ public final class ImpactsDISI extends DocIdSetIterator {
       maxScore = maxScoreCache.getMaxScoreForLevel(0);
     }
   }
-
+  // target是文档号
   @Override
   public int advance(int target) throws IOException {
     return in.advance(advanceTarget(target));

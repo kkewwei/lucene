@@ -103,7 +103,7 @@ public class DirectReader {
     public long get(long index) {
       try {
         int shift = (3 - (int)(index & 3)) << 1;
-        return (in.readByte(offset + (index >>> 2)) >>> shift) & 0x3;
+        return (in.readByte(offset + (index >>> 2)) >>> shift) & 0x3;// 从dvd中哪个文件读取原始值
       } catch (IOException e) {
         throw new RuntimeException(e);
       }

@@ -41,7 +41,7 @@ import org.apache.lucene.util.bkd.BKDWriter;
 
 /** Writes dimensional values */
 public class Lucene86PointsWriter extends PointsWriter implements Closeable {
-
+  // kdd是存放的每个叶子的元数据，二叉树结构放在kdi中，然后kdm放的元数据
   /** Outputs used to write the BKD tree data files. */
   protected final IndexOutput metaOut, indexOut, dataOut;// dataOut=kdd文件，metaOut=kdm文件
 
@@ -63,7 +63,7 @@ public class Lucene86PointsWriter extends PointsWriter implements Closeable {
     boolean success = false;
     try {
       CodecUtil.writeIndexHeader(dataOut, // 文件头： magic,codec,version,segmentSuffix
-                                 Lucene86PointsFormat.DATA_CODEC_NAME,
+                                 Lucene86PointsFormat.DATA_CODEC_NAME,// Lucene86PointsFormatData
                                  Lucene86PointsFormat.VERSION_CURRENT,
                                  writeState.segmentInfo.getId(),
                                  writeState.segmentSuffix);
@@ -73,7 +73,7 @@ public class Lucene86PointsWriter extends PointsWriter implements Closeable {
           Lucene86PointsFormat.META_EXTENSION); // kdm文件
       metaOut = writeState.directory.createOutput(metaFileName, writeState.context);
       CodecUtil.writeIndexHeader(metaOut,
-          Lucene86PointsFormat.META_CODEC_NAME,
+          Lucene86PointsFormat.META_CODEC_NAME, // Lucene86PointsFormatMeta
           Lucene86PointsFormat.VERSION_CURRENT,
           writeState.segmentInfo.getId(),
           writeState.segmentSuffix);
@@ -83,7 +83,7 @@ public class Lucene86PointsWriter extends PointsWriter implements Closeable {
           Lucene86PointsFormat.INDEX_EXTENSION); // kdi文件
       indexOut = writeState.directory.createOutput(indexFileName, writeState.context);
       CodecUtil.writeIndexHeader(indexOut,
-          Lucene86PointsFormat.INDEX_CODEC_NAME,
+          Lucene86PointsFormat.INDEX_CODEC_NAME,// Lucene86PointsFormatMeta
           Lucene86PointsFormat.VERSION_CURRENT,
           writeState.segmentInfo.getId(),
           writeState.segmentSuffix);
@@ -112,7 +112,7 @@ public class Lucene86PointsWriter extends PointsWriter implements Closeable {
                                           fieldInfo.getPointDimensionCount(),
                                           fieldInfo.getPointIndexDimensionCount(),
                                           fieldInfo.getPointNumBytes(),
-                                          maxPointsInLeafNode,
+                                          maxPointsInLeafNode,// 每个叶子节点最大的个数
                                           maxMBSortInHeap,
                                           values.size())) {
 

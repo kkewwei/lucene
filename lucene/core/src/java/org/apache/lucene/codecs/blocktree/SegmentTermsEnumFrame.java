@@ -492,7 +492,7 @@ final class SegmentTermsEnumFrame {
         }
       }
 
-      // metadata
+      // metadata 解析跳表元数据，可参考 Lucene84PostingsWriter.encodeTerm()
       ste.fr.parent.postingsReader.decodeTerm(bytesReader, ste.fr.fieldInfo, state, absolute);
 
       metaDataUpto++;

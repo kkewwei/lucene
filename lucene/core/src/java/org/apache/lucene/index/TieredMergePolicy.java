@@ -84,7 +84,7 @@ import java.util.Set;
 //     merge is already running (under CMS) and then bias
 //     ourselves towards picking smaller merges if so (or,
 //     maybe CMS should do so)
-
+// TieredMergePolicy是EsTieredMergePolicy属性
 public class TieredMergePolicy extends MergePolicy {
   /** Default noCFSRatio.  If a merge's size is {@code >= 10%} of
    *  the index, then we disable compound file for it.

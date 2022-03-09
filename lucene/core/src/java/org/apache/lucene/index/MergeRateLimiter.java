@@ -41,7 +41,7 @@ public class MergeRateLimiter extends RateLimiter {
   private volatile double mbPerSec; // 每个线程初始化时不限速
   private volatile long minPauseCheckBytes;// 不超过1mb，也不超过当前写入速度的25ms,就检查一次。
 
-  private long lastNS;
+  private long lastNS; // 上次检查符合规范的起始时间
 
   private AtomicLong totalBytesWritten = new AtomicLong(); // 这个文件这次打开，总共的写入byte
 
@@ -64,7 +64,7 @@ public class MergeRateLimiter extends RateLimiter {
       }
       this.mbPerSec = mbPerSec;
   
-      // NOTE: Double.POSITIVE_INFINITY casts to Long.MAX_VALUE  按照当前写入速度的25ms,就检查一次
+      // NOTE: Double.POSITIVE_INFINITY casts to Long.MAX_VALUE  按照当前写入速度的25ms,就检查一次。
       this.minPauseCheckBytes = Math.min(1024*1024, (long) ((MIN_PAUSE_CHECK_MSEC / 1000.0) * mbPerSec * 1024 * 1024));// 最大不超过1M
       assert minPauseCheckBytes >= 0;
     }
@@ -139,7 +139,7 @@ public class MergeRateLimiter extends RateLimiter {
 
     // Defensive: don't sleep for too long; the loop above will call us again if
     // we should keep sleeping and the rate may be adjusted in between.
-    if (curPauseNS > MAX_PAUSE_NS) { // 若停顿时间超过250ms
+    if (curPauseNS > MAX_PAUSE_NS) { // 若停顿时间超过250ms。加入合并速度为0，那么最多停顿为MAX_PAUSE_NS，然后写一条，再进来停顿
       curPauseNS = MAX_PAUSE_NS; // 最多暂停250ms
     }
 

@@ -211,11 +211,11 @@ public abstract class MergePolicy {
     boolean isExternal;             // used by IndexWriter
     int maxNumSegments = -1;        // used by IndexWriter
 
-    /** Estimated size in bytes of the merged segment. */ // 预估的去除删除之后的byte
+    /** Estimated size in bytes of the merged segment. */ // 去除删除之后的byte, 在IndexWriter.registerMerge()中会统计，文件长度之和相加
     public volatile long estimatedMergeBytes;       // used by IndexWriter
 
     // Sum of sizeInBytes of all SegmentInfos; set by IW.mergeInit
-    volatile long totalMergeBytes; // 包含了需要被删除的byte
+    volatile long totalMergeBytes; // 包含了需要被删除的byte, 在IndexWriter.registerMerge()中会统计，文件长度之和相加
 
     private List<MergeReader> mergeReaders;        // used by IndexWriter
 
@@ -558,7 +558,7 @@ public abstract class MergePolicy {
 
   /**
    * Creates a new merge policy instance.
-   */
+   */ // es默认使用该函数
   public MergePolicy() {
     this(DEFAULT_NO_CFS_RATIO, DEFAULT_MAX_CFS_SEGMENT_SIZE);
   }
@@ -650,13 +650,13 @@ public abstract class MergePolicy {
    * compound file format. The default implementation returns <code>true</code>
    * iff the size of the given mergedInfo is less or equal to
    * {@link #getMaxCFSSegmentSizeMB()} and the size is less or equal to the
-   * TotalIndexSize * {@link #getNoCFSRatio()} otherwise <code>false</code>.
-   */
+   * TotalIndexSize * {@link #getNoCFSRatio()} otherwise <code>false</code>.// 从IndexWriter.mergeMiddle()中跑过来，
+   */ // 合并产生的端是否需要符合文件。而flush产生的段是否需要复合文件，是在LiveIndexWriterConfig.useCompoundFile控制的
   public boolean useCompoundFile(SegmentInfos infos, SegmentCommitInfo mergedInfo, MergeContext mergeContext) throws IOException {
-    if (getNoCFSRatio() == 0.0) {
+    if (getNoCFSRatio() == 0.0) { // infos是这个IndexWriter维护的所有段，就是一个shard包含的所有段
       return false;
     }
-    long mergedInfoSize = size(mergedInfo, mergeContext);
+    long mergedInfoSize = size(mergedInfo, mergeContext);// 去除了待删除文件
     if (mergedInfoSize > maxCFSSegmentSize) {
       return false;
     }
@@ -666,7 +666,7 @@ public abstract class MergePolicy {
     long totalSize = 0;
     for (SegmentCommitInfo info : infos) {
       totalSize += size(info, mergeContext);
-    }
+    } // 合并后是合并前的10%大小，才使用。
     return mergedInfoSize <= getNoCFSRatio() * totalSize;
   }
   

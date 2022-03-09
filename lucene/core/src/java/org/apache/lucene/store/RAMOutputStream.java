@@ -36,14 +36,14 @@ import org.apache.lucene.util.Accountables;
  */
 @Deprecated
 public class RAMOutputStream extends IndexOutput implements Accountable {
-  static final int BUFFER_SIZE = 1024;
+  static final int BUFFER_SIZE = 1024; //
 
   private final RAMFile file; // 真正存放数据的
 
   private byte[] currentBuffer; // file中的哪个buffers。由currentBufferIndex指向
   private int currentBufferIndex; // 指向的是file中的哪个buffers。
   
-  private int bufferPosition; // 当前currentBuffer里面写入位置
+  private int bufferPosition; // 当前currentBuffer内写入位置
   private long bufferStart;// 当前buffer在file的buffers[]里面的绝对位置
   private int bufferLength; //currentBuffer的长度
   
@@ -169,7 +169,7 @@ public class RAMOutputStream extends IndexOutput implements Accountable {
     } else {
       currentBuffer = file.getBuffer(currentBufferIndex);
     }
-    bufferPosition = 0;
+    bufferPosition = 0; // buffer内空闲位置
     bufferStart = (long) BUFFER_SIZE * (long) currentBufferIndex; // 当前buffer在file里面的绝对位置
     bufferLength = currentBuffer.length;
   }

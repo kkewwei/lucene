@@ -53,7 +53,7 @@ public abstract class RadixSelector extends Selector { // 基数选择器
    * its length is less than or equal to {@code k}. This may only be called
    * with a value of {@code i} between {@code 0} included and
    * {@code maxLength} excluded. */
-  protected abstract int byteAt(int i, int k); // 返回第i个point的第k个byte
+  protected abstract int byteAt(int i, int k); // 返回第i个point的第k个byte(此时位数已经不相同了)
 
   /** Get a fall-back selector which may assume that the first {@code d} bytes
    *  of all compared strings are equal. This fallback selector is used when
@@ -112,12 +112,12 @@ public abstract class RadixSelector extends Selector { // 基数选择器
   }
 
   @Override
-  public void select(int from, int to, int k) {
+  public void select(int from, int to, int k) {// from和to、middle都是point下标，不是叶子下标
     checkArgs(from, to, k);
     select(from, to, k, 0, 0);
   }
   // k: 基本是middle, d：不相同的前缀+doc组成的第几个字符。l：递归的次数
-  private void select(int from, int to, int k, int d, int l) {
+  private void select(int from, int to, int k, int d, int l) {// from和to、middle都是point下标，不是叶子下标
     if (to - from <= LENGTH_THRESHOLD || d >= LEVEL_THRESHOLD) { //当数据个数少于 100，或者递归次数超过8次，就开始蜕化为
       getFallbackSelector(d).select(from, to, k); //
     } else {
@@ -128,13 +128,13 @@ public abstract class RadixSelector extends Selector { // 基数选择器
   /**
    * @param d the character number to compare 要比较的字符编号（不相同的前缀长度+文档Id取值构成）
    * @param l the level of recursion // 递归的次数
-   */
-  private void radixSelect(int from, int to, int k, int d, int l) {
+   */ // k  右子树第一个叶子节点的第一个point
+  private void radixSelect(int from, int to, int k, int d, int l) {// from和to、middle都是point下标，不是叶子下标
     final int[] histogram = this.histogram; //统计的是每一字符多少个数据
     Arrays.fill(histogram, 0); // 每次使用都得清空
 
     final int commonPrefixLength = computeCommonPrefixLengthAndBuildHistogram(from, to, d, histogram);
-    if (commonPrefixLength > 0) { // 所有元素中有相同的前缀
+    if (commonPrefixLength > 0) { // 所有point中有相同的逻辑位数的前缀
       // if there are no more chars to compare or if all entries fell into the
       // first bucket (which means strings are shorter than d) then we are done
       // otherwise recurse
@@ -145,12 +145,12 @@ public abstract class RadixSelector extends Selector { // 基数选择器
       return;
     }
     assert assertHistogram(commonPrefixLength, histogram);
-    // 没有相同的元素
+    // 所有point逻辑位数没有一个相同前缀
     int bucketFrom = from; //
     for (int bucket = 0; bucket < HISTOGRAM_SIZE; ++bucket) { // 遍历每一个桶
       final int bucketTo = bucketFrom + histogram[bucket]; // 获取桶里面数据的范围
 
-      if (bucketTo > k) { // 若读取的数据个数超过中位数，
+      if (bucketTo > k) { // 若读取的数据个数超过中位数（文档下标），
         partition(from, to, bucket, bucketFrom, bucketTo, d); // 通过快排的思想，完成左边小于桶，右边大于桶
 
         if (bucket != 0 && d + 1 < maxLength) {// 最中间的那个桶继续排序
@@ -181,7 +181,7 @@ public abstract class RadixSelector extends Selector { // 基数选择器
   }
 
   /** Return a number for the k-th character between 0 and {@link #HISTOGRAM_SIZE}. */
-  private int getBucket(int i, int k) { // 从第i个point中的最大偏移级中读取第k个元素（单个value内偏移量）。
+  private int getBucket(int i, int k) { // 从第i个point（文档）中的最大偏移级中读取第k个元素（不相同的前缀长度+文档Id取值构成）
     return byteAt(i, k) + 1; // 还+1，得到的应该是第几个bucket
   }
 
@@ -190,9 +190,9 @@ public abstract class RadixSelector extends Selector { // 基数选择器
    *  @see #buildHistogram */ // k：要比较的字符编号
   private int computeCommonPrefixLengthAndBuildHistogram(int from, int to, int k, int[] histogram) {
     final int[] commonPrefix = this.commonPrefix; //公用的，为了减少产生次数
-    int commonPrefixLength = Math.min(commonPrefix.length, maxLength - k); //
+    int commonPrefixLength = Math.min(commonPrefix.length, maxLength - k); // 逻辑位数相同的前缀
     for (int j = 0; j < commonPrefixLength; ++j) { // 好像是从from中读取值，
-      final int b = byteAt(from, k + j); // 从第from个point中读取最大维度差中第k+j个数
+      final int b = byteAt(from, k + j); // 从第from的point中读取最大维度差（切分维度）中第k+j字符
       commonPrefix[j] = b;
       if (b == -1) {
         commonPrefixLength = j + 1;
@@ -205,8 +205,8 @@ public abstract class RadixSelector extends Selector { // 基数选择器
       for (int j = 0; j < commonPrefixLength; ++j) {
         final int b = byteAt(i, k + j); // 从第k个字符开始统计
         if (b != commonPrefix[j]) {
-          commonPrefixLength = j; // 最多只有commonPrefixLength是相同的
-          if (commonPrefixLength == 0) { // we have no common prefix，最起码此前数据，第一位都是相同的
+          commonPrefixLength = j; // 最多只有前commonPrefixLength的doc的前j位是相同的,下次比较就少比较点
+          if (commonPrefixLength == 0) { // we have no common prefix，最起码此前数据，第一位都是相同的（第一位都不相同）
             histogram[commonPrefix[0] + 1] = i - from; // 统计第k个字母出现次数，+1是习惯，每个地方都加1了。
             histogram[b + 1] = 1; // 只有相同前缀为0，第一个字符都不相同
             break outer;
@@ -220,9 +220,9 @@ public abstract class RadixSelector extends Selector { // 基数选择器
       // the loop got broken because there is no common prefix
       assert commonPrefixLength == 0; // 这些数据已经没有相同的前缀了
       buildHistogram(i + 1, to, k, histogram); // 统计每个首字母的次数
-    } else { // 说明所有的元素第一位都是相同的
+    } else { // 能比较到最后一位，说明前面最少一位是相同的
       assert commonPrefixLength > 0;
-      histogram[commonPrefix[0] + 1] = to - from;
+      histogram[commonPrefix[0] + 1] = to - from; // 貌似没统计完呀
     }
 
     return commonPrefixLength; //同时返回了相同的前缀
@@ -232,24 +232,24 @@ public abstract class RadixSelector extends Selector { // 基数选择器
    *  offsets {@code from} and {@code to}, using {@link #getBucket}. */
   private void buildHistogram(int from, int to, int k, int[] histogram) {
     for (int i = from; i < to; ++i) {
-      histogram[getBucket(i, k)]++;
+      histogram[getBucket(i, k)]++;// k（不相同的前缀长度+文档Id取值构成）
     }
   }
    // 使用快排的思想，第bucket个桶左边的数据全部小于第bucket个桶，右边的数据，全部大于第bucket个桶
   /** Reorder elements so that all of them that fall into {@code bucket} are
-   *  between offsets {@code bucketFrom} and {@code bucketTo}. */
+   *  between offsets {@code bucketFrom} and {@code bucketTo}. */// from和to、middle都是point下标，不是叶子下标
   private void partition(int from, int to, int bucket, int bucketFrom, int bucketTo, int d) { // 第bucket个桶中包含中间数据
     int left = from;
-    int right = to - 1;
+    int right = to - 1;//非闭区间
 
     int slot = bucketFrom;
     // 这里有变成快排序的思想
     for (;;) {
-      int leftBucket = getBucket(left, d); // 获取最小数是第几个桶
+      int leftBucket = getBucket(left, d); // 获取左边桶的下标元素，d:要比较的字符编号（不相同的前缀长度+文档Id取值构成）
       int rightBucket = getBucket(right, d);// 获取最大数是第几个桶
 
       while (leftBucket <= bucket && left < bucketFrom) { // 按照桶来
-        if (leftBucket == bucket) { // 找到了一个这个桶的一个元素，先转换过来
+        if (leftBucket == bucket) { // 找到了一个这个桶的一个元素，和中间的值一样，那么先给你换到中间
           swap(left, slot++); // 跑到MutablePointsReaderUtils.partition()里面匿名类定义的那里
         } else {
           ++left;

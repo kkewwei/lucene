@@ -90,7 +90,7 @@ public class Builder<T> {
   // terms go through it:
   private final int minSuffixCount2; // 0
 
-  private final boolean doShareNonSingletonNodes;
+  private final boolean doShareNonSingletonNodes;// 默认为false
   private final int shareMaxTailLength;
 
   private final IntsRefBuilder lastInput = new IntsRefBuilder(); // 上一个相同的前缀
@@ -244,13 +244,13 @@ public class Builder<T> {
   // compileNode可能返回的是一个已经写入 FST的 Node的 ID，这样就达到了共享 Node 的目的。tailLength是可能共享的长度
   private CompiledNode compileNode(UnCompiledNode<T> nodeIn, int tailLength) throws IOException {
     final long node;
-    long bytesPosStart = bytes.getPosition();
+    long bytesPosStart = bytes.getPosition();// 可写的起始位置
     if (dedupHash != null && (doShareNonSingletonNodes || nodeIn.numArcs <= 1) && tailLength <= shareMaxTailLength) {// doShareNonSingletonNodes默认为false
       if (nodeIn.numArcs == 0) { // 说明该节点是结尾。
         node = fst.addNode(this, nodeIn);// Node的Arc数量为0，fst.addNode 会返回 -1。已经将nodeId的value存放了fst中
         lastFrozenNode = node; // 每次重新输入一条边，又开始置位-1
       } else { // root节点也会进来
-        node = dedupHash.add(this, nodeIn); // 这个就是node
+        node = dedupHash.add(this, nodeIn); // 这个就是node，是在fst中的存储位置
       }
     } else {
       node = fst.addNode(this, nodeIn); // 把node写入fst中
@@ -258,7 +258,7 @@ public class Builder<T> {
     assert node != -2;
 
     long bytesPosEnd = bytes.getPosition(); // 看看是否有写入
-    if (bytesPosEnd != bytesPosStart) { // 有写入
+    if (bytesPosEnd != bytesPosStart) { // fst.bytes中有写入
       // The FST added a new node:
       assert bytesPosEnd > bytesPosStart;
       lastFrozenNode = node;
@@ -277,9 +277,9 @@ public class Builder<T> {
     for(int idx=lastInput.length(); idx >= downTo; idx--) { // 节点idx，从后向前，只压缩存储不同的后缀
 
       boolean doPrune = false; // 是否需要修剪
-      boolean doCompile = false;
+      boolean doCompile = false;// 始终为true
 
-      final UnCompiledNode<T> node = frontier[idx]; // 结尾那个NULL的node
+      final UnCompiledNode<T> node = frontier[idx]; // 新增的那个多余的结尾为NULL的node
       final UnCompiledNode<T> parent = frontier[idx-1];
 // 如果Node的出度小于minSuffixCount1，会被删除
       if (node.inputCount < minSuffixCount1) { // 始终不成立
@@ -329,7 +329,7 @@ public class Builder<T> {
         parent.deleteLast(lastInput.intAt(idx-1), node);
       } else { // 永远进来
 
-        if (minSuffixCount2 != 0) {
+        if (minSuffixCount2 != 0) { // 直接跳过
           compileAllTargets(node, lastInput.length()-idx);
         }
         final T nextFinalOutput = node.output; // 结尾那个NULL 节点
@@ -341,7 +341,7 @@ public class Builder<T> {
         // dead-end states:
         final boolean isFinal = node.isFinal || node.numArcs == 0; // 若本节点没有出边，可以freeze起来
         // 用compileNode 函数将 Node写入FST，得到一个 CompiledNode，替换掉 Arc的target
-        if (doCompile) { // 始终进来
+        if (doCompile) { // 始终进来，变成CompileNode
           // this node makes it and we now compile it.  first,
           // compile any targets that were previously
           // undecided:
@@ -406,7 +406,7 @@ public class Builder<T> {
 
     // De-dup NO_OUTPUT since it must be a singleton:
     if (output.equals(NO_OUTPUT)) {
-      output = NO_OUTPUT;
+      output = NO_OUTPUT; // 必须是个单例
     }
 
     assert lastInput.length() == 0 || input.compareTo(lastInput.get()) >= 0: "inputs are added out of order lastInput=" + lastInput.get() + " vs input=" + input;
@@ -426,8 +426,8 @@ public class Builder<T> {
     }
 
     // compare shared prefix length
-    int pos1 = 0;
-    int pos2 = input.offset;
+    int pos1 = 0; // 找到和上一个词的公共长度下标
+    int pos2 = input.offset;//
     final int pos1Stop = Math.min(lastInput.length(), input.length);
     while(true) {// 遍历当前term与上个term的公共前缀的长度
       frontier[pos1].inputCount++; // 首先
@@ -459,8 +459,8 @@ public class Builder<T> {
       frontier[idx].inputCount++; // 下一个节点，多了一条指入的边
     }
    // 新增的边，最后一个给设置为true
-    final UnCompiledNode<T> lastNode = frontier[input.length];
-    if (lastInput.length() != input.length || prefixLenPlus1 != input.length + 1) {
+    final UnCompiledNode<T> lastNode = frontier[input.length]; // 新增了一个尾部节点
+    if (lastInput.length() != input.length || prefixLenPlus1 != input.length + 1) { // 保证lastInput和input是不一样的
       lastNode.isFinal = true; //
       lastNode.output = NO_OUTPUT;
     }
@@ -484,7 +484,7 @@ public class Builder<T> {
         assert validOutput(wordSuffix);
         parentNode.setLastOutput(input.ints[input.offset + idx - 1], commonOutputPrefix);
         node.prependOutput(wordSuffix); //将节点不相同的部分向后面的边移动
-      } else {
+      } else { // 那么没有什么好减少的了,遇到了，那么感觉就该退出了
         commonOutputPrefix = wordSuffix = NO_OUTPUT;
       }
 
@@ -495,11 +495,11 @@ public class Builder<T> {
     if (lastInput.length() == input.length && prefixLenPlus1 == 1+input.length) {
       // same input more than 1 time in a row, mapping to
       // multiple outputs
-      lastNode.output = fst.outputs.merge(lastNode.output, output);
+      lastNode.output = fst.outputs.merge(lastNode.output, output); // 那么看output是否定义了将outpue合并的方法，比如1+1=2，就存储2
     } else {
       // this new arc is private to this new input; set its
       // arc output to the leftover output:
-      frontier[prefixLenPlus1-1].setLastOutput(input.ints[input.offset + prefixLenPlus1-1], output);
+      frontier[prefixLenPlus1-1].setLastOutput(input.ints[input.offset + prefixLenPlus1-1], output); // 对最后一条边赋值
     }
 
     // save last input
@@ -558,8 +558,8 @@ public class Builder<T> {
     public int label;  // really an "unsigned" byte 该节点对应的那个字符  10进制
     public Node target; // 该边目标节点
     public boolean isFinal; // isFinal表示Arc已经是终止Arc，其target是-1，不可以继续深度遍历，不可以继续freeze。//例如:ab,ac,ad。那么b,c,d都是最后一条边
-    public T output; // 表示当前Arc上有输出
-    public T nextFinalOutput; //只有这种情况可用，
+    public T output; //
+    public T nextFinalOutput; //
   }
 
   // NOTE: not many instances of Node or CompiledNode are in
@@ -575,13 +575,13 @@ public class Builder<T> {
   }
 
   static final class CompiledNode implements Node {
-    long node; // 这个node是干啥的
+    long node; // 下游节点在fst中存储的起始位置
     @Override
     public boolean isCompiled() {
       return true;
     }
   }
- // fst的节点
+ // fst的节点,为什么总与lastArc打交道呢，因为最后一条边才是当前主线，不是最后一条半的话，都是已经处理过的（边的target存储的都是CompiledNode）
   /** Expert: holds a pending (seen but not yet serialized) Node. */
   public static final class UnCompiledNode<T> implements Node {
     final Builder<T> owner;
@@ -591,7 +591,7 @@ public class Builder<T> {
     // node, maybe we should use -1 arc to mean "end" (like
     // we do when reading the FST).  Would simplify much
     // code here...
-    public T output;  //
+    public T output;  // 初始化时默认全为0(owner.NO_OUTPUT)
     public boolean isFinal; // 表示从Node出发的Arc数量是0，当Node是Final Node时，output才有值。
     public long inputCount; //多少个边把这个UnCompiledNode作为终点&终点，实际并没有用上
 
@@ -650,7 +650,7 @@ public class Builder<T> {
       arc.output = arc.nextFinalOutput = owner.NO_OUTPUT;
       arc.isFinal = false;
     }
-    // 将该节点的下游给替换掉已达到共享的目的
+    // 将该节点的下游给替换掉已达到共享的目的     target:默认fst存储位置   nextFinalOutput：
     public void replaceLast(int labelToMatch, Node target, T nextFinalOutput, boolean isFinal) {
       assert numArcs > 0;
       final Arc<T> arc = arcs[numArcs-1]; //

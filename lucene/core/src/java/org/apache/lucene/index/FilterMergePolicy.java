@@ -25,7 +25,7 @@ import org.apache.lucene.util.IOSupplier;
  * A wrapper for {@link MergePolicy} instances.
  *
  * @lucene.experimental
- */
+ */ // FilterMergePolicy 是EsTieredMergePolicy基类
 public class FilterMergePolicy extends MergePolicy {
 
   /** The wrapped {@link MergePolicy}. */

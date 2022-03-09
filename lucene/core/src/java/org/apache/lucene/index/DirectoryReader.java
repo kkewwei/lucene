@@ -257,9 +257,9 @@ public abstract class DirectoryReader extends BaseCompositeReader<LeafReader> {
 
     List<IndexCommit> commits = new ArrayList<>();
 
-    SegmentInfos latest = SegmentInfos.readLatestCommit(dir);
+    SegmentInfos latest = SegmentInfos.readLatestCommit(dir);//读取最大的那个segments_n
     final long currentGen = latest.getGeneration();
-
+    // 放成了第一个
     commits.add(new StandardDirectoryReader.ReaderCommit(null, latest, dir));
 
     for(int i=0;i<files.length;i++) {
@@ -268,7 +268,7 @@ public abstract class DirectoryReader extends BaseCompositeReader<LeafReader> {
 
       if (fileName.startsWith(IndexFileNames.SEGMENTS) &&
           !fileName.equals(IndexFileNames.OLD_SEGMENTS_GEN) &&
-          SegmentInfos.generationFromSegmentsFileName(fileName) < currentGen) {
+          SegmentInfos.generationFromSegmentsFileName(fileName) < currentGen) {// 只要小的
 
         SegmentInfos sis = null;
         try {
@@ -292,7 +292,7 @@ public abstract class DirectoryReader extends BaseCompositeReader<LeafReader> {
     }
 
     // Ensure that the commit points are sorted in ascending order.
-    Collections.sort(commits);
+    Collections.sort(commits);// 排序了，确保最大Segments_n放在最后面
 
     return commits;
   }

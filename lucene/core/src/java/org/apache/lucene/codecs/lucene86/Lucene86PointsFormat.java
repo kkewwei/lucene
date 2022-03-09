@@ -48,10 +48,10 @@ public final class Lucene86PointsFormat extends PointsFormat {
 
   /**
    * Filename extension for the leaf blocks
-   */
+   */ // 叶子节点
   public static final String DATA_EXTENSION = "kdd";
 
-  /**
+  /**  // 每个域的索引结构
    * Filename extension for the index per field
    */
   public static final String INDEX_EXTENSION = "kdi";

@@ -119,7 +119,7 @@ public final class Lucene50LiveDocsFormat extends LiveDocsFormat {
 
   @Override
   public void files(SegmentCommitInfo info, Collection<String> files) throws IOException {
-    if (info.hasDeletions()) {
+    if (info.hasDeletions()) {// 如果段有删除，那么添加generation_n.liv
       files.add(IndexFileNames.fileNameFromGeneration(info.info.name, EXTENSION, info.getDelGen()));
     }
   }

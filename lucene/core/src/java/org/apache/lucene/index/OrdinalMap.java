@@ -33,14 +33,14 @@ import org.apache.lucene.util.PriorityQueue;
 import org.apache.lucene.util.RamUsageEstimator;
 import org.apache.lucene.util.packed.PackedInts;
 import org.apache.lucene.util.packed.PackedLongValues;
-
+// 为每一个segmentValueCount小于globalValueCount的segment，保存了一份segment ord到global ord的mapping（LongValues）。对于segment valueCount等于globalValueCount的segment，原本的segment ord就是global ord，后续获取ord时，直接从SortedSetDV(dvd)中读取。
 /** Maps per-segment ordinals to/from global ordinal space, using a compact packed-ints representation.
  *
  *  <p><b>NOTE</b>: this is a costly operation, as it must merge sort all terms, and may require non-trivial RAM once done.  It's better to operate in
  *  segment-private ordinal space instead when possible.
  *
  * @lucene.internal */
-public class OrdinalMap implements Accountable {
+public class OrdinalMap implements Accountable { // 排序值（Ordinal）
   // TODO: we could also have a utility method to merge Terms[] and use size() as a weight when we need it
   // TODO: use more efficient packed ints structures?
 
@@ -48,15 +48,15 @@ public class OrdinalMap implements Accountable {
     public final static TermsEnumIndex[] EMPTY_ARRAY = new TermsEnumIndex[0];
     final int subIndex;
     final TermsEnum termsEnum;
-    BytesRef currentTerm;
+    BytesRef currentTerm; // 当前TermsEnumIndex维持的这个docValue的哪个值
 
     public TermsEnumIndex(TermsEnum termsEnum, int subIndex) {
       this.termsEnum = termsEnum;
       this.subIndex = subIndex;
     }
-
+    // 会依次读取每个docValue中词的内容
     public BytesRef next() throws IOException {
-      currentTerm = termsEnum.next();
+      currentTerm = termsEnum.next();// 将跑到 Lucene80DocValuesProducer$TermsDict.next()
       return currentTerm;
     }
   }
@@ -140,9 +140,9 @@ public class OrdinalMap implements Accountable {
   public static OrdinalMap build(IndexReader.CacheKey owner, SortedSetDocValues[] values, float acceptableOverheadRatio) throws IOException {
     final TermsEnum[] subs = new TermsEnum[values.length];
     final long[] weights = new long[values.length];
-    for (int i = 0; i < values.length; ++i) {
+    for (int i = 0; i < values.length; ++i) {// 几个segment
       subs[i] = values[i].termsEnum();
-      weights[i] = values[i].getValueCount();
+      weights[i] = values[i].getValueCount();// 每个segment docValue多少个独立的词
     }
     return build(owner, subs, weights, acceptableOverheadRatio);
   }
@@ -166,18 +166,18 @@ public class OrdinalMap implements Accountable {
     // enums are not sorted, so let's sort to save memory
     final SegmentMap segmentMap = new SegmentMap(weights);
     return new OrdinalMap(owner, subs, segmentMap, acceptableOverheadRatio);
-  }
+  }// 获取这个semgment docvalue每个term在全局的order
 
   private static final long BASE_RAM_BYTES_USED = RamUsageEstimator.shallowSizeOfInstance(OrdinalMap.class);
 
   /** Cache key of whoever asked for this awful thing */
   public final IndexReader.CacheKey owner;
   // globalOrd -> (globalOrd - segmentOrd) where segmentOrd is the the ordinal in the first segment that contains this term
-  final PackedLongValues globalOrdDeltas;
+  final PackedLongValues globalOrdDeltas;// 和firstSegments一起使用的
   // globalOrd -> first segment container
   final PackedLongValues firstSegments;
   // for every segment, segmentOrd -> globalOrd
-  final LongValues segmentToGlobalOrds[];
+  final LongValues segmentToGlobalOrds[];// 每个segment对应一个元素，保留segment内排序Id->全局排序id的映射
   // the map from/to segment ids
   final SegmentMap segmentMap;
   // ram usage
@@ -193,48 +193,48 @@ public class OrdinalMap implements Accountable {
     // slow anyway
     PackedLongValues.Builder globalOrdDeltas = PackedLongValues.monotonicBuilder(PackedInts.COMPACT);
     PackedLongValues.Builder firstSegments = PackedLongValues.packedBuilder(PackedInts.COMPACT);
-    final PackedLongValues.Builder[] ordDeltas = new PackedLongValues.Builder[subs.length];
-    for (int i = 0; i < ordDeltas.length; i++) {
+    final PackedLongValues.Builder[] ordDeltas = new PackedLongValues.Builder[subs.length]; // 每个segment一个
+    for (int i = 0; i < ordDeltas.length; i++) { // 8个segment
       ordDeltas[i] = PackedLongValues.monotonicBuilder(acceptableOverheadRatio);
     }
-    long[] ordDeltaBits = new long[subs.length];
-    long[] segmentOrds = new long[subs.length];
+    long[] ordDeltaBits = new long[subs.length];// 记录每个segment的ordDelta占几位
+    long[] segmentOrds = new long[subs.length];// 与segment个数相关，每个segment已经处理的词的个数
 
-    // Just merge-sorts by term:
+    // Just merge-sorts by term:  每个segment最小的三个词读取处理
     PriorityQueue<TermsEnumIndex> queue = new PriorityQueue<TermsEnumIndex>(subs.length) {
         @Override
-        protected boolean lessThan(TermsEnumIndex a, TermsEnumIndex b) {
+        protected boolean lessThan(TermsEnumIndex a, TermsEnumIndex b) {// 并没有考虑文档id大小的问题
           return a.currentTerm.compareTo(b.currentTerm) < 0;
         }
       };
-    
-    for (int i = 0; i < subs.length; i++) {
+    //每个segment里面的词都读取出来，然后排序
+    for (int i = 0; i < subs.length; i++) {//几个segment，读取每个segment里面docValue的最小值(第一个值),类似n路归并排序
       TermsEnumIndex sub = new TermsEnumIndex(subs[segmentMap.newToOld(i)], i);
       if (sub.next() != null) {
         queue.add(sub);
       }
     }
-
+    // 当前读取到的term
     BytesRefBuilder scratch = new BytesRefBuilder();
       
-    long globalOrd = 0;
-    while (queue.size() != 0) {
-      TermsEnumIndex top = queue.top();
+    long globalOrd = 0; // 词全局序号
+    while (queue.size() != 0) { // 开始一个新的字段
+      TermsEnumIndex top = queue.top(); // OridinalMap$TermsEnumIndex中
       scratch.copyBytes(top.currentTerm);
-
+      // 这个词第一次出现在哪个segment中
       int firstSegmentIndex = Integer.MAX_VALUE;
-      long globalOrdDelta = Long.MAX_VALUE;
+      long globalOrdDelta = Long.MAX_VALUE;//这个词的全局排序的差值
 
       // Advance past this term, recording the per-segment ord deltas:
-      while (true) {
-        top = queue.top();
-        long segmentOrd = top.termsEnum.ord();
-        long delta = globalOrd - segmentOrd;
-        int segmentIndex = top.subIndex;
+      while (true) { // 这次循环把这个词给读取完
+        top = queue.top(); // 从栈顶读取一个term
+        long segmentOrd = top.termsEnum.ord(); // 当前词在segment内docValue的排序
+        long delta = globalOrd - segmentOrd; // 这个词全局排序-当前序号
+        int segmentIndex = top.subIndex; //第几个segment
         // We compute the least segment where the term occurs. In case the
         // first segment contains most (or better all) values, this will
         // help save significant memory
-        if (segmentIndex < firstSegmentIndex) {
+        if (segmentIndex < firstSegmentIndex) { //仅仅始终记录最小的那个segment Index，以便都往一起跑，节约内存
           firstSegmentIndex = segmentIndex;
           globalOrdDelta = delta;
         }
@@ -243,31 +243,31 @@ public class OrdinalMap implements Accountable {
         // for each per-segment ord, map it back to the global term; the while loop is needed
         // in case the incoming TermsEnums don't have compact ordinals (some ordinal values
         // are skipped), which can happen e.g. with a FilteredTermsEnum:
-        assert segmentOrds[segmentIndex] <= segmentOrd;
+        assert segmentOrds[segmentIndex] <= segmentOrd;// 当前这个segment已经处理的order，肯定比即将来的这个orde小
 
         // TODO: we could specialize this case (the while loop is not needed when the ords
         // are compact)
-        do {
-          ordDeltas[segmentIndex].add(delta);
+        do {//实际上并不会循环
+          ordDeltas[segmentIndex].add(delta);// 和全局的order给存储起来
           segmentOrds[segmentIndex]++;
-        } while (segmentOrds[segmentIndex] <= segmentOrd);
+        } while (segmentOrds[segmentIndex] <= segmentOrd);// 小于当前这个词的sgment内排序
         
-        if (top.next() == null) {
-          queue.pop();
+        if (top.next() == null) { // 这个segment继续读取下一个term，放在对应的OridinalMap$TermsEnumIndex中
+          queue.pop();// 将这个segment丢弃了
           if (queue.size() == 0) {
             break;
           }
         } else {
-          queue.updateTop();
-        }
+          queue.updateTop();// 并没有考虑文档id大小一致的问题
+        }// 若下个词和当前词的词不一样，相同的词已经读取完了，再出现的词，肯定比这个词大。
         if (queue.top().currentTerm.equals(scratch.get()) == false) {
           break;
         }
       }
 
       // for each unique term, just mark the first segment index/delta where it occurs
-      firstSegments.add(firstSegmentIndex);
-      globalOrdDeltas.add(globalOrdDelta);
+      firstSegments.add(firstSegmentIndex);// 针对每个unique 词，仅仅记录第一个segment的index(最小的那个segment)
+      globalOrdDeltas.add(globalOrdDelta);// 针对每个unique 词，仅仅记录第一个segment的index(最小的那个segment)和全局的差值
       globalOrd++;
     }
 
@@ -278,16 +278,16 @@ public class OrdinalMap implements Accountable {
     long ramBytesUsed = BASE_RAM_BYTES_USED + this.globalOrdDeltas.ramBytesUsed()
       + this.firstSegments.ramBytesUsed() + RamUsageEstimator.shallowSizeOf(segmentToGlobalOrds)
       + segmentMap.ramBytesUsed();
-    for (int i = 0; i < ordDeltas.length; ++i) {
+    for (int i = 0; i < ordDeltas.length; ++i) {// 遍历segment
       final PackedLongValues deltas = ordDeltas[i].build();
-      if (ordDeltaBits[i] == 0L) {
+      if (ordDeltaBits[i] == 0L) { // 全部为0，说明segment内order排序和全局排序一模一样
         // segment ords perfectly match global ordinals
         // likely in case of low cardinalities and large segments
         segmentToGlobalOrds[i] = LongValues.IDENTITY;
-      } else {
+      } else { // 本地semgment docValue内词的排序和全局排序不一样不
         final int bitsRequired = ordDeltaBits[i] < 0 ? 64 : PackedInts.bitsRequired(ordDeltaBits[i]);
         final long monotonicBits = deltas.ramBytesUsed() * 8;
-        final long packedBits = bitsRequired * deltas.size();
+        final long packedBits = bitsRequired * deltas.size();// 总共占用多少byte
         if (deltas.size() <= Integer.MAX_VALUE
             && packedBits <= monotonicBits * (1 + acceptableOverheadRatio)) {
           // monotonic compression mostly adds overhead, let's keep the mapping in plain packed ints
@@ -305,9 +305,9 @@ public class OrdinalMap implements Accountable {
               }
             };
           ramBytesUsed += newDeltas.ramBytesUsed();
-        } else {
+        } else {// 一般跑这里
           segmentToGlobalOrds[i] = new LongValues() {
-              @Override
+              @Override// 这个segment中的第几位映射到全局globaOrder的位数
               public long get(long ord) {
                 return ord + deltas.get(ord);
               }
@@ -324,7 +324,7 @@ public class OrdinalMap implements Accountable {
    * Given a segment number, return a {@link LongValues} instance that maps
    * segment ordinals to global ordinals.
    */
-  public LongValues getGlobalOrds(int segmentIndex) {
+  public LongValues getGlobalOrds(int segmentIndex) { // 获取本segment docValue的全局映射表
     return segmentToGlobalOrds[segmentMap.oldToNew(segmentIndex)];
   }
 

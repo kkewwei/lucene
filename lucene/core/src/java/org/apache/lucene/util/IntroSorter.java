@@ -36,7 +36,7 @@ public abstract class IntroSorter extends Sorter {
     quicksort(from, to, 2 * MathUtil.log(to - from, 2));
   }
 
-  void quicksort(int from, int to, int maxDepth) {
+  void quicksort(int from, int to, int maxDepth) { // 文档下标
     if (to - from < BINARY_SORT_THRESHOLD) { //二进制排序
       binarySort(from, to);
       return;

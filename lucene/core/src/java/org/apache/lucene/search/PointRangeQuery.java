@@ -155,7 +155,7 @@ public abstract class PointRangeQuery extends Query {
       private IntersectVisitor getIntersectVisitor(DocIdSetBuilder result) {
         return new IntersectVisitor() {
 
-          DocIdSetBuilder.BulkAdder adder;
+          DocIdSetBuilder.BulkAdder adder;// 匹配的docID放这里
 
           @Override
           public void grow(int count) {
@@ -332,7 +332,7 @@ public abstract class PointRangeQuery extends Query {
         if (scorerSupplier == null) {
           return null;
         }
-        return scorerSupplier.get(Long.MAX_VALUE); //
+        return scorerSupplier.get(Long.MAX_VALUE); // PointRangeQuery
       }
 
       @Override

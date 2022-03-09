@@ -30,7 +30,7 @@ import org.apache.lucene.search.DocIdSetIterator;
  * {@link LongBitSet}.
  * // 存储固定长度的length,原理超简单https://www.amazingkoala.com.cn/Lucene/gongjulei/2019/0404/45.html
  * @lucene.internal
- */   // 以 long作为长度为64位长的bytes, 若64以内某个数有值，那么就将对应byte置为1。以x/64来缩小每个数，0-63全部放在第一个logn中，64-127放在第二个long中
+ */   // 以 long作为长度为64位长的bytes, 若64以内某个数有值，那么就将对应byte置为1。以x/64来缩小每个数，0-63全部放在第一个long中，64-127放在第二个long中
 public final class FixedBitSet extends BitSet implements Bits, Accountable {
 
   private static final long BASE_RAM_BYTES_USED = RamUsageEstimator.shallowSizeOfInstance(FixedBitSet.class);

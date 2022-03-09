@@ -44,7 +44,7 @@ import org.apache.lucene.util.InfoStream;
  *  reuses instances of the SegmentReaders in all these
  *  places if it is in "near real-time mode" (getReader()
  *  has been called on this instance). */
-final class ReaderPool implements Closeable {
+final class ReaderPool implements Closeable { // 详见https://www.amazingkoala.com.cn/Lucene/Index/2020/1209/184.html介绍，非常牛逼
  // ReaderPool描述了所有SegmentCommitInfo的信息，在本篇文章中我们只需要知道，ReaderPool类中包含了一个容器:readerMap
   private final Map<SegmentCommitInfo,ReadersAndUpdates> readerMap = new HashMap<>(); // 真正干嘛的，还没看懂
   private final Directory directory;

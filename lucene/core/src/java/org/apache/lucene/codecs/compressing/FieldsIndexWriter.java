@@ -63,8 +63,8 @@ public final class FieldsIndexWriter implements Closeable {
   private final byte[] id;
   private final int blockShift; // 一个block最多放多少个chunk,一般都是1024个
   private final IOContext ioContext;
-  private IndexOutput docsOut; // _eg7_Lucene85FieldsIndex-doc_ids_0.tmp
-  private IndexOutput filePointersOut; // _eg7_Lucene85FieldsIndexfile_pointers_1.tmp
+  private IndexOutput docsOut; // _eg7_Lucene85FieldsIndex-doc_ids_0.tmp或者 _eg7_Lucene85TermVectorsIndex-doc_ids_0.tmp
+  private IndexOutput filePointersOut; // _eg7_Lucene85FieldsIndexfile_pointers_1.tmp或者_eg7_Lucene85TermVectorsIndex_pointers_1.tmp
   private int totalDocs; // 这个segment的storedFields总文档数
   private int totalChunks;  // 这个segment的storedFields总chunk数
   private long previousFP;
@@ -92,7 +92,7 @@ public final class FieldsIndexWriter implements Closeable {
       }
     }
   }
-   // 达到16k或者128个文档了，会触发一次
+   // 达到16k或者128个文档了，会触发一次(StoredField或者termVector都会跑到这里)
   void writeIndex(int numDocs, long startPointer) throws IOException {
     assert startPointer >= previousFP;
     docsOut.writeVInt(numDocs); // docsOut = "_3_Lucene85FieldsIndex-doc_ids_0.tmp" 文档数

@@ -136,12 +136,12 @@ public final class Lucene80DocValuesFormat extends DocValuesFormat {
     super("Lucene80");
   }
 
-  @Override
+  @Override // 写时产生
   public DocValuesConsumer fieldsConsumer(SegmentWriteState state) throws IOException {
     return new Lucene80DocValuesConsumer(state, DATA_CODEC, DATA_EXTENSION, META_CODEC, META_EXTENSION);
   }
 
-  @Override
+  @Override// segment加载的时候就会进来
   public DocValuesProducer fieldsProducer(SegmentReadState state) throws IOException {
     return new Lucene80DocValuesProducer(state, DATA_CODEC, DATA_EXTENSION, META_CODEC, META_EXTENSION);
   }
@@ -174,6 +174,6 @@ public final class Lucene80DocValuesFormat extends DocValuesFormat {
   static final int TERMS_DICT_BLOCK_MASK = TERMS_DICT_BLOCK_SIZE - 1;// 15  词典block，会没15个词尽量压缩到一次，为一个block
 
   static final int TERMS_DICT_REVERSE_INDEX_SHIFT = 10;    // terms_dict_reverses_index_shift
-  static final int TERMS_DICT_REVERSE_INDEX_SIZE = 1 << TERMS_DICT_REVERSE_INDEX_SHIFT;    // terms_dict_reverses_index_size
-  static final int TERMS_DICT_REVERSE_INDEX_MASK = TERMS_DICT_REVERSE_INDEX_SIZE - 1; // terms_dict_reverses_index_mask
+  static final int TERMS_DICT_REVERSE_INDEX_SIZE = 1 << TERMS_DICT_REVERSE_INDEX_SHIFT;    // terms_dict_reverses_index_size  1024
+  static final int TERMS_DICT_REVERSE_INDEX_MASK = TERMS_DICT_REVERSE_INDEX_SIZE - 1; // terms_dict_reverses_index_mask 1023
 }

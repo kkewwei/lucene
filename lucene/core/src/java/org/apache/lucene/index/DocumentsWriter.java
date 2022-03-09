@@ -675,7 +675,7 @@ final class DocumentsWriter implements Closeable, Accountable {// 在索引的�
       assert flushingDeleteQueue == currentFullFlushDelQueue;
       flushingDeleteQueue.close(); // all DWPT have been processed and this queue has been fully flushed to the ticket-queue
     }
-    if (anythingFlushed) { //
+    if (anythingFlushed) { // 又刷新
       return -seqNo;
     } else {
       return seqNo;

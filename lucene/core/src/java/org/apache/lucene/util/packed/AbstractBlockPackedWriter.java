@@ -26,7 +26,7 @@ import org.apache.lucene.store.DataOutput;
 
 abstract class AbstractBlockPackedWriter {
 
-  static final int MIN_BLOCK_SIZE = 64;
+  static final int MIN_BLOCK_SIZE = 64;// 最小的block个数
   static final int MAX_BLOCK_SIZE = 1 << (30 - 3);
   static final int MIN_VALUE_EQUALS_0 = 1 << 0;
   static final int BPV_SHIFT = 1;
@@ -42,7 +42,7 @@ abstract class AbstractBlockPackedWriter {
   }
 
   protected DataOutput out; // _0.tvd   FSIndexOutput
-  protected final long[] values;// 可能每个文档的域个数
+  protected final long[] values;// 可能每个文档的域个数，
   protected byte[] blocks; //需要几个byte来存放values里面的所有数据
   protected int off; //  这一批缓存准备向文件中刷入的数据
   protected long ord;

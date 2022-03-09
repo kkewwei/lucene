@@ -127,7 +127,7 @@ public final class FST<T> implements Accountable {
 
   // Never serialized; just used to represent the virtual
   // non-final node w/ no arcs:
-  private static final long NON_FINAL_END_NODE = 0;
+  private static final long NON_FINAL_END_NODE = 0; // 仅仅是表示虚拟非final节点
 
   /** If arc has this label then that arc is final/accepted */
   public static final int END_LABEL = -1;
@@ -401,7 +401,7 @@ public final class FST<T> implements Accountable {
     bytes = new BytesStore(bytesPageBits); // es中bytesPageBits=15。32kb
     // pad: ensure no node gets address 0 which is reserved to mean
     // the stop state w/ no arcs
-    bytes.writeByte((byte) 0);
+    bytes.writeByte((byte) 0); //
     emptyOutput = null;
   }
 
@@ -655,7 +655,7 @@ public final class FST<T> implements Accountable {
         // TODO: for better perf (but more RAM used) we
         // could avoid this except when arc is "near" the
         // last arc:
-        flags += BIT_TARGET_NEXT;
+        flags += BIT_TARGET_NEXT; // bit_target_next
       }
 
       if (arc.isFinal) { //例如:ab,ac,ad。那么b,c,d都是最后一条边。
@@ -683,7 +683,7 @@ public final class FST<T> implements Accountable {
       int numLabelBytes = (int) (builder.bytes.getPosition() - labelStart);
 
       // System.out.println("  write arc: label=" + (char) arc.label + " flags=" + flags + " target=" + target.node + " pos=" + bytes.getPosition() + " output=" + outputs.outputToString(arc.output));
-       // 有输出
+       // 有输出，那么也记录下output
       if (arc.output != NO_OUTPUT) {
         outputs.write(arc.output, builder.bytes); // 写output
         //System.out.println("    write output");
@@ -749,7 +749,7 @@ public final class FST<T> implements Accountable {
     }
 
     final long thisNodeAddress = builder.bytes.getPosition()-1;
-    builder.bytes.reverse(startAddress, thisNodeAddress); // 根节点最后读取，想最开始读取根节点。才倒序byte的
+    builder.bytes.reverse(startAddress, thisNodeAddress); // 这里倒了一次，读取的时候也是倒着读的
     builder.nodeCount++;
     return thisNodeAddress; // 写了两个字符
   }
@@ -765,8 +765,8 @@ public final class FST<T> implements Accountable {
    */
   private boolean shouldExpandNodeWithFixedLengthArcs(Builder<T> builder, Builder.UnCompiledNode<T> node) {
     return builder.allowFixedLengthArcs &&
-        ((node.depth <= FIXED_LENGTH_ARC_SHALLOW_DEPTH && node.numArcs >= FIXED_LENGTH_ARC_SHALLOW_NUM_ARCS) ||
-            node.numArcs >= FIXED_LENGTH_ARC_DEEP_NUM_ARCS);
+        ((node.depth <= FIXED_LENGTH_ARC_SHALLOW_DEPTH && node.numArcs >= FIXED_LENGTH_ARC_SHALLOW_NUM_ARCS) ||// 深度超过3，或者边超过5个
+            node.numArcs >= FIXED_LENGTH_ARC_DEEP_NUM_ARCS);// 边的个数超过10个
   }
 
   /**
@@ -943,7 +943,7 @@ public final class FST<T> implements Accountable {
   }
   //
   /** Fills virtual 'start' arc, ie, an empty incoming arc to the FST's start node */
-  public Arc<T> getFirstArc(Arc<T> arc) { // 开始读取第一条边
+  public Arc<T> getFirstArc(Arc<T> arc) { // 虚拟出来的一条边，它的下游是root
     T NO_OUTPUT = outputs.getNoOutput(); // ByteSequenceOutputs
 
     if (emptyOutput != null) { // 为空
@@ -1319,10 +1319,10 @@ public final class FST<T> implements Accountable {
   // TODO: could we somehow [partially] tableize arc lookups
   // like automaton?
 
-  /** Finds an arc leaving the incoming arc, replacing the arc in place.
+  /** Finds an arc leaving the incoming arc, replacing the arc in place.  follow和arc一模一样，就当一个参数使用就好了。时刻存放当前扫到那条边了
    *  This returns null if the arc was not found, else the incoming arc. */
   public Arc<T> findTargetArc(int labelToMatch, Arc<T> follow, Arc<T> arc, BytesReader in) throws IOException {
-   // 从in中读取一个字符labelToMatch对应的边, 该边的终点和follow指向的终点相同, 将该边放入arc中
+   // 从in中读取一个字符labelToMatch对应的边, 将该边放入arc中
     if (labelToMatch == END_LABEL) {
       if (follow.isFinal()) {
         if (follow.target() <= 0) {
@@ -1408,7 +1408,7 @@ public final class FST<T> implements Accountable {
       } else if (arc.isLast()) {
         return null;
       } else {
-        readNextRealArc(arc, in);
+        readNextRealArc(arc, in);// 读取下一个字段
       }
     }
   }

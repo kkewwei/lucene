@@ -45,7 +45,7 @@ public final class PositiveIntOutputs extends Outputs<Long> {
   }
 
   @Override
-  public Long common(Long output1, Long output2) {
+  public Long common(Long output1, Long output2) { // 定义比大小
     assert valid(output1);
     assert valid(output2);
     if (output1 == NO_OUTPUT || output2 == NO_OUTPUT) {

@@ -239,9 +239,9 @@ public class SegmentCommitInfo {
 
     // TODO we could rely on TrackingDir.getCreatedFiles() (like we do for
     // updates) and then maybe even be able to remove LiveDocsFormat.files().
-    
+    //
     // Must separately add any live docs files:
-    info.getCodec().liveDocsFormat().files(this, files);
+    info.getCodec().liveDocsFormat().files(this, files);// files()将跑到Lucene50LiveDocsFormat，添加.liv文件
     
     // must separately add any field updates files
     for (Set<String> updatefiles : dvUpdatesFiles.values()) {

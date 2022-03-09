@@ -59,7 +59,7 @@ final class SegmentDocValues {
       }
     };
   }
-
+  // segment加载的时候就会进来
   /** Returns the {@link DocValuesProducer} for the given generation. */
   synchronized DocValuesProducer getDocValuesProducer(long gen, SegmentCommitInfo si, Directory dir, FieldInfos infos) throws IOException {
     RefCount<DocValuesProducer> dvp = genDVProducers.get(gen);

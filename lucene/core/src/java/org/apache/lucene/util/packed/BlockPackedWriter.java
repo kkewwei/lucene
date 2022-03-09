@@ -94,7 +94,7 @@ public final class BlockPackedWriter extends AbstractBlockPackedWriter {
 
     if (bitsRequired > 0) {
       if (min != 0) {
-        for (int i = 0; i < off; ++i) {
+        for (int i = 0; i < off; ++i) { // 精简长度
           values[i] -= min; // 实际保存的是域的当前值-最小值，也是为了精简字段长度
         }
       }

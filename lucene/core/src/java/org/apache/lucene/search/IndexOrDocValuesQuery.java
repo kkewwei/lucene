@@ -50,7 +50,7 @@ import org.apache.lucene.index.Term;
  * @lucene.experimental
  */
 public final class IndexOrDocValuesQuery extends Query {
-
+ // 为什么会设计IndexOrDocValuesQuery，可以看下这篇文档https://www.amazingkoala.com.cn/Lucene/Search/2021/0701/196.html
   private final Query indexQuery, dvQuery; //可以分别是LongPoint$1，SortedNumericDocValuesRangeQuery$1
 
   /**

@@ -188,7 +188,7 @@ class FreqProxFields extends Fields {
         return null;
       } else {
         int textStart = postingsArray.textStarts[sortedTermIDs[ord]];
-        terms.bytePool.setBytesRef(scratch, textStart); // 读取这个termID的具体byte
+        terms.bytePool.setBytesRef(scratch, textStart); // 读取这个termID的具体bytes，根据长度获取
         return scratch;
       }
     }
@@ -411,7 +411,7 @@ class FreqProxFields extends Fields {
     int pos;
     int startOffset;
     int endOffset;
-    int posLeft; // freqency
+    int posLeft; // freqency 什么含义
     int termID;
     boolean ended;
     boolean hasPayload;
@@ -427,8 +427,8 @@ class FreqProxFields extends Fields {
 
     public void reset(int termID) {
       this.termID = termID;
-      terms.initReader(reader, termID, 0); // FreqProxTermsWriterPerField, 把词频等信息从PoolBuffer0中读取出来
-      terms.initReader(posReader, termID, 1); // FreqProxTermsWriterPerField, 把offset、position等信息从PoolBuffer1中读取出来
+      terms.initReader(reader, termID, 0); // FreqProxTermsWriterPerField, 把词频等信息从PoolBuffer0中读取出来，放入reader中
+      terms.initReader(posReader, termID, 1); // FreqProxTermsWriterPerField, 把offset、position等信息从PoolBuffer1中读取出来，放入posReader
       ended = false;
       docID = -1;
       posLeft = 0;
@@ -462,7 +462,7 @@ class FreqProxFields extends Fields {
           freq = postingsArray.termFreqs[termID];
         }
       } else {// 跑到这里
-        int code = reader.readVInt(); // 可以看下FreqProxTermsWriterPerField.addTerm()里面存储doc的过程L168，就是
+        int code = reader.readVInt(); // 可以看下 FreqProxTermsWriterPerField.addTerm()里面存储doc的过程L168，就是
         docID += code >>> 1; // doc就是一直累加的
         if ((code & 1) != 0) { // 低位为1，就说明freq为1
           freq = 1;

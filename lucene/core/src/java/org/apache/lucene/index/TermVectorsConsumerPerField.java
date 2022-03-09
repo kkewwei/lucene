@@ -26,7 +26,7 @@ import org.apache.lucene.util.ByteBlockPool;
 import org.apache.lucene.util.BytesRef;
 // Lucene的倒排索引有两种格式，一种是用于搜索的Postings，在源码中由FreqProxTermsWriterPerField负责；另一种是TermsVectors，由TermsVectorsWriterPerField实现。
 final class TermVectorsConsumerPerField extends TermsHashPerField { // segment内共享，segment完成后就清空。和FreqProxTermsWriterPerField一一对应
-
+  // 每次TermVectorsConsumerPerField.finishDocument(写完一个文档后）调用PostingsBytesStartArray.clear()，就会被置位null
   private TermVectorsPostingsArray termVectorsPostingsArray;
 
   private final TermVectorsConsumer termsWriter;// TermVectorsConsumer
@@ -57,7 +57,7 @@ final class TermVectorsConsumerPerField extends TermsHashPerField { // segment�
    *  are enabled, to write the vectors to
    *  RAMOutputStream, which is then quickly flushed to
    *  the real term vectors files in the Directory. */  @Override
-  void finish() {// 所有域处理完后会调用，将自己放在termsWriter中
+  void finish() {// 所有域处理完后会调用，将自己放在termsWriter中(处理完一个文档)
     if (!doVectors || getNumTerms() == 0) {
       return;
     }
@@ -85,9 +85,9 @@ final class TermVectorsConsumerPerField extends TermsHashPerField { // segment�
     final TermVectorsWriter tv = termsWriter.writer;// CompressingTermVectorsWriter，一个segment共享一个，落盘完成后就置空了
 
     sortTerms();
-    final int[] termIDs = getSortedTermIDs();// 一个域内termId的个数
+    final int[] termIDs = getSortedTermIDs();// 一个域内termId的个数，已经按照term排好序了
     // numPostings 每个distinct(词), 这个域加一个
-    tv.startField(fieldInfo, numPostings, doVectorPositions, doVectorOffsets, hasPayloads);
+    tv.startField(fieldInfo, numPostings, doVectorPositions, doVectorOffsets, hasPayloads); // 写入tvd
     // 整个链共享一个
     final ByteSliceReader posReader = doVectorPositions ? termsWriter.vectorSliceReaderPos : null;//ByteSliceReader, 为了读取某一个词
     final ByteSliceReader offReader = doVectorOffsets ? termsWriter.vectorSliceReaderOff : null; // ByteSliceReader  为了读取某一个词
@@ -137,7 +137,7 @@ final class TermVectorsConsumerPerField extends TermsHashPerField { // segment�
 
       hasPayloads = false;
 
-      doVectors = field.fieldType().storeTermVectors(); // 存储termVector
+      doVectors = field.fieldType().storeTermVectors(); // 存储termVector，es中不设置
 
       if (doVectors) { // 若设置了doVectors
 
@@ -212,7 +212,7 @@ final class TermVectorsConsumerPerField extends TermsHashPerField { // segment�
       postings.lastOffsets[termID] = endOffset;
     }
 
-    if (doVectorPositions) { // // 没看懂记录着有啥用
+    if (doVectorPositions) { // // 词向量的位置信息
       final BytesRef payload;
       if (payloadAttribute == null) {
         payload = null;
@@ -236,14 +236,14 @@ final class TermVectorsConsumerPerField extends TermsHashPerField { // segment�
   @Override
   void newTerm(final int termID, final int docID) {
     TermVectorsPostingsArray postings = termVectorsPostingsArray;
-
+    // 每个新的文档时都置位空了
     postings.freqs[termID] = getTermFreq();
     postings.lastOffsets[termID] = 0;
     postings.lastPositions[termID] = 0;
     
     writeProx(postings, termID);
   }
-
+  // 第一次出现
   @Override
   void addTerm(final int termID, final int docID) {
     TermVectorsPostingsArray postings = termVectorsPostingsArray;
@@ -252,7 +252,7 @@ final class TermVectorsConsumerPerField extends TermsHashPerField { // segment�
 
     writeProx(postings, termID);
   }
-
+   // 此后多次出现
   private int getTermFreq() {
     int freq = termFreqAtt.getTermFrequency();
     if (freq != 1) {

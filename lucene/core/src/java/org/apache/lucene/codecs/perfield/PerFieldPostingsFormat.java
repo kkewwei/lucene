@@ -117,7 +117,7 @@ public abstract class PerFieldPostingsFormat extends PostingsFormat {
 
       FieldsGroup build() {
         List<String> fieldList = new ArrayList<>(fields);
-        fieldList.sort(null);
+        fieldList.sort(null);//排序
         return new FieldsGroup(fieldList, suffix, state);
       }
     }
@@ -153,7 +153,7 @@ public abstract class PerFieldPostingsFormat extends PostingsFormat {
       // Write postings
       boolean success = false;
       try {
-        for (Map.Entry<PostingsFormat, FieldsGroup> ent : formatToGroups.entrySet()) {
+        for (Map.Entry<PostingsFormat, FieldsGroup> ent : formatToGroups.entrySet()) {// 一般只有一种
           PostingsFormat format = ent.getKey();
           final FieldsGroup group = ent.getValue();
 
@@ -216,12 +216,12 @@ public abstract class PerFieldPostingsFormat extends PostingsFormat {
       for(String field : indexedFieldNames) {
         FieldInfo fieldInfo = writeState.fieldInfos.fieldInfo(field);
         // TODO: This should check current format from the field attribute?
-        final PostingsFormat format = getPostingsFormatForField(field); // Lucene50PostingsFormat
+        final PostingsFormat format = getPostingsFormatForField(field); // Lucene84PostingsFormat，只能有一种格式
 
         if (format == null) {
           throw new IllegalStateException("invalid null PostingsFormat for field=\"" + field + "\"");
         }
-        String formatName = format.getName();
+        String formatName = format.getName(); // Lucene84
 
         FieldsGroup.Builder groupBuilder = formatToGroupBuilders.get(format);
         if (groupBuilder == null) { // 域名相同

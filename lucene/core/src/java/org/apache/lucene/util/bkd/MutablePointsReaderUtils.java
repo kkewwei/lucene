@@ -96,7 +96,7 @@ public final class MutablePointsReaderUtils {
                                MutablePointValues reader, int from, int to,
                                BytesRef scratch1, BytesRef scratch2) {
 
-    final int start = sortedDim * bytesPerDim + commonPrefixLengths[sortedDim];
+    final int start = sortedDim * bytesPerDim + commonPrefixLengths[sortedDim];// point内偏移量
     final int dimEnd =  sortedDim * bytesPerDim + bytesPerDim;
     final int dataStart = numIndexDim * bytesPerDim;
     final int dataEnd = dataStart + (numDataDim - numIndexDim) * bytesPerDim;
@@ -119,7 +119,7 @@ public final class MutablePointsReaderUtils {
       }
 
       @Override
-      protected int comparePivot(int j) {
+      protected int comparePivot(int j) {// 先比较不同的值，在比较docId
         reader.getValue(j, scratch2);
         int cmp = FutureArrays.compareUnsigned(pivot.bytes, pivot.offset + start, pivot.offset + dimEnd, scratch2.bytes,
             scratch2.offset + start, scratch2.offset + dimEnd);
@@ -137,19 +137,19 @@ public final class MutablePointsReaderUtils {
 
   /** Partition points around {@code mid}. All values on the left must be less
    *  than or equal to it and all values on the right must be greater than or
-   *  equal to it. */
+   *  equal to it. */ //
   public static void partition(int numDataDim, int numIndexDim, int maxDoc, int splitDim, int bytesPerDim, int commonPrefixLen,
-                               MutablePointValues reader, int from, int to, int mid,
+                               MutablePointValues reader, int from, int to, int mid, // from和to、middle都是point下标，不是叶子下标
                                BytesRef scratch1, BytesRef scratch2) {
     final int dimOffset = splitDim * bytesPerDim + commonPrefixLen; // 相同纬度的数据，从这个位开始不一致了（该元素内的偏移量）
     final int dimCmpBytes = bytesPerDim - commonPrefixLen; // 需要比较的位数
     final int dataOffset = numIndexDim * bytesPerDim; // 整个point的数据结尾位置
-    final int dataCmpBytes = (numDataDim - numIndexDim) * bytesPerDim + dimCmpBytes; // 该元素不相同的个数
-    final int bitsPerDocId = PackedInts.bitsRequired(maxDoc - 1);
+    final int dataCmpBytes = (numDataDim - numIndexDim) * bytesPerDim + dimCmpBytes; // 该point该元素不相同的个数
+    final int bitsPerDocId = PackedInts.bitsRequired(maxDoc - 1); // 最大的那个文档id需要多少位
     new RadixSelector(dataCmpBytes + (bitsPerDocId + 7) / 8) { //  这里位数为两类，可以从byteAt()看出，读取每一类的方式也不一样
     // 第一类就是普通的dimCmpBytes，读取的是不相同的字符；第二类是 (bitsPerDocId + 7) / 8， 读取的是文档Id，就是说把文档Id作为了桶的一部分
       @Override
-      protected Selector getFallbackSelector(int k) { // 使用快排进行排序
+      protected Selector getFallbackSelector(int k) { // 使用快排进行排序, k:表示第几个字符
         final int dataStart = (k < dimCmpBytes) ? dataOffset : dataOffset + k - dimCmpBytes;
         final int dataEnd = numDataDim * bytesPerDim;
         return new IntroSelector() {
@@ -171,7 +171,7 @@ public final class MutablePointsReaderUtils {
           @Override
           protected int comparePivot(int j) {
             if (k < dimCmpBytes) {
-              reader.getValue(j, scratch2);
+              reader.getValue(j, scratch2); // 优先比较
               int cmp = FutureArrays.compareUnsigned(pivot.bytes, pivot.offset + dimOffset + k, pivot.offset + dimOffset + dimCmpBytes,
                   scratch2.bytes, scratch2.offset + dimOffset + k, scratch2.offset + dimOffset + dimCmpBytes);
               if (cmp != 0) {
@@ -197,13 +197,13 @@ public final class MutablePointsReaderUtils {
       }
       // 可以从maxLength=dataCmpBytes + (bitsPerDocId + 7) / 8可以看出，属于不同的读法，
       @Override
-      protected int byteAt(int i, int k) { // 第i个元素，k表示相对位置
+      protected int byteAt(int i, int k) { // 第i个w文档，k表示不同前缀相对位置
         if (k < dimCmpBytes) { // 读取的是dataCmpBytes中的数据
           return Byte.toUnsignedInt(reader.getByteAt(i, dimOffset + k));
         } else if (k < dataCmpBytes) {
           return Byte.toUnsignedInt(reader.getByteAt(i, dataOffset + k - dimCmpBytes));
         } else { // 读取的是docId的高位
-          final int shift = bitsPerDocId - ((k - dataCmpBytes + 1) << 3); // 通过(k - dataCmpBytes)去掉原本影响，，每次向右移8位,比如第一次是22，第二次是14
+          final int shift = bitsPerDocId - ((k - dataCmpBytes + 1) << 3); // 通过(k - dataCmpBytes)去掉原本影响，，每次向右移8位,比如第一次是22，第二次是14，
           return (reader.getDocID(i) >>> Math.max(0, shift)) & 0xff; // 应该仅仅是为了hash，从docId中取值
         }
       }

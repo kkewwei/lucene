@@ -447,23 +447,23 @@ public final class Lucene84PostingsFormat extends PostingsFormat {
       }
     }
   }
-
+  //TermState中如下参数的含义可参考：Lucene84PostingsWriter.finishTerm()最后定义的
   /**
    * Holds all state required for {@link Lucene84PostingsReader} to produce a
    * {@link org.apache.lucene.index.PostingsEnum} without re-seeking the terms dict.
    *
    * @lucene.internal
-   */
+   */ // // 每个词写完后，都会产生一个该对象，记录当前一些位置信息
   public static final class IntBlockTermState extends BlockTermState {
     /** file pointer to the start of the doc ids enumeration, in {@link #DOC_EXTENSION} file */
-    public long docStartFP;
+    public long docStartFP;//// 这个单词在写入doc文件前，记录的doc绝对起始位置
     /** file pointer to the start of the positions enumeration, in {@link #POS_EXTENSION} file */
     public long posStartFP;
     /** file pointer to the start of the payloads enumeration, in {@link #PAY_EXTENSION} file */
     public long payStartFP;
     /** file offset for the start of the skip list, relative to docStartFP, if there are more
      * than {@link ForUtil#BLOCK_SIZE} docs; otherwise -1 */
-    public long skipOffset;
+    public long skipOffset;//// 该term存储docId和词频占用doc文件的长度,    有了长度+doc起始位置，就可以算出跳表起始位置
     /** file offset for the last position in the last block, if there are more than
      * {@link ForUtil#BLOCK_SIZE} positions; otherwise -1 */
     public long lastPosBlockOffset;

@@ -166,7 +166,7 @@ public final class Lucene84PostingsReader extends PostingsReaderBase {
   public void close() throws IOException {
     IOUtils.close(docIn, posIn, payIn);
   }
-
+  // 可参考 Lucene84PostingsReader.encodeTerm()
   @Override
   public void decodeTerm(DataInput in, FieldInfo fieldInfo, BlockTermState _termState, boolean absolute)
     throws IOException {
@@ -184,7 +184,7 @@ public final class Lucene84PostingsReader extends PostingsReaderBase {
     if (version >= VERSION_COMPRESSED_TERMS_DICT_IDS) {
       final long l = in.readVLong();
       if ((l & 0x01) == 0) {
-        termState.docStartFP += l >>> 1;
+        termState.docStartFP += l >>> 1;// 先解析出该词在写入doc时，doc的起始位置
         if (termState.docFreq == 1) {
           termState.singletonDocID = in.readVInt();
         } else {
@@ -1013,10 +1013,10 @@ public final class Lucene84PostingsReader extends PostingsReaderBase {
     final ForDeltaUtil forDeltaUtil = new ForDeltaUtil(forUtil);
     final PForUtil pforUtil = new PForUtil(forUtil);
 
-    private final long[] docBuffer = new long[BLOCK_SIZE+1];
-    private final long[] freqBuffer = new long[BLOCK_SIZE];
+    private final long[] docBuffer = new long[BLOCK_SIZE+1];// 文档id
+    private final long[] freqBuffer = new long[BLOCK_SIZE]; // 词频
 
-    private int docBufferUpto;
+    private int docBufferUpto; // 内存缓存的文档数
 
     private final Lucene84ScoreSkipReader skipper;
 
@@ -1057,7 +1057,7 @@ public final class Lucene84PostingsReader extends PostingsReaderBase {
           MAX_SKIP_LEVELS,
           indexHasPositions,
           indexHasOffsets,
-          indexHasPayloads);
+          indexHasPayloads);// termState中如下参数的含义可参考：Lucene84PostingsWriter.finishTerm()最后定义的
       skipper.init(termState.docStartFP+termState.skipOffset, termState.docStartFP, termState.posStartFP, termState.payStartFP, docFreq);
 
       // We set the last element of docBuffer to NO_MORE_DOCS, it helps save conditionals in advance()
@@ -1108,13 +1108,13 @@ public final class Lucene84PostingsReader extends PostingsReaderBase {
       docBufferUpto = 0;
       assert docBuffer[BLOCK_SIZE] == NO_MORE_DOCS;
     }
-
+    // target是文档号
     @Override
     public void advanceShallow(int target) throws IOException {
       if (target > nextSkipDoc) {
         // always plus one to fix the result, since skip position in Lucene84SkipReader
         // is a little different from MultiLevelSkipListReader
-        final int newDocUpto = skipper.skipTo(target) + 1;
+        final int newDocUpto = skipper.skipTo(target) + 1; // Lucene84ScoreSkipReader
 
         if (newDocUpto >= blockUpto) {
           // Skipper moved
@@ -1144,12 +1144,12 @@ public final class Lucene84PostingsReader extends PostingsReaderBase {
       return advance(doc + 1);
     }
 
-    @Override
+    @Override // target是文档Id
     public int advance(int target) throws IOException {
       if (target > nextSkipDoc) {
-        advanceShallow(target);
+        advanceShallow(target);// target是文档号
       }
-      if (docBufferUpto == BLOCK_SIZE) {
+      if (docBufferUpto == BLOCK_SIZE) {// 128
         if (seekTo >= 0) {
           docIn.seek(seekTo);
           isFreqsRead = true; // reset isFreqsRead

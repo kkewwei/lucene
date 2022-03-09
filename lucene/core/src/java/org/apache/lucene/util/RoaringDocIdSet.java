@@ -32,7 +32,7 @@ import org.apache.lucene.search.DocIdSetIterator;
  * a {@link FixedBitSet} is used.
  *
  * @lucene.internal
- */
+ */ // 位图优化后的roaringbitmap文章，描述比较清楚：https://zhuanlan.zhihu.com/p/351365841
 public class RoaringDocIdSet extends DocIdSet {
 
   // Number of documents in a block

@@ -63,7 +63,7 @@ public final class SegmentReader extends CodecReader { // 父类有LeafReader
 
   /** True if we are holding RAM only liveDocs or DV updates, i.e. the SegmentCommitInfo delGen doesn't match our liveDocs. */
   final boolean isNRT;
-  
+   // segment加载的时候就会进来
   final DocValuesProducer docValuesProducer;  // SegmentDocValuesProducer
   final FieldInfos fieldInfos; // 需要全部读取出来
 
@@ -256,7 +256,7 @@ public final class SegmentReader extends CodecReader { // 父类有LeafReader
   @Override
   public DocValuesProducer getDocValuesReader() {
     ensureOpen();
-    return docValuesProducer; // SegmentDocValuesProducer
+    return docValuesProducer; // SegmentDocValuesProducer,也可以是 PerFieldDocValuesFormat$FieldsReader
   }
 
   @Override

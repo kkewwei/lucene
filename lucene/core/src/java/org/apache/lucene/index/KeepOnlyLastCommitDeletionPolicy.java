@@ -34,7 +34,7 @@ public final class KeepOnlyLastCommitDeletionPolicy extends IndexDeletionPolicy 
 
   /**
    * Deletes all commits except the most recent one.
-   */
+   */// 初始化时删除比较旧的commits
   @Override
   public void onInit(List<? extends IndexCommit> commits) {
     // Note that commits.size() should normally be 1:
@@ -49,7 +49,7 @@ public final class KeepOnlyLastCommitDeletionPolicy extends IndexDeletionPolicy 
     // Note that commits.size() should normally be 2 (if not
     // called by onInit above):
     int size = commits.size();
-    for(int i=0;i<size-1;i++) { //这里删除的时候，把最新的那个文件给保留了
+    for(int i=0;i<size-1;i++) { //这里删除的时候，把最新的那个commit给保留了
       commits.get(i).delete();
     }
   }

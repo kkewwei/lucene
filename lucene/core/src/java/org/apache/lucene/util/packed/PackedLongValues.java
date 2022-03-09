@@ -35,7 +35,7 @@ public class PackedLongValues extends LongValues implements Accountable {
   static final int MIN_PAGE_SIZE = 64;
   // More than 1M doesn't really makes sense with these appending buffers
   // since their goal is to try to have small numbers of bits per value
-  static final int MAX_PAGE_SIZE = 1 << 20;
+  static final int MAX_PAGE_SIZE = 1 << 20;//1m
 
   /** Return a new {@link Builder} that will compress efficiently positive integers. */
   public static PackedLongValues.Builder packedBuilder(int pageSize, float acceptableOverheadRatio) {
@@ -70,7 +70,7 @@ public class PackedLongValues extends LongValues implements Accountable {
   }
 
   final PackedInts.Reader[] values;
-  final int pageShift, pageMask;
+  final int pageShift, pageMask; // pageShift=1024
   private final long size;
   private final long ramBytesUsed;
 
@@ -160,20 +160,19 @@ public class PackedLongValues extends LongValues implements Accountable {
   }
   // 辅助产生每个Builder
   /** A Builder for a {@link PackedLongValues} instance. */
-  public static class
-  Builder implements Accountable {
+  public static class Builder implements Accountable {
 
     private static final int INITIAL_PAGE_COUNT = 16;
     private static final long BASE_RAM_BYTES_USED = RamUsageEstimator.shallowSizeOfInstance(Builder.class);
 
-    final int pageShift, pageMask;
+    final int pageShift, pageMask; // pageShift默认1024
     final float acceptableOverheadRatio;
     long[] pending; // 暂存的是每个termId，相同的算俩 / 文档Id
     long size; // 暂存的文档个数
 
     PackedInts.Reader[] values; //  存放的是这里[]Direct64, 里面有数数组直接填写。初始长度为16,装满了还能继续装
     long ramBytesUsed;
-    int valuesOff;
+    int valuesOff;// value里面当前起始位置
     int pendingOff; //目前已经存进来了几个term
 
     Builder(int pageSize, float acceptableOverheadRatio) {
@@ -219,7 +218,7 @@ public class PackedLongValues extends LongValues implements Accountable {
       }
       if (pendingOff == pending.length) { // 目前1024个，若存满了则扩容一次
         // check size
-        if (values.length == valuesOff) { //
+        if (values.length == valuesOff) { // 是否需要库容
           final int newLength = ArrayUtil.oversize(valuesOff + 1, 8);
           grow(newLength);
         }
@@ -264,7 +263,7 @@ public class PackedLongValues extends LongValues implements Accountable {
         final int bitsRequired = minValue < 0 ? 64 : PackedInts.bitsRequired(maxValue); //最大的数字需要多少位，最小数如果是负数，则需要64位，否则为（64-他的开始的0的数量）
         final PackedInts.Mutable mutable = PackedInts.getMutable(numValues, bitsRequired, acceptableOverheadRatio);//这个方法便是生成一个可以装数的包， Packed64
         for (int i = 0; i < numValues; ) { // 装每个数
-          i += mutable.set(i, values, i, numValues - i); // 跑到Packed64
+          i += mutable.set(i, values, i, numValues - i); // 跑到Packed64.set()
         }
         this.values[block] = mutable; // 每次打包都能产生一个value
       }

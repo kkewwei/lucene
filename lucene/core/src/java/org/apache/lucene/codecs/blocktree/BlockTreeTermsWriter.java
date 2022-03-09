@@ -299,7 +299,7 @@ public final class BlockTreeTermsWriter extends FieldsConsumer {
       lastField = field;
 
       //if (DEBUG) System.out.println("\nBTTW.write seg=" + segment + " field=" + field);
-      Terms terms = fields.terms(field); //  FreqProxFields$FreqProxTerms
+      Terms terms = fields.terms(field); //  FreqProxFields$FreqProxTerms，将FreqProxTermsWriterPerField简单封装了下
       if (terms == null) {
         continue;
       }
@@ -307,7 +307,7 @@ public final class BlockTreeTermsWriter extends FieldsConsumer {
       TermsEnum termsEnum = terms.iterator(); // 遍历FreqProxTermsWriterPerField里面每个termId使用的
       TermsWriter termsWriter = new TermsWriter(fieldInfos.fieldInfo(field)); // 一个域单独产生一个
       while (true) { //遍历这个field下每个词
-        BytesRef term = termsEnum.next(); // 读取这个词的具体内容
+        BytesRef term = termsEnum.next(); // 按照排好的顺序，读取这个词的具体内容
         //if (DEBUG) System.out.println("BTTW: next term " + term);
 
         if (term == null) {
@@ -315,7 +315,7 @@ public final class BlockTreeTermsWriter extends FieldsConsumer {
         }
 
         //if (DEBUG) System.out.println("write field=" + fieldInfo.name + " term=" + brToString(term));
-        termsWriter.write(term, termsEnum, norms); // 对doc,tim等文件的构建
+        termsWriter.write(term, termsEnum, norms); // 对doc,tim等文件的构建，跑到BlockTreeTermsWriter$TermsWriter
       }
 
       termsWriter.finish();// 完成field 的构建。每个单词一个finish。将pending中剩余的全部打包起来
@@ -380,11 +380,11 @@ public final class BlockTreeTermsWriter extends FieldsConsumer {
 
   private static final class PendingBlock extends PendingEntry {
     public final BytesRef prefix; // 作为整个term，来参与字典的创建，整个没有相同的前缀。就是block0的term
-    public final long fp;  // 获取当前block在tim中的起始位置
-    public FST<BytesRef> index; // 产生的就放这里
-    public List<FST<BytesRef>> subIndices; // 这个block里面的子fst
+    public final long fp;  // 获取当前block（包括metaWriter,statsWriter,suffixWriter存储信息）在tim中的起始位置
+    public FST<BytesRef> index; // 产生fst的就放这里，一个bloacks才会产生一个FST
+    public List<FST<BytesRef>> subIndices; // 子PendingBlock的fst结构
     public final boolean hasTerms;
-    public final boolean isFloor; // 该
+    public final boolean isFloor; // 是有经过优化
     public final int floorLeadByte; //// floorLeadLabel除第一个是-1，其他bloc时都是和上一个block不同的那个字母
 
     public PendingBlock(BytesRef prefix, long fp, boolean hasTerms, boolean isFloor, int floorLeadByte, List<FST<BytesRef>> subIndices) {
@@ -413,11 +413,11 @@ public final class BlockTreeTermsWriter extends FieldsConsumer {
       // (opposite of what Lucene does today), for better
       // outputs sharing in the FST
       scratchBytes.writeVLong(encodeOutput(fp, hasTerms, isFloor)); //写入scratchBytes：最高62为存放tim起始位置，低一位存放是否有terms，最低位存放是否是floor
-      if (isFloor) {
+      if (isFloor) { // 若cout太大，进行了拆分
         scratchBytes.writeVInt(blocks.size()-1); // block个剩余数
         for (int i=1;i<blocks.size();i++) { // 遍历每一个block，把当前block当做一次output
           PendingBlock sub = blocks.get(i); // 第二个
-          assert sub.floorLeadByte != -1; // 只有第一个block该值为-1
+          assert sub.floorLeadByte != -1; // 看起来每个都进行了优化
           //if (DEBUG) {
           //  System.out.println("    write floorLeadByte=" + Integer.toHexString(sub.floorLeadByte&0xff));
           //}
@@ -469,7 +469,7 @@ public final class BlockTreeTermsWriter extends FieldsConsumer {
     private void append(Builder<BytesRef> builder, FST<BytesRef> subIndex, IntsRefBuilder scratchIntsRef) throws IOException {
       final BytesRefFSTEnum<BytesRef> subIndexEnum = new BytesRefFSTEnum<>(subIndex);
       BytesRefFSTEnum.InputOutput<BytesRef> indexEnt;
-      while((indexEnt = subIndexEnum.next()) != null) {
+      while((indexEnt = subIndexEnum.next()) != null) {// 把每个的fst中的每个的key和value都读取出来了
         //if (DEBUG) {
         //  System.out.println("      add sub=" + indexEnt.input + " " + indexEnt.input + " output=" + indexEnt.output);
         //}
@@ -535,17 +535,17 @@ public final class BlockTreeTermsWriter extends FieldsConsumer {
     // we append to this stack, and once the top of the stack has enough
     // terms starting with a common prefix, we write a new block with
     // those terms and replace those terms in the stack with a new block:
-    private final List<PendingEntry> pending = new ArrayList<>(); //待索引词典列表
+    private final List<PendingEntry> pending = new ArrayList<>(); //待索引词典列表，排好序，只要有足够相同前缀的词，那么就组成一个新的terms
 
     // Reused in writeBlocks:
     private final List<PendingBlock> newBlocks = new ArrayList<>();
 
     private PendingTerm firstPendingTerm; // 这个域写入的第一个词
     private PendingTerm lastPendingTerm;  // 这个域写入的最后一个词
-    // 将最后prefixTopSize产生一个fst，放入PendingBlock中，然后再放入pending中
+    // 将最后prefixTopSize个terms产生一个fst，放入PendingBlock中，然后再放入pending中(这后count个term都有相同的前缀)
     /** Writes the top count entries in pending, using prevTerm to compute the prefix. */
     void writeBlocks(int prefixLength, int count) throws IOException { // 前缀长度相同
-
+      //表示pending中后count个term拥有相同的前缀，前缀长度为prefixLength
       assert count > 0;
 
       //if (DEBUG2) {
@@ -568,7 +568,7 @@ public final class BlockTreeTermsWriter extends FieldsConsumer {
       int start = pending.size()-count; // 计算起始位置
       int end = pending.size();// 终止位置
       int nextBlockStart = start;// 记录下
-      int nextFloorLeadLabel = -1;// 当前block中第一个term[prefixLength],特点就是和上个block最后一个term[prefixLength]不同
+      int nextFloorLeadLabel = -1;// 当前block中第一个term[prefixLength]。组成的该block该下标的值都比她大
 
       for (int i=start; i<end; i++) {
 
@@ -593,16 +593,16 @@ public final class BlockTreeTermsWriter extends FieldsConsumer {
           suffixLeadLabel = block.prefix.bytes[block.prefix.offset + prefixLength] & 0xff; // 不同那个后缀
         }
         // if (DEBUG) System.out.println("  i=" + i + " ent=" + ent + " suffixLeadLabel=" + suffixLeadLabel);
-
-        if (suffixLeadLabel != lastSuffixLeadLabel) { // 第prefixLength个字符和前一次第prefixLength字符不一致
+        // 第prefixLength个字符和前一次第prefixLength字符不一致,才会进来产生
+        if (suffixLeadLabel != lastSuffixLeadLabel) {
           int itemsInBlock = i - nextBlockStart;// 这个block的长度
-          if (itemsInBlock >= minItemsInBlock && end-nextBlockStart > maxItemsInBlock) {// 如果Entry的个数超过minItemsInBlock，且小于maxItemsInBlock，则将这个Entry集合写入到磁盘的同一个block
-            // The count is too large for one block, so we must break it into "floor" blocks, where we record
+          if (itemsInBlock >= minItemsInBlock && end-nextBlockStart > maxItemsInBlock) {// 如果Entry的个数超过minItemsInBlock，且剩下的entery还不止maxItemsInBlock，才将当前这些Entry集合写入到磁盘的同一个block
+            // The count is too large for one block, so we must break it into "floor" blocks, where we record// 假如最后剩下的不够maxItemsInBlock了，那么就直接跳到最后面，将这些直接合并成一个block。不至于最后一个block太小了
             // the leading label of the suffix of the first term in each floor block, so at search time we can
             // jump to the right floor block.  We just use a naive greedy segmenter here: make a new floor
             // block as soon as we have at least minItemsInBlock.  This is not always best: it often produces
-            // a too-small block as the final block:
-            boolean isFloor = itemsInBlock < count; // 若这个block小于这次满足需求的总block, 那么就拆分
+            // a too-small block as the final block:// 此时前prefixLength+1个字符都是一样的（做了步优化，相同前缀更多了）。
+            boolean isFloor = itemsInBlock < count; // 只要不是全量的floor，那么久一定是拆分下一级别了。
             newBlocks.add(writeBlock(prefixLength, isFloor, nextFloorLeadLabel, nextBlockStart, i, hasTerms, hasSubBlocks));
 
             hasTerms = false;
@@ -624,7 +624,7 @@ public final class BlockTreeTermsWriter extends FieldsConsumer {
       // Write last block, if any:
       if (nextBlockStart < end) {
         int itemsInBlock = end - nextBlockStart;
-        boolean isFloor = itemsInBlock < count;
+        boolean isFloor = itemsInBlock < count;// 明显拆分过的
         newBlocks.add(writeBlock(prefixLength, isFloor, nextFloorLeadLabel, nextBlockStart, end, hasTerms, hasSubBlocks));
       }
 
@@ -642,7 +642,7 @@ public final class BlockTreeTermsWriter extends FieldsConsumer {
       // Append new block
       pending.add(firstBlock); // 向里面写入了一个block
 
-      newBlocks.clear();
+      newBlocks.clear();// 清0了
     }
 
     private boolean allEqual(byte[] b, int startOffset, int endOffset, byte value) {
@@ -658,7 +658,7 @@ public final class BlockTreeTermsWriter extends FieldsConsumer {
     /** Writes the specified slice (start is inclusive, end is exclusive)
      *  from pending stack as a new block.  If isFloor is true, there
      *  were too many (more than maxItemsInBlock) entries sharing the
-     *  same prefix, and so we broke it into multiple floor blocks where // floorLeadLabel除第一个是-1，其他bloc时都是和上一个block不同的那个字母
+     *  same prefix, and so we broke it into multiple floor blocks where // floorLeadLabel是这个block中所有entery第一个entry的不相同位（第prefixLength位）的byte，该block所有的第prefixLength位的byte都大于该值，作为一点小的优化
      *  we record the starting label of the suffix of each floor block. */   // 将该block索引信息全部写入tim中了
     private PendingBlock writeBlock(int prefixLength, boolean isFloor, int floorLeadLabel, int start, int end,
                                     boolean hasTerms, boolean hasSubBlocks) throws IOException {
@@ -668,10 +668,10 @@ public final class BlockTreeTermsWriter extends FieldsConsumer {
       long startFP = termsOut.getFilePointer(); // 获取当前block在tim中的起始位置
 
       boolean hasFloorLeadLabel = isFloor && floorLeadLabel != -1;
-
+      // 若hasFloorLeadLabel为true，则说明从start-end，有相同prefixLength+1的前缀，第prefixLength+1相同的是floorLeadLabel
       final BytesRef prefix = new BytesRef(prefixLength + (hasFloorLeadLabel ? 1 : 0));
       System.arraycopy(lastTerm.get().bytes, 0, prefix.bytes, 0, prefixLength);
-      prefix.length = prefixLength;
+      prefix.length = prefixLength; // 前缀一定是相同的（这里的好好理解下）
 
       //if (DEBUG2) System.out.println("    writeBlock field=" + fieldInfo.name + " prefix=" + brToString(prefix) + " fp=" + startFP + " isFloor=" + isFloor + " isLastInFloor=" + (end == pending.size()) + " floorLeadLabel=" + floorLeadLabel + " start=" + start + " end=" + end + " hasTerms=" + hasTerms + " hasSubBlocks=" + hasSubBlocks);
 
@@ -695,7 +695,7 @@ public final class BlockTreeTermsWriter extends FieldsConsumer {
 
       // We optimize the leaf block case (block has only terms), writing a more
       // compact format in this case:
-      boolean isLeafBlock = hasSubBlocks == false;// 如果这个值为true，那么这个block中没有一个是新产生的block
+      boolean isLeafBlock = hasSubBlocks == false;// 如果这个值为true，那么这个block中没有一个是新产生的block(全部是叶子block)
 
       //System.out.println("  isLeaf=" + isLeafBlock);
 
@@ -777,10 +777,10 @@ public final class BlockTreeTermsWriter extends FieldsConsumer {
             // Write term meta data
             postingsWriter.encodeTerm(metaWriter, fieldInfo, state, absolute);
             absolute = false;
-          } else {
+          } else { //是个block
             PendingBlock block = (PendingBlock) ent;
             assert StringHelper.startsWith(block.prefix, prefix);
-            final int suffix = block.prefix.length - prefixLength;
+            final int suffix = block.prefix.length - prefixLength;// 当前block前缀-公共前缀
             assert StringHelper.startsWith(block.prefix, prefix);
 
             assert suffix > 0;
@@ -879,7 +879,7 @@ public final class BlockTreeTermsWriter extends FieldsConsumer {
       //   System.out.println("      fpEnd=" + out.getFilePointer());
       // }
 
-      if (hasFloorLeadLabel) { // 这里给多加了一个字段
+      if (hasFloorLeadLabel) { // 相同前缀更多了一位
         // We already allocated to length+1 above:
         prefix.bytes[prefix.length++] = (byte) floorLeadLabel;
       }
@@ -904,12 +904,12 @@ public final class BlockTreeTermsWriter extends FieldsConsumer {
       }
       */
       // 将term的存入文档，跳表放入内存，产生doc文件。
-      BlockTermState state = postingsWriter.writeTerm(text, termsEnum, docsSeen, norms); // 针对的是一个词
+      BlockTermState state = postingsWriter.writeTerm(text, termsEnum, docsSeen, norms); // 针对的是一个词，构建跳表结果，并存储起来
       if (state != null) { //IntBlockTermState
 
         assert state.docFreq != 0;
         assert fieldInfo.getIndexOptions() == IndexOptions.DOCS || state.totalTermFreq >= state.docFreq: "postingsWriter=" + postingsWriter;
-        pushTerm(text); // 需要进来
+        pushTerm(text); // 需要进来，放入fst结构中
        
         PendingTerm term = new PendingTerm(text, state); // 函数判断pending是否满足构建索引的条件，并将当前term加入pending末尾
         pending.add(term);//当前term加入待索引列表
@@ -936,15 +936,15 @@ public final class BlockTreeTermsWriter extends FieldsConsumer {
 
       // if (DEBUG) System.out.println("  shared=" + pos + "  lastTerm.length=" + lastTerm.length);
       // 尽量找一批term，
-      // Close the "abandoned" suffix now:// 从后向前是为了更多可能取相似性前缀
-      for(int i=lastTerm.length()-1;i>=prefixLength;i--) {
+      // Close the "abandoned" suffix now:// 从后向前是为了尽可能少的取相似性前缀
+      for(int i=lastTerm.length()-1;i>=prefixLength;i--) { // 下标
       // 计算与栈顶的Entry的公共前缀为 i 的Entry的数量
         // How many items on top of the stack share the current suffix
         // we are closing:
         int prefixTopSize = pending.size() - prefixStarts[i]; // 当前存量与多少后缀是不同的
         if (prefixTopSize >= minItemsInBlock) { // pending词的个数最少25个。
           // if (DEBUG) System.out.println("pushTerm i=" + i + " prefixTopSize=" + prefixTopSize + " minItemsInBlock=" + minItemsInBlock);
-          writeBlocks(i+1, prefixTopSize);//。将最后prefixTopSize产生一个fst，放入PendingBlock中，然后再放入pending中
+          writeBlocks(i+1, prefixTopSize);//。将最后prefixTopSize个terms产生一个fst，放入PendingBlock中，然后再放入pending中
           prefixStarts[i] -= prefixTopSize-1;
         }// if选中之后并没有直接退出
       }
@@ -956,8 +956,8 @@ public final class BlockTreeTermsWriter extends FieldsConsumer {
       // Init new tail:
       for(int i=prefixLength;i<text.length;i++) {// 修改不同的后缀。
         prefixStarts[i] = pending.size();
-      }
-
+      } // 第i个字符被修改，那么说明从第i个开始有变化
+      //prefixStarts[i]=count，说明此时从后向前的pending.szie-count个terms，相同前缀长度为i
       lastTerm.copyBytes(text); // 缓存上一次的term
     }
 

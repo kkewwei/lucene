@@ -64,9 +64,9 @@ public final class Lucene84PostingsWriter extends PushPostingsWriterBase {
   IntBlockTermState lastState;
 
   // Holds starting file pointers for current term:
-  private long docStartFP;// 每个单词写入时doc文件最开始的位置
-  private long posStartFP;// 每个单词写入时pos文件最开始的位置
-  private long payStartFP;// 每个单词写入时pay文件最开始的位置
+  private long docStartFP;// 这个单词在写入doc文件前，记录的doc绝对起始位置
+  private long posStartFP;// 每个单词写入时pos文件最开始的绝对起始位置
+  private long payStartFP;// 每个单词写入时pay文件最开始的绝对起始位置
 
   final long[] docDeltaBuffer;// 缓存的文档id增量
   final long[] freqBuffer;// 缓存的词频
@@ -81,16 +81,16 @@ public final class Lucene84PostingsWriter extends PushPostingsWriterBase {
   private byte[] payloadBytes;
   private int payloadByteUpto;
 
-  private int lastBlockDocID;//  该block所有文档&freq写入建立索引时该block最后一个docId
-  private long lastBlockPosFP;//  该block所有文档&freq写入建立索引时该block的position
-  private long lastBlockPayFP;//  该block所有文档&freq写入建立索引时该block的payload&&offset
+  private int lastBlockDocID;//  该block所有文档&freq写入建立跳表一个节点时会去更新doc
+  private long lastBlockPosFP;//  该block所有文档&freq写入建立跳表一个节点时会去更新position
+  private long lastBlockPayFP;//  该block所有文档&freq写入建立跳表一个节点时会去更新payload&&offset
   private int lastBlockPosBufferUpto;
   private int lastBlockPayloadByteUpto;
 
   private int lastDocID;
   private int lastPosition;
   private int lastStartOffset;
-  private int docCount;
+  private int docCount; // 总共的文档数
 
   private final PForUtil pforUtil;
   private final ForDeltaUtil forDeltaUtil;
@@ -109,12 +109,12 @@ public final class Lucene84PostingsWriter extends PushPostingsWriterBase {
     IndexOutput payOut = null;
     boolean success = false;
     try {
-      CodecUtil.writeIndexHeader(docOut, DOC_CODEC, VERSION_CURRENT, 
+      CodecUtil.writeIndexHeader(docOut, DOC_CODEC, VERSION_CURRENT,// 创建doc文件
                                    state.segmentInfo.getId(), state.segmentSuffix);
       ByteOrder byteOrder = ByteOrder.nativeOrder();
       if (byteOrder == ByteOrder.BIG_ENDIAN) {
         docOut.writeByte((byte) 'B');
-      } else if (byteOrder == ByteOrder.LITTLE_ENDIAN) {
+      } else if (byteOrder == ByteOrder.LITTLE_ENDIAN) {// 小端模式
         docOut.writeByte((byte) 'L');
       } else {
         throw new Error();
@@ -125,14 +125,14 @@ public final class Lucene84PostingsWriter extends PushPostingsWriterBase {
       if (state.fieldInfos.hasProx()) { // 如果设置了需要位置信息
         posDeltaBuffer = new long[BLOCK_SIZE];// _0_Lucene50_0.pos
         String posFileName = IndexFileNames.segmentFileName(state.segmentInfo.name, state.segmentSuffix, Lucene84PostingsFormat.POS_EXTENSION);
-        posOut = state.directory.createOutput(posFileName, state.context);
+        posOut = state.directory.createOutput(posFileName, state.context);// 创建pos文件
         CodecUtil.writeIndexHeader(posOut, POS_CODEC, VERSION_CURRENT,
                                      state.segmentInfo.getId(), state.segmentSuffix);
 
         if (state.fieldInfos.hasPayloads()) {
           payloadBytes = new byte[128];
           payloadLengthBuffer = new long[BLOCK_SIZE];
-        } else {
+        } else { // 默认跑这里
           payloadBytes = null;
           payloadLengthBuffer = null;
         }
@@ -144,7 +144,7 @@ public final class Lucene84PostingsWriter extends PushPostingsWriterBase {
           offsetStartDeltaBuffer = null;
           offsetLengthBuffer = null;
         }
-        //_0_Lucene50_0.pay
+        //创建_0_Lucene50_0.pay
         if (state.fieldInfos.hasPayloads() || state.fieldInfos.hasOffsets()) {
           String payFileName = IndexFileNames.segmentFileName(state.segmentInfo.name, state.segmentSuffix, Lucene84PostingsFormat.PAY_EXTENSION);
           payOut = state.directory.createOutput(payFileName, state.context);
@@ -213,7 +213,7 @@ public final class Lucene84PostingsWriter extends PushPostingsWriterBase {
     this.norms = norms;
     competitiveFreqNormAccumulator.clear();
   }
-
+  // docID： 最新的文档id
   @Override
   public void startDoc(int docID, int termDocFreq) throws IOException {
     // Have collected a block of docs, and get a new doc. 
@@ -382,7 +382,7 @@ public final class Lucene84PostingsWriter extends PushPostingsWriterBase {
       assert state.totalTermFreq != -1;
       if (state.totalTermFreq > BLOCK_SIZE) { // 若词的已经大于了一个block
         // record file offset for last pos in last block
-        lastPosBlockOffset = posOut.getFilePointer() - posStartFP;// 保存的是最后不足一个block(128个词)时，pos中文件位置
+        lastPosBlockOffset = posOut.getFilePointer() - posStartFP;// 保存的这个词在pos文件中写入的长度
       } else {
         lastPosBlockOffset = -1;
       }
@@ -449,7 +449,7 @@ public final class Lucene84PostingsWriter extends PushPostingsWriterBase {
     state.posStartFP = posStartFP;
     state.payStartFP = payStartFP;
     state.singletonDocID = singletonDocID;
-    state.skipOffset = skipOffset; // 前一个term占用文件的长度
+    state.skipOffset = skipOffset; // 该term存储docId和词频占用doc文件的长度,有了长度+doc起始位置，就可以算出跳表起始位置
     state.lastPosBlockOffset = lastPosBlockOffset;
     docBufferUpto = 0;
     posBufferUpto = 0;

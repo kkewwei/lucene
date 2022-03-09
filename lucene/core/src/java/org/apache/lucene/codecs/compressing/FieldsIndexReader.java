@@ -41,14 +41,14 @@ final class FieldsIndexReader extends FieldsIndex {
 
   private final int maxDoc; // 总文档数
   private final int blockShift;
-  private final int numChunks;
+  private final int numChunks;// 这个人semgent多少个numchunks
   private final DirectMonotonicReader.Meta docsMeta;
   private final DirectMonotonicReader.Meta startPointersMeta;
   private final IndexInput indexInput;//_v.fdx
   private final long docsStartPointer, docsEndPointer, startPointersStartPointer, startPointersEndPointer;
   private final DirectMonotonicReader docs, startPointers; // 应该是放的某个block或者chunk
   private final long maxPointer;
-
+  // 读取的是fdm整个文件
   FieldsIndexReader(Directory dir, String name, String suffix, String extensionPrefix, String codecName, byte[] id) throws IOException {
     try (ChecksumIndexInput metaIn = dir.openChecksumInput(IndexFileNames.segmentFileName(name, suffix, extensionPrefix + FIELDS_META_EXTENSION_SUFFIX), IOContext.READONCE)) { // _v.fdm
       Throwable priorE = null;
@@ -81,8 +81,8 @@ final class FieldsIndexReader extends FieldsIndex {
     }
     final RandomAccessInput docsSlice = indexInput.randomAccessSlice(docsStartPointer, docsEndPointer - docsStartPointer);
     final RandomAccessInput startPointersSlice = indexInput.randomAccessSlice(startPointersStartPointer, startPointersEndPointer - startPointersStartPointer);
-    docs = DirectMonotonicReader.getInstance(docsMeta, docsSlice);
-    startPointers = DirectMonotonicReader.getInstance(startPointersMeta, startPointersSlice);
+    docs = DirectMonotonicReader.getInstance(docsMeta, docsSlice);// 是从fdm里面的_ids部分读取
+    startPointers = DirectMonotonicReader.getInstance(startPointersMeta, startPointersSlice);// 是从fdm里面的_pointers部分读取
   }
 
   private FieldsIndexReader(FieldsIndexReader other) throws IOException {

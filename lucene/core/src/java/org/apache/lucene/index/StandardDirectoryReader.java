@@ -468,7 +468,7 @@ public final class StandardDirectoryReader extends DirectoryReader {
 
   private final Set<ClosedListener> readerClosedListeners = new CopyOnWriteArraySet<>();
 
-  private final CacheHelper cacheHelper = new CacheHelper() {
+  private final CacheHelper cacheHelper = new CacheHelper() {// Shard粒度的共享的
     private final CacheKey cacheKey = new CacheKey();
 
     @Override

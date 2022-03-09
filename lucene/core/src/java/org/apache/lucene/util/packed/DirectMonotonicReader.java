@@ -49,11 +49,11 @@ public final class DirectMonotonicReader extends LongValues implements Accountab
   public static class Meta implements Accountable {
     private static final long BASE_RAM_BYTES_USED = RamUsageEstimator.shallowSizeOfInstance(Meta.class);
 
-    final int blockShift;
-    final int numBlocks;
+    final int blockShift; // 10
+    final int numBlocks;// 一次最对可以存1024个数字，称为一个block，看用了几个block
     final long[] mins;
     final float[] avgs;
-    final byte[] bpvs;
+    final byte[] bpvs; 
     final long[] offsets;
 
     Meta(long numValues, int blockShift) {
@@ -82,7 +82,7 @@ public final class DirectMonotonicReader extends LongValues implements Accountab
   /** Load metadata from the given {@link IndexInput}.
    *  @see DirectMonotonicReader#getInstance(Meta, RandomAccessInput) */
   public static Meta loadMeta(IndexInput metaIn, long numValues, int blockShift) throws IOException {
-    Meta meta = new Meta(numValues, blockShift); // 3个chunk，只有一个
+    Meta meta = new Meta(numValues, blockShift); // 3个chunk，只有一个,一个block有1024个次
     for (int i = 0; i < meta.numBlocks; ++i) { //循环每个block,该block多少个chunk
       meta.mins[i] = metaIn.readLong(); // 每个chunK的
       meta.avgs[i] = Float.intBitsToFloat(metaIn.readInt());
@@ -91,7 +91,7 @@ public final class DirectMonotonicReader extends LongValues implements Accountab
     }
     return meta;
   }
-
+  // 还原一级索引16*文件在dvm中存放的起始位置
   /**
    * Retrieves an instance from the specified slice.
    */
@@ -158,10 +158,10 @@ public final class DirectMonotonicReader extends LongValues implements Accountab
    * Return the index of a key if it exists, or its insertion point otherwise
    * like {@link Arrays#binarySearch(long[], int, int, long)}.
    *
-   * @see Arrays#binarySearch(long[], int, int, long)
+   * @see Arrays#binarySearch(long[], int, int, long) 将dfx和fdm的值都加载到了内存中
    */ // 二分搜索，扎到这个文档所在的chunk。比如32 32 12,那么在存储的时候就是0 32 64 78。当我们搜索的时候，key只会是0 32  64 78.
   public long binarySearch(long fromIndex, long toIndex, long key) { //查找这个key落在了哪个chunk上
-    if (fromIndex < 0 || fromIndex > toIndex) {
+    if (fromIndex < 0 || fromIndex > toIndex) {//fromIndex和toIndex都是chunkId
       throw new IllegalArgumentException("fromIndex=" + fromIndex + ",toIndex=" + toIndex);
     }
     long lo = fromIndex;
