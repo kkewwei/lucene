@@ -205,15 +205,15 @@ public abstract class MergePolicy {
    * @lucene.experimental */
   public static class OneMerge {
     private final CompletableFuture<Boolean> mergeCompleted = new CompletableFuture<>();
-    SegmentCommitInfo info;         // used by IndexWriter
-    boolean registerDone;           // used by IndexWriter 完成注册
-    long mergeGen;                  // used by IndexWriter
-    boolean isExternal;             // used by IndexWriter
-    int maxNumSegments = -1;        // used by IndexWriter
-
-    /** Estimated size in bytes of the merged segment. */ // 去除删除之后的byte, 在IndexWriter.registerMerge()中会统计，文件长度之和相加
-    public volatile long estimatedMergeBytes;       // used by IndexWriter
-
+    SegmentCommitInfo info; // used by IndexWriter
+    boolean registerDone; // used by IndexWriter
+    long mergeGen; // used by IndexWriter
+    boolean isExternal; // used by IndexWriter
+    int maxNumSegments = -1; // used by IndexWriter
+    // 根据merge前的前10个segment，去掉delete部分之后的sum(size)
+    /** Estimated size in bytes of the merged segment. */
+    public volatile long estimatedMergeBytes; // used by IndexWriter
+     //  根据merge前的前10个segment，包含delete部分之后的sum(size)
     // Sum of sizeInBytes of all SegmentInfos; set by IW.mergeInit
     volatile long totalMergeBytes; // 包含了需要被删除的byte, 在IndexWriter.registerMerge()中会统计，文件长度之和相加
 

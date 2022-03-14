@@ -623,7 +623,7 @@ public class ConcurrentMergeScheduler extends MergeScheduler {
   protected void doMerge(MergeSource mergeSource, OneMerge merge) throws IOException {
     mergeSource.merge(merge); // 进的是ElasticsearchConcurrentMergeScheduler，第二次才进入IndexWriter
   }
-
+ // 这个函数在es被复写了。
   /** Create and return a new MergeThread */
   protected synchronized MergeThread getMergeThread(MergeSource mergeSource, OneMerge merge) throws IOException {
     final MergeThread thread = new MergeThread(mergeSource, merge);
