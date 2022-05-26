@@ -29,11 +29,11 @@ import org.apache.lucene.util.BytesRef;
  */
 final class SingletonSortedSetDocValues extends SortedSetDocValues {
   private final SortedDocValues in;
-  private long ord;
+  private long ord; // segment内词的排序
   
   /** Creates a multi-valued view over the provided SortedDocValues */
   public SingletonSortedSetDocValues(SortedDocValues in) {
-    if (in.docID() != -1) {
+    if (in.docID() != -1) {// 初始的词docId为-1(确定这个SortedDocValues还未被读取过)
       throw new IllegalStateException("iterator has already been used: docID=" + in.docID());
     }
     this.in = in;
@@ -77,10 +77,10 @@ final class SingletonSortedSetDocValues extends SortedSetDocValues {
     return docID;
   }
 
-  @Override
+  @Override //在dvd的文档roarmap中查找文档id是否存在
   public boolean advanceExact(int target) throws IOException {
-    if (in.advanceExact(target)) {
-      ord = in.ordValue();
+    if (in.advanceExact(target)) { // 存在的话
+      ord = in.ordValue();//跑到哪里
       return true;
     }
     return false;
@@ -94,7 +94,7 @@ final class SingletonSortedSetDocValues extends SortedSetDocValues {
 
   @Override
   public long getValueCount() {
-    return in.getValueCount();
+    return in.getValueCount(); // 将进入
   }
 
   @Override
@@ -104,7 +104,7 @@ final class SingletonSortedSetDocValues extends SortedSetDocValues {
 
   @Override
   public TermsEnum termsEnum() throws IOException {
-    return in.termsEnum(); // SortedDocValuesTermsEnum
+    return in.termsEnum(); // 可以是SortedDocValuesTermsEnum，也可以是Lucene80DocValuesProducer$BaseSortedDocValues.termsEnum()
   }
 
   @Override

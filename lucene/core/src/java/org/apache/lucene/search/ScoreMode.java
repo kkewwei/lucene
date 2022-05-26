@@ -23,7 +23,7 @@ public enum ScoreMode {
   
   /**
    * Produced scorers will allow visiting all matches and get their score.
-   */// complete,完全遍历还需要全部打分
+   */// complete,  则需要为所有候选文档都进行评分
   COMPLETE {
     @Override
     public boolean needsScores() {
@@ -34,7 +34,7 @@ public enum ScoreMode {
   /**
    * Produced scorers will allow visiting all matches but scores won't be
    * available.
-   */ // complete_no_scores,完全遍历但是不打分
+   */ // complete_no_scores,  完全遍历但是不打分
   COMPLETE_NO_SCORES {
     @Override
     public boolean needsScores() {
@@ -46,7 +46,7 @@ public enum ScoreMode {
    * Produced scorers will optionally allow skipping over non-competitive
    * hits using the {@link Scorer#setMinCompetitiveScore(float)} API.
    */
-  TOP_SCORES { // // 是否需要打分, 并非全部文档都需要打分，只打分top的
+  TOP_SCORES { //最常用的方式，即按文档得分取查询结果集的TopK
     @Override
     public boolean needsScores() {
       return true;

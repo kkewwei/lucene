@@ -30,7 +30,7 @@ import java.util.Objects;
  * @lucene.experimental
  */
 public abstract class TwoPhaseIterator {
-
+  // 两阶段匹配：先通过DocIdSetIterator对象获取一个文档号集合，该集合中不一定都满足查询条件，即所谓的approximation，通过nextDoc()或者advance()方法遍历该文档号集合（第一阶段），将每一个文档通过matches()方法（第二阶段），在该方法中能真正的确定文档号是否满足查询条件。
   protected final DocIdSetIterator approximation;
 
   /** Takes the approximation to be returned by {@link #approximation}. Not null. */
@@ -81,7 +81,7 @@ public abstract class TwoPhaseIterator {
     public int advance(int target) throws IOException {
       return doNext(approximation.advance(target));
     }
-
+    // 第二次匹配
     private int doNext(int doc) throws IOException {
       for (;; doc = approximation.nextDoc()) {
         if (doc == NO_MORE_DOCS) {

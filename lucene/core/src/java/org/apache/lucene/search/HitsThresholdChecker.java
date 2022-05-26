@@ -66,7 +66,7 @@ abstract class HitsThresholdChecker {
    */
   private static class LocalHitsThresholdChecker extends HitsThresholdChecker {
     private final int totalHitsThreshold; //最多找多少个：默认为10000
-    private int hitCount;
+    private int hitCount; // 这里还有个
 
     public LocalHitsThresholdChecker(int totalHitsThreshold) {
 
@@ -79,7 +79,7 @@ abstract class HitsThresholdChecker {
 
     @Override
     public void incrementHitCount() {
-      ++hitCount;
+      ++hitCount; // 共同collect的文档数，可超过1万限制
     }
 
     @Override

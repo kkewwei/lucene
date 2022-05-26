@@ -73,7 +73,7 @@ public final class DocIdSetBuilder {
   }
 
   private static class BufferAdder extends BulkAdder {
-    final Buffer buffer;
+    final Buffer buffer;// 累计存储
 
     BufferAdder(Buffer buffer) {
       this.buffer = buffer;
@@ -111,13 +111,13 @@ public final class DocIdSetBuilder {
   public DocIdSetBuilder(int maxDoc, Terms terms) throws IOException {
     this(maxDoc, terms.getDocCount(), terms.getSumDocFreq());
   }
-
+  // values=ExitablePointValues
   /** Create a {@link DocIdSetBuilder} instance that is optimized for
    *  accumulating docs that match the given {@link PointValues}. */
   public DocIdSetBuilder(int maxDoc, PointValues values, String field) throws IOException {
     this(maxDoc, values.getDocCount(), values.size());
   }
-
+  //
   DocIdSetBuilder(int maxDoc, int docCount, long valueCount) {
     this.maxDoc = maxDoc;
     this.multivalued = docCount < 0 || docCount != valueCount;
@@ -136,7 +136,7 @@ public final class DocIdSetBuilder {
     // maxDoc >>> 7 is a good value if you want to save memory, lower values
     // such as maxDoc >>> 11 should provide faster building but at the expense
     // of using a full bitset even for quite sparse data
-    this.threshold = maxDoc >>> 7; // 若读取的文档数小于maxDoc >>> 7，就使用数组，若大于，则使用BitSize
+    this.threshold = maxDoc >>> 7; // 若读取的文档数小于总文档数的/128，就使用数组，若大于，则使用BitSize
 
     this.bitSet = null;
   }
@@ -172,7 +172,7 @@ public final class DocIdSetBuilder {
   public BulkAdder grow(int numDocs) {
     if (bitSet == null) { //
       if ((long) totalAllocated + numDocs <= threshold) {
-        ensureBufferCapacity(numDocs);
+        ensureBufferCapacity(numDocs); // copy扩容
       } else {
         upgradeToBitSet(); // 升级为非BitSet
         counter += numDocs;

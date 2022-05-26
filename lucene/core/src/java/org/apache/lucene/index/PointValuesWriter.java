@@ -31,7 +31,7 @@ class PointValuesWriter {
   private final FieldInfo fieldInfo;
   private final ByteBlockPool bytes; // 每个字段point值长度一样，没统计每个字段的范围
   private final Counter iwBytesUsed;
-  private int[] docIDs; // 按序累加，docIDs[i]表示：第一个point个值属于第几个文档。有的文档没有该字段
+  private int[] docIDs; // 按序累加，docIDs[i]表示：第i个point个值属于第几个文档。第0位存放20，第1位存放5，value按照大小排序。表示第0小value文档id=20
   private int numPoints;  // 有时一个文档相同域，包含多个Point，这里是汇总Point个数（相同文档相同域算两个）
   private int numDocs; // 该字段已经写入了多少个文档。（point是经过distinct过后的）// 是一个从0开始递增的值，可以理解为是每一个点数据的一个唯一编号，并且通过这个编号能映射出该点数据属于哪一个文档(document)。映射关系则是通过docIDs[ ]数组实现。
   private int lastDocID = -1; // 最大文档编号
@@ -136,9 +136,9 @@ class PointValuesWriter {
         ords[i] = ords[j];
         ords[j] = tmp;
       }
-
+      // 第0位存放20，第1位存放5，value按照大小排序，第0小value文档id=20
       @Override
-      public int getDocID(int i) { // 返回文档ID
+      public int getDocID(int i) { // 返回文档ID, i是第几个写入的
         return docIDs[ords[i]];//ords记录的是第几个point跑到第几位了，docIDs某个point是属于第几个文档，要和ords结合用，
       }
 

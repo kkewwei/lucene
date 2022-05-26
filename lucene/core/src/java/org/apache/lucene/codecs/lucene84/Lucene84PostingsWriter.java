@@ -218,7 +218,7 @@ public final class Lucene84PostingsWriter extends PushPostingsWriterBase {
   public void startDoc(int docID, int termDocFreq) throws IOException {
     // Have collected a block of docs, and get a new doc. 
     // Should write skip data as well as postings list for
-    // current block. // 针对每个block建立索引结构
+    // current block. // 针对每个block(128个文档)建立索引结构
     if (lastBlockDocID != -1 && docBufferUpto == 0) {// 上一批block的docId,freq已经被压缩到了doc文件中。则开始针对上一批数据建立跳表
       skipWriter.bufferSkip(lastBlockDocID, competitiveFreqNormAccumulator, docCount, // 把当前文档当做一个跳跃表节点
           lastBlockPosFP, lastBlockPayFP, lastBlockPosBufferUpto, lastBlockPayloadByteUpto);
@@ -322,7 +322,7 @@ public final class Lucene84PostingsWriter extends PushPostingsWriterBase {
       posBufferUpto = 0;
     }
   }
-
+  //  读完完一个文档的词频信息后
   @Override
   public void finishDoc() throws IOException {
     // Since we don't know df for current term, we had to buffer

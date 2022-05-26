@@ -44,7 +44,7 @@ public final class TotalHits {
    * The value of the total hit count. Must be interpreted in the context of
    * {@link #relation}.
    */
-  public final long value;
+  public final long value; // 返回结果的个数
 
   /**
    * Whether {@link #value} is the exact hit count, in which case

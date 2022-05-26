@@ -53,12 +53,12 @@ public final class LZ4 {
   static final int MEMORY_USAGE = 14;
   static final int MIN_MATCH = 4; // minimum length of a match
   static final int MAX_DISTANCE = 1 << 16; // maximum distance of a reference
-  static final int LAST_LITERALS = 5; // the last 5 bytes must be encoded as literals
+  static final int LAST_LITERALS = 5; // the last 5 bytes must be encoded as literals 最后5个byte必须编码为literals
   static final int HASH_LOG_HC = 15; // log size of the dictionary for compressHC
   static final int HASH_TABLE_SIZE_HC = 1 << HASH_LOG_HC;
   static final int OPTIMAL_ML = 0x0F + 4 - 1; // match length that doesn't require an additional byte
 
-
+  //在LZ4中，用到了魔数2654435761L，这个数是2到2^32间黄金分割的素数， 2654435761 / 4294967296 = 0.618033987， 2654435761L用 signed int表示就是-1640531535.
   private static int hash(int i, int hashBits) {
     return (i * -1640531535) >>> (32 - hashBits);
   }
@@ -388,7 +388,7 @@ public final class LZ4 {
       return true;
     }
   }
-
+ // HashTable ht确定的最快压缩还是最高效压缩，默认是FastCompressionHashTable
   /**
    * Compress <code>bytes[off:off+len]</code> into <code>out</code> using
    * at most 16KB of memory. <code>ht</code> shouldn't be shared across threads

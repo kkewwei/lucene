@@ -342,7 +342,7 @@ public abstract class FilterLeafReader extends LeafReader { // 封装的是另�
     // Don't call ensureOpen() here (it could affect performance)
     return in.numDocs(); //首先this=ExitableDirectoryReader$ExitableLeafReader,in =ElasticsearchLeafReader
   } // 其次再次this=ElasticsearchLeafReader,in=SegmentReader
-
+  // segment包含的最大文档ID
   @Override
   public int maxDoc() {
     // Don't call ensureOpen() here (it could affect performance)
@@ -400,8 +400,8 @@ public abstract class FilterLeafReader extends LeafReader { // 封装的是另�
 
   @Override
   public SortedSetDocValues getSortedSetDocValues(String field) throws IOException {
-    ensureOpen();
-    return in.getSortedSetDocValues(field);
+    ensureOpen(); // in = SegmentReader
+    return in.getSortedSetDocValues(field); // 进入CodecReader.getSortedSetDocValues()
   }
 
   @Override

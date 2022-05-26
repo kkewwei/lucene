@@ -295,7 +295,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable,
 
   private Collection<String> filesToCommit;// 某个IndexCommit点包含的多少个文件
   // 在类初始话的时候，会去检查是否直接使用之前存在的段。shard恢复时会用之前的
-  private final SegmentInfos segmentInfos; // 目前这个shard维持的所有的段信息。ES中Refresh产生的字段会首先加入到这里面，加入了就代表将段公开可以查询了
+  private final SegmentInfos segmentInfos; // 目前这个shard维持的所有的段信息。ES中Refresh产生的字段会首先加入到这里面，加入了就代表将段公开可以查询了。然后铜鼓StandardDirectoryReader.open(segmentInfos)构建StandardDirectoryReader，放入
   final FieldNumbers globalFieldNumberMap;
 
   final DocumentsWriter docWriter;// DocumentsWriter， 一个shard，也只有一个DocumentsWriter

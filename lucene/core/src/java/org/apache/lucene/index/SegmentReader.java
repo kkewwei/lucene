@@ -222,7 +222,7 @@ public final class SegmentReader extends CodecReader { // 父类有LeafReader
     // Don't call ensureOpen() here (it could affect performance)
     return numDocs;
   }
-
+  // segment包含的最大文档ID
   @Override
   public int maxDoc() {
     // Don't call ensureOpen() here (it could affect performance)

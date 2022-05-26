@@ -156,7 +156,7 @@ public abstract class CompressionMode {
     private final LZ4.FastCompressionHashTable ht;
 
     LZ4FastCompressor() {
-      ht = new LZ4.FastCompressionHashTable();
+      ht = new LZ4.FastCompressionHashTable();// 默认是LZ4.FastCompressionHashTable
     }
 
     @Override

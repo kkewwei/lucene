@@ -30,8 +30,8 @@ import org.apache.lucene.util.automaton.CompiledAutomaton;
  * dictionary value (ordinal) can be retrieved for each document. Ordinals
  * are dense and in increasing sorted order.
  */
-public abstract class SortedSetDocValues extends DocValuesIterator {
-  
+public abstract class SortedSetDocValues extends DocValuesIterator { //
+  // // 仅仅会去map dv docId，orderId, 及term的一二级索引结构
   /** Sole constructor. (For invocation by subclass 
    * constructors, typically implicit.) */
   protected SortedSetDocValues() {}
@@ -49,7 +49,7 @@ public abstract class SortedSetDocValues extends DocValuesIterator {
    *         ordinals are dense, start at 0, then increment by 1 for 
    *         the next value in sorted order. 
    */
-  public abstract long nextOrd() throws IOException;
+  public abstract long nextOrd() throws IOException; // 得到下一个排好序的顺序
 
   // TODO: should we have a docValueCount, like SortedNumeric?
   

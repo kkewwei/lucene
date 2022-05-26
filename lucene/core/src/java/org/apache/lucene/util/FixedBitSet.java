@@ -218,13 +218,13 @@ public final class FixedBitSet extends BitSet implements Bits, Accountable {
     bits[wordNum] &= ~bitmask;
     return val;
   }
-  // 计算大于等于参数index的位置被置位的Index
+  // 计算大于等于参数index的位置有文档的Index
   @Override
   public int nextSetBit(int index) {
     // Depends on the ghost bits being clear!
     assert index >= 0 && index < numBits : "index=" + index + ", numBits=" + numBits;
-    int i = index >> 6;
-    long word = bits[i] >> index;  // skip all the bits to the right of index // 丢弃之前的位数
+    int i = index >> 6;// 注意：：丢弃之前的位数
+    long word = bits[i] >> index;  // skip all the bits to the right of index
 
     if (word!=0) { // // 如果word的值不为0，说明大于等于index的位中存在被置位(1)的位
       return index + Long.numberOfTrailingZeros(word); //  // 返回大于等于该index，第一个被置位的Index(从低位到高位)
@@ -424,7 +424,7 @@ public final class FixedBitSet extends BitSet implements Bits, Accountable {
    * @param startIndex lower index
    * @param endIndex one-past the last bit to set
    */
-  public void set(int startIndex, int endIndex) {
+  public void set(int startIndex, int endIndex) { //  从start到end全部置为1
     assert startIndex >= 0 && startIndex < numBits : "startIndex=" + startIndex + ", numBits=" + numBits;
     assert endIndex >= 0 && endIndex <= numBits : "endIndex=" + endIndex + ", numBits=" + numBits;
     if (endIndex <= startIndex) {

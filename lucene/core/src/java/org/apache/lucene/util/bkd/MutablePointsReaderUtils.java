@@ -147,7 +147,7 @@ public final class MutablePointsReaderUtils {
     final int dataCmpBytes = (numDataDim - numIndexDim) * bytesPerDim + dimCmpBytes; // 该point该元素不相同的个数
     final int bitsPerDocId = PackedInts.bitsRequired(maxDoc - 1); // 最大的那个文档id需要多少位
     new RadixSelector(dataCmpBytes + (bitsPerDocId + 7) / 8) { //  这里位数为两类，可以从byteAt()看出，读取每一类的方式也不一样
-    // 第一类就是普通的dimCmpBytes，读取的是不相同的字符；第二类是 (bitsPerDocId + 7) / 8， 读取的是文档Id，就是说把文档Id作为了桶的一部分
+    // 第一类就是普通的dimCmpBytes，读取的是不相同的字符；第二类是 (bitsPerDocId + 7) / 8， 把文档ID分成几份，每一份内的元素该位相同
       @Override
       protected Selector getFallbackSelector(int k) { // 使用快排进行排序, k:表示第几个字符
         final int dataStart = (k < dimCmpBytes) ? dataOffset : dataOffset + k - dimCmpBytes;
@@ -169,7 +169,7 @@ public final class MutablePointsReaderUtils {
           }
 
           @Override
-          protected int comparePivot(int j) {
+          protected int comparePivot(int j) {  // 当范围很小时，或者递归很深时，就进来
             if (k < dimCmpBytes) {
               reader.getValue(j, scratch2); // 优先比较
               int cmp = FutureArrays.compareUnsigned(pivot.bytes, pivot.offset + dimOffset + k, pivot.offset + dimOffset + dimCmpBytes,
@@ -202,9 +202,9 @@ public final class MutablePointsReaderUtils {
           return Byte.toUnsignedInt(reader.getByteAt(i, dimOffset + k));
         } else if (k < dataCmpBytes) {
           return Byte.toUnsignedInt(reader.getByteAt(i, dataOffset + k - dimCmpBytes));
-        } else { // 读取的是docId的高位
-          final int shift = bitsPerDocId - ((k - dataCmpBytes + 1) << 3); // 通过(k - dataCmpBytes)去掉原本影响，，每次向右移8位,比如第一次是22，第二次是14，
-          return (reader.getDocID(i) >>> Math.max(0, shift)) & 0xff; // 应该仅仅是为了hash，从docId中取值
+        } else { // 比如bitsPerDocId=21位，将docId按照8位一份，比如分成了4份：比如读取第一份：那么reader.getDocID(i)>>8，读取高3份的值
+          final int shift = bitsPerDocId - ((k - dataCmpBytes + 1) << 3); // 通过(k - dataCmpBytes)去掉原本影响
+          return (reader.getDocID(i) >>> Math.max(0, shift)) & 0xff; //
         }
       }
     }.select(from, to, mid);

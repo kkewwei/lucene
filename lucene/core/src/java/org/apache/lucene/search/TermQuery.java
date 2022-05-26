@@ -74,7 +74,7 @@ public class TermQuery extends Query {
         this.simScorer = similarity.scorer(boost, collectionStats, termStats);
       }
     }
-
+    // 提取terms
     @Override
     public void extractTerms(Set<Term> terms) {
       terms.add(getTerm());

@@ -61,17 +61,17 @@ public abstract class TopScoreDocCollector extends TopDocsCollector<ScoreDoc> {
       docBase = context.docBase;
       return new ScorerLeafCollector() {
 
-        @Override
+        @Override// 比如传递进来的是ConstantScoreScorer
         public void setScorer(Scorable scorer) throws IOException {
-          super.setScorer(scorer);
-          minCompetitiveScore = 0f;
-          updateMinCompetitiveScore(scorer);
+          super.setScorer(scorer); // 设置下scorer
+          minCompetitiveScore = 0f; // 这里始终置位为0
+          updateMinCompetitiveScore(scorer);// 这也调用
           if (minScoreAcc != null) {
             updateGlobalMinCompetitiveScore(scorer);
           }
         }
-        // 开始遍历选中的文档，然后进行得分统计。
-        @Override
+        // 开始遍历选中的文档，然后进行得分统计。 doc是段内docId
+        @Override // 匹配的文档，开始收集起来
         public void collect(int doc) throws IOException {
           float score = scorer.score();
 
@@ -84,9 +84,9 @@ public abstract class TopScoreDocCollector extends TopDocsCollector<ScoreDoc> {
           if (minScoreAcc != null && (totalHits & minScoreAcc.modInterval) == 0) {
             updateGlobalMinCompetitiveScore(scorer);
           }
-          // 得分最小的放在最上面
+          // 得分最小的放在最上面（最小堆）
           if (score <= pqTop.score) {// 小于等于顶置。目前使用全部score为1，达到我们期望的值后，
-            if (totalHitsRelation == TotalHits.Relation.EQUAL_TO) {
+            if (totalHitsRelation == TotalHits.Relation.EQUAL_TO) {// 若不是的话，那么就直接跳过了
               // we just reached totalHitsThreshold, we can start setting the min
               // competitive score now
               updateMinCompetitiveScore(scorer);
@@ -94,9 +94,9 @@ public abstract class TopScoreDocCollector extends TopDocsCollector<ScoreDoc> {
             // Since docs are returned in-order (i.e., increasing doc Id), a document
             // with equal score to pqTop.score cannot compete since HitQueue favors
             // documents with lower doc Ids. Therefore reject those docs too.
-            return;
+            return; // 小于等于，那么就退出了
           }
-          pqTop.doc = doc + docBase; //
+          pqTop.doc = doc + docBase; // 得分大于最小值，那么将堆顶元素替换掉，并重新排序
           pqTop.score = score;
           pqTop = pq.updateTop(); // 重新更新堆顶元素
           updateMinCompetitiveScore(scorer); // 应该是调整
@@ -268,10 +268,10 @@ public abstract class TopScoreDocCollector extends TopDocsCollector<ScoreDoc> {
   }
 
   int docBase; // 这个叶子的起始文档
-  ScoreDoc pqTop;
+  ScoreDoc pqTop; // 最小堆
   final HitsThresholdChecker hitsThresholdChecker;
   final MaxScoreAccumulator minScoreAcc;
-  float minCompetitiveScore;
+  float minCompetitiveScore; // 什么含义
 
   // prevents instantiation
   TopScoreDocCollector(int numHits, HitsThresholdChecker hitsThresholdChecker,
@@ -307,7 +307,7 @@ public abstract class TopScoreDocCollector extends TopDocsCollector<ScoreDoc> {
       // since we tie-break on doc id and collect in doc id order we can require
       // the next float if the global minimum score is set on a document id that is
       // smaller than the ids in the current leaf
-      float score = docBase > maxMinScore.docID ? Math.nextUp(maxMinScore.score) : maxMinScore.score;
+      float score = docBase > maxMinScore.docID ? Math.nextUp(maxMinScore.score) : maxMinScore.score; // 正无穷大的方向上返回与指定参数相邻的数字。如果参数为6.7，则在正无穷大方向上的相邻数字6.7为6.700000000000001。
       if (score > minCompetitiveScore) {
         assert hitsThresholdChecker.isThresholdReached();
         scorer.setMinCompetitiveScore(score);
@@ -316,7 +316,7 @@ public abstract class TopScoreDocCollector extends TopDocsCollector<ScoreDoc> {
       }
     }
   }
-
+  // 只要有文档满足，超过10000，就是GREATER_THAN_OR_EQUAL_TO
   protected void updateMinCompetitiveScore(Scorable scorer) throws IOException {
     if (hitsThresholdChecker.isThresholdReached() // 统计当前计算得分的文档个数是否超过10000个文档
           && pqTop != null
@@ -324,9 +324,9 @@ public abstract class TopScoreDocCollector extends TopDocsCollector<ScoreDoc> {
       // since we tie-break on doc id and collect in doc id order, we can require
       // the next float
       float localMinScore = Math.nextUp(pqTop.score);
-      if (localMinScore > minCompetitiveScore) {
+      if (localMinScore > minCompetitiveScore) { // 找最大的
         scorer.setMinCompetitiveScore(localMinScore);
-        totalHitsRelation = TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO;
+        totalHitsRelation = TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO; // 超过之后，就变成了greate_than_or_equal_to
         minCompetitiveScore = localMinScore;
         if (minScoreAcc != null) {
           // we don't use the next float but we register the document

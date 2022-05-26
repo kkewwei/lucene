@@ -31,7 +31,7 @@ import org.apache.lucene.util.MathUtil;
 /** Handles intersection of an multi-dimensional shape in byte[] space with a block KD-tree previously written with {@link BKDWriter}.
  *
  * @lucene.experimental */
-// 引入针对数值类型的新索引数据结构：BKD-Tree，用于优化Lucene中范围查询的性能。由于这一索引结构最初用于地理坐标场景，因此被命名为Point索引。
+// 引入针对数值类型的新索引数据结构：BKD-Tree  节点启动的时候，会来初始化该类
 public final class BKDReader extends PointValues {
 
   // Packed array of byte[] holding all split values in the full binary tree:
@@ -44,15 +44,15 @@ public final class BKDReader extends PointValues {
   final int maxPointsInLeafNode; // 一个叶子节点多少个Point
   final byte[] minPackedValue; // 该segment中最大/最小的那个值
   final byte[] maxPackedValue;
-  final long pointCount; //
-  final int docCount; // 这俩兄弟
+  final long pointCount; // 可能一个文档有两个point，一般来说，docCount和pointCount是相等的
+  final int docCount; // 涉及到多少个文档
   final int version;
   protected final int packedBytesLength;
   protected final int packedIndexBytesLength; // 一个元素占用的空间
   final long minLeafBlockFP;
 
-  final IndexInput packedIndex;// 就是kdi文件读取
-// 读取的是kdm文件，写入过程详见 BKDWriter.writeIndex()函数
+  final IndexInput packedIndex;// 就是kdi文件读取，在节点重启时候会去映射。（kdm在接电启动时候会去全量读取）
+// 节点启动的时候，会来初始化该类。读取的是kdm文件，写入过程详见 BKDWriter.writeIndex()函数
   /** Caller must pre-seek the provided {@link IndexInput} to the index location that {@link BKDWriter#finish} returned.
    * BKD tree is always stored off-heap. */
   public BKDReader(IndexInput metaIn, IndexInput indexIn, IndexInput dataIn) throws IOException {
@@ -64,7 +64,7 @@ public final class BKDReader extends PointValues {
       numIndexDims = numDataDims;
     }
     maxPointsInLeafNode = metaIn.readVInt();// 每个页节点的元素个数
-    bytesPerDim = metaIn.readVInt();// 每一个元素中每以阶的大小
+    bytesPerDim = metaIn.readVInt();// 单个元素某个维度占用的长度
     packedBytesLength = numDataDims * bytesPerDim;
     packedIndexBytesLength = numIndexDims * bytesPerDim;
 
@@ -88,15 +88,15 @@ public final class BKDReader extends PointValues {
     pointCount = metaIn.readVLong();// 该segment总共的元素个数
     docCount = metaIn.readVInt();// 总共存在多少个文档中
 
-    int numIndexBytes = metaIn.readVInt();// BKD树转存结构
+    int numIndexBytes = metaIn.readVInt();// BKD树转存结构总长度
     long indexStartPointer;
     if (version >= BKDWriter.VERSION_META_FILE) {
-      minLeafBlockFP = metaIn.readLong(); // kdd文件存储的起始位置
+      minLeafBlockFP = metaIn.readLong(); // 在kdd文件存储数据的起始位置
       indexStartPointer = metaIn.readLong(); // kdi中读取索引结构的起始位置
     } else {
       indexStartPointer = indexIn.getFilePointer();
       minLeafBlockFP = indexIn.readVLong();
-      indexIn.seek(indexStartPointer);// 跳转到dki中，可以直接读取叶子信息
+      indexIn.seek(indexStartPointer);
     }
     this.packedIndex = indexIn.slice("packedIndex", indexStartPointer, numIndexBytes);// 定位到kdi中，方便读取该
     this.in = dataIn;
@@ -127,10 +127,10 @@ public final class BKDReader extends PointValues {
     // true if the per-dim delta we read for the node at this level is a negative offset vs. the last split on this dim; this is a packed
     // 2D array, i.e. to access array[level][dim] you read from negativeDeltas[level*numDims+dim].  this will be true if the last time we
     // split on this dimension, we next pushed to the left sub-tree:
-    private final boolean[] negativeDeltas; // negativeDeltas
+    private final boolean[] negativeDeltas; // 数高*维度, 当前维度是数的左子树还是右子树
     // holds the packed per-level split values; the intersect method uses this to save the cell min/max as it recurses:
-    private final byte[][] splitValuesStack; // 记录的某个维度上一次切分的值
-    // scratch value to return from getPackedValue:
+    private final byte[][] splitValuesStack; // 记录的某个维度上一次切分的值（这里比较粗暴，直接将上个level所有的维度都copy了，没有必要）
+    // scratch value to return from getPackedValue:  看起来仅仅退的时间比较简单粗暴，直接退就好了，而不是再复原
     private final BytesRef scratch; //
     // 为了遍历树
     IndexTree() {
@@ -195,14 +195,14 @@ public final class BKDReader extends PointValues {
       splitDim = splitDims[level];
       //System.out.println("  pop nodeID=" + nodeID);
     }
-
-    public boolean isLeafNode() {// 对于最小的叶子节点，2*nodeID-1>=(nodeID-1)+叶子个数，nodeID=leafNodeOffset
-      return nodeID >= leafNodeOffset;// 那么叶子点全部满足nodeID >= leafNodeOffset
+    // 非常神奇(巧妙)，自己画个图一看便知。
+    public boolean isLeafNode() {
+      return nodeID >= leafNodeOffset;
     }
-    //
-    public boolean nodeExists() { // 若最后一个叶子节点为nodeID，那么最后一个非叶子节点：nodeID/2，那么nodeID/2+叶子个数=nodeID，也就是nodeID=2*叶子个数
-      return nodeID - leafNodeOffset < leafNodeOffset; // 若最后没有右子树，nodeID/2+叶子个数=nodeID，若有右子树，（nodeID-1)/2+叶子个数=nodeID
-    } // 不清楚这里到底判断的啥？最大一个叶子节点nodeID:nodeID-nodeID/2=叶子个数   =》  nodeID/2=叶子个数。
+    // nodeID还是叶子节点。第0个叶子节点： nodeID=leafNodeOffset，最后一个叶子节点nodeID：leafNodeOffset+leafNodeOffset-1
+    public boolean nodeExists() {
+      return nodeID - leafNodeOffset < leafNodeOffset;
+    }  // nodeID - leafNodeOffset是非叶子节点第几个 一定< leafNodeOffset
 
     public int getNodeID() {
       return nodeID;
@@ -233,30 +233,30 @@ public final class BKDReader extends PointValues {
       assert isLeafNode(): "nodeID=" + nodeID + " is not a leaf";
       return leafBlockFPStack[level];
     }
-
+    // 计算多少叶子节点在该节点之下
     /** Return the number of leaves below the current node. */
     public int getNumLeaves() {
-      int leftMostLeafNode = nodeID;
+      int leftMostLeafNode = nodeID; // 计算出该节点最左边的那个叶子编号
       while (leftMostLeafNode < leafNodeOffset) {
         leftMostLeafNode = leftMostLeafNode * 2;
       }
-      int rightMostLeafNode = nodeID;
+      int rightMostLeafNode = nodeID;// 计算左右边的那个叶子编号
       while (rightMostLeafNode < leafNodeOffset) {
         rightMostLeafNode = rightMostLeafNode * 2 + 1;
       }
       final int numLeaves;
-      if (rightMostLeafNode >= leftMostLeafNode) {
+      if (rightMostLeafNode >= leftMostLeafNode) { // 同一级别
         // both are on the same level
         numLeaves = rightMostLeafNode - leftMostLeafNode + 1;
-      } else {
+      } else { // 不同级别
         // left is one level deeper than right
         numLeaves = rightMostLeafNode - leftMostLeafNode + 1 + leafNodeOffset;
-      }
+      }// getNumLeavesSlow为了校验
       assert numLeaves == getNumLeavesSlow(nodeID) : numLeaves + " " + getNumLeavesSlow(nodeID);
       return numLeaves;
     }
 
-    // for assertions
+    // for assertions  为了校验node左=node右
     private int getNumLeavesSlow(int node) {
       if (node >= 2 * leafNodeOffset) {
         return 0;
@@ -272,7 +272,7 @@ public final class BKDReader extends PointValues {
     private void readNodeData(boolean isLeft) {
       if (splitPackedValueStack[level] == null) { // 此时level已经是当前level
         splitPackedValueStack[level] = new byte[packedIndexBytesLength];
-      }// 上次的拿过来的来更新本地
+      }// 上层的所有维度拿过来的来更新本地
       System.arraycopy(negativeDeltas, (level-1)*numIndexDims, negativeDeltas, level*numIndexDims, numIndexDims); // 记录了上次每个维度的最后一次的切分情况
       assert splitDim != -1;
       negativeDeltas[level*numIndexDims+splitDim] = isLeft; // 修正这个维度最近一次的是左子树还是右子树切分
@@ -299,7 +299,7 @@ public final class BKDReader extends PointValues {
 
           if (splitValuesStack[level] == null) {// 临时变量
             splitValuesStack[level] = new byte[packedIndexBytesLength];
-          }// 把上一个切分的值拿来，以便读取当前切分的原值
+          }// 把上一个level所有维度都拿过来覆盖掉，而不是只选择一个维度复原。
           System.arraycopy(splitValuesStack[level - 1], 0, splitValuesStack[level], 0, packedIndexBytesLength);
           if (suffix > 0) {
             int firstDiffByteDelta = code / (1 + bytesPerDim);
@@ -314,9 +314,9 @@ public final class BKDReader extends PointValues {
           }
           // kdi存储：delte,code,diffChar,suffix;leftLength;leftBlock;rightBlock
           int leftNumBytes;                    // readNow
-          if (nodeID * 2 < leafNodeOffset) {
+          if (nodeID * 2 < leafNodeOffset) {//提前判断了左子节点是不是叶子节点。
             leftNumBytes = in.readVInt(); // 读取左子树的存储空间，等于BKDWriter.recursePackIndex()中返回值中的bytes2.length
-          } else {// （左叶子节点不存储leftNumBytes，直接返回0了）
+          } else {//
             leftNumBytes = 0;
           } // 比较妙，就是右子树在kdd存储的起始位置
           rightNodePositions[level] = Math.toIntExact(in.getFilePointer()) + leftNumBytes; // rightBlock
@@ -355,7 +355,7 @@ public final class BKDReader extends PointValues {
                           IndexTree indexVisitor) {
       this.in = in;
       this.visitor = visitor;
-      this.commonPrefixLengths = new int[numDims]; // 一个元素几个阶
+      this.commonPrefixLengths = new int[numDims]; //  一个元素几个维度
       this.scratchIterator = new BKDReaderDocIDSetIterator(maxPointsInLeafNode); // 每个叶子节点多少元素
       this.scratchDataPackedValue = new byte[packedBytesLength]; // 一个元素多少位存储
       this.scratchMinIndexPackedValue = new byte[packedIndexBytesLength];
@@ -369,17 +369,17 @@ public final class BKDReader extends PointValues {
     intersect(getIntersectState(visitor), minPackedValue, maxPackedValue); // 开始正式交互
   }
 
-  @Override
+  @Override // 在bkd数中根据上下限对比，只要有相交，那么就认为预估节点为512/2个数据符合要求。
   public long estimatePointCount(IntersectVisitor visitor) {
     return estimatePointCount(getIntersectState(visitor), minPackedValue, maxPackedValue);
   }
-
+  // 将当前节点的子叶子节点全部加到docIds中
   /** Fast path: this is called when the query box fully encompasses all cells under this node. */
   private void addAll(IntersectState state, boolean grown) throws IOException {
     //System.out.println("R: addAll nodeID=" + nodeID);
 
-    if (grown == false) {
-      final long maxPointCount = (long) maxPointsInLeafNode * state.index.getNumLeaves();
+    if (grown == false) { // 先根据docIds扩容
+      final long maxPointCount = (long) maxPointsInLeafNode * state.index.getNumLeaves();// 看下有多少该分支下有多少数是在范围之内的
       if (maxPointCount <= Integer.MAX_VALUE) { // could be >MAX_VALUE if there are more than 2B points in total
         state.visitor.grow((int) maxPointCount);
         grown = true;
@@ -424,7 +424,7 @@ public final class BKDReader extends PointValues {
     // Again, this time reading values and checking with the visitor
     visitDocValues(state.commonPrefixLengths, state.scratchDataPackedValue, state.scratchMinIndexPackedValue, state.scratchMaxIndexPackedValue, state.in, state.scratchIterator, count, state.visitor);
   }
-
+  // 读取该叶子全量的docIds
   private void visitDocIDs(IndexInput in, long blockFP, IntersectVisitor visitor) throws IOException {
     // Leaf node
     in.seek(blockFP);
@@ -435,7 +435,7 @@ public final class BKDReader extends PointValues {
 
     DocIdsWriter.readInts(in, count, visitor);
   }
-   // 读取叶子节点数据,参考 BKDWriter.build()中叶子存储过程：writeLeafBlockDocs函数,先存储的docCount
+   // 读取叶子节点数据,参考 BKDWriter.build()中叶子存储过程：writeLeafBlockDocs 函数,先存储的docCount
   int readDocIDs(IndexInput in, long blockFP, BKDReaderDocIDSetIterator iterator) throws IOException {
     in.seek(blockFP); // 跑到KDD文件中的某个叶子节点上了
 
@@ -446,10 +446,10 @@ public final class BKDReader extends PointValues {
 
     return count;
   }
-
+ // 会读取每个point的value,找到符合范围的docId
   void visitDocValues(int[] commonPrefixLengths, byte[] scratchDataPackedValue, byte[] scratchMinIndexPackedValue, byte[] scratchMaxIndexPackedValue,
                       IndexInput in, BKDReaderDocIDSetIterator scratchIterator, int count, IntersectVisitor visitor) throws IOException {
-    if (version >= BKDWriter.VERSION_LOW_CARDINALITY_LEAVES) { // 默认跑到这里
+    if (version >= BKDWriter.VERSION_LOW_CARDINALITY_LEAVES) { // 默认跑到这里，会读取每个point的value,找到符合范围的docId
       visitDocValuesWithCardinality(commonPrefixLengths, scratchDataPackedValue, scratchMinIndexPackedValue, scratchMaxIndexPackedValue, in, scratchIterator, count, visitor);
     } else {
       visitDocValuesNoCardinality(commonPrefixLengths, scratchDataPackedValue, scratchMinIndexPackedValue, scratchMaxIndexPackedValue, in, scratchIterator, count, visitor);
@@ -510,7 +510,7 @@ public final class BKDReader extends PointValues {
       visitor.grow(count);
       visitUniqueRawDocValues(scratchDataPackedValue, scratchIterator, count, visitor);
     } else {
-      if (numIndexDims != 1) { //
+      if (numIndexDims != 1) { // 多维度
         byte[] minPackedValue = scratchMinIndexPackedValue;
         System.arraycopy(scratchDataPackedValue, 0, minPackedValue, 0, packedIndexBytesLength); // 相同前缀，先给最小最大值赋值
         byte[] maxPackedValue = scratchMaxIndexPackedValue;
@@ -538,7 +538,7 @@ public final class BKDReader extends PointValues {
         }
       } else { // 只有一维的话，则读取也只是先定义下
         visitor.grow(count);
-      }
+      } // 稀疏矩阵
       if (compressedDim == -2) { //大部分一样，会读取每个文档的value进行读取，并缓存docId
         // low cardinality values  会check value是否满足条件，并记录下docId编号
         visitSparseRawDocValues(commonPrefixLengths, scratchDataPackedValue, in, scratchIterator, count, visitor);
@@ -557,17 +557,17 @@ public final class BKDReader extends PointValues {
     }
   }
   // 大部分相同，会读取每个docId的value，并进行比较，将匹配的docId给暂存起来
-  // read cardinality and point
+  // read cardinality and point, 可看 BKDWriter.writeLowCardinalityLeafBlockPackedValues()
   private void visitSparseRawDocValues(int[] commonPrefixLengths, byte[] scratchPackedValue, IndexInput in, BKDReaderDocIDSetIterator scratchIterator, int count, IntersectVisitor visitor) throws IOException {
     int i;
-    for (i = 0; i < count;) { // 遍历每个值
+    for (i = 0; i < count;) { // 遍历这个叶子每个及诶按
       int length = in.readVInt(); // 读取相同元素的个数
       for(int dim = 0; dim < numDataDims; dim++) {
         int prefix = commonPrefixLengths[dim];
         in.readBytes(scratchPackedValue, dim*bytesPerDim + prefix, bytesPerDim - prefix); // 将后缀值读取出来
       } // scratchPackedValue放的读取出来的文档id的value
-      scratchIterator.reset(i, length); // BKDReader$BKDReaderDocIDSetIterator， 制定了docId的长度及docId起始位置
-      visitor.visit(scratchIterator, scratchPackedValue); // 读取每个docId的value值，对比。
+      scratchIterator.reset(i, length); // BKDReader$BKDReaderDocIDSetIterator， 制定需要读取的docId起始位置，及docId长度
+      visitor.visit(scratchIterator, scratchPackedValue); // 读取每个docId的value值，对比。跑到IntersectVisitor.visit
       i += length;
     }
     if (i != count) {
@@ -580,7 +580,7 @@ public final class BKDReader extends PointValues {
     scratchIterator.reset(0, count);
     visitor.visit(scratchIterator, scratchPackedValue);
   }
-
+  // 大部分不同，可看 BKDWriter.writeHighCardinalityLeafBlockPackedValues
   private void visitCompressedDocValues(int[] commonPrefixLengths, byte[] scratchPackedValue, IndexInput in, BKDReaderDocIDSetIterator scratchIterator, int count, IntersectVisitor visitor, int compressedDim) throws IOException {
     // the byte at `compressedByteOffset` is compressed using run-length compression,
     // other suffix bytes are stored verbatim
@@ -595,7 +595,7 @@ public final class BKDReader extends PointValues {
           int prefix = commonPrefixLengths[dim];
           in.readBytes(scratchPackedValue, dim*bytesPerDim + prefix, bytesPerDim - prefix);//读取原始值
         }//读取一个具体的point值，和查询范围作对比，符合的话，会将docId存放在visitor中
-        visitor.visit(scratchIterator.docIDs[i+j], scratchPackedValue); //
+        visitor.visit(scratchIterator.docIDs[i+j], scratchPackedValue); // 会去匹配当前这个词，会跑到ExitableDirectoryReader$ExitableIntersectVisitor
       }
       i += runLen;
     }
@@ -624,16 +624,16 @@ public final class BKDReader extends PointValues {
   }
   // 交互,和estimatePointCount()大致相似，不同的是，intersect会进入叶子节点具体判断哪些符合
   private void intersect(IntersectState state, byte[] cellMinPacked, byte[] cellMaxPacked) throws IOException {
-
+// cellMinPackedx: 该segment中最大/最小的那个值
     /*
     System.out.println("\nR: intersect nodeID=" + state.index.getNodeID());
     for(int dim=0;dim<numDims;dim++) {
       System.out.println("  dim=" + dim + "\n    cellMin=" + new BytesRef(cellMinPacked, dim*bytesPerDim, bytesPerDim) + "\n    cellMax=" + new BytesRef(cellMaxPacked, dim*bytesPerDim, bytesPerDim));
     }
     */
-
+    // cellMinPacked: 该子树中最大/最小的那个值
     Relation r = state.visitor.compare(cellMinPacked, cellMaxPacked);
-
+    // 此时极可能是叶子节点，也可以是非叶子节点
     if (r == Relation.CELL_OUTSIDE_QUERY) {// 不在范围内
       // This cell is fully outside of the query shape: stop recursing
     } else if (r == Relation.CELL_INSIDE_QUERY) {// 完全包含
@@ -645,13 +645,13 @@ public final class BKDReader extends PointValues {
       // TODO: we can assert that the first value here in fact matches what the index claimed?
       
       // In the unbalanced case it's possible the left most node only has one child:
-      if (state.index.nodeExists()) { // 可能没有右子节点
+      if (state.index.nodeExists()) {// 当前nodeId还是叶子节点
         // Leaf node; scan and filter all points in this block:
-        int count = readDocIDs(state.in, state.index.getLeafBlockFP(), state.scratchIterator);// 读取具体的文档id
-         // 将读取具体的value，比较，缓存docId
+        int count = readDocIDs(state.in, state.index.getLeafBlockFP(), state.scratchIterator);// 从kdd中读取具体的文档id放入state.scratchIterator
+         // 将读取具体的value，比较，缓存docId，看那些point符合范围，结果存储在 state.visitor.in.adder中
         // Again, this time reading values and checking with the visitor
         visitDocValues(state.commonPrefixLengths, state.scratchDataPackedValue, state.scratchMinIndexPackedValue, state.scratchMaxIndexPackedValue, state.in, state.scratchIterator, count, state.visitor);
-      }
+      } // 读取的文档id是有序的
 
     } else { // 非叶子节点
       
@@ -660,7 +660,7 @@ public final class BKDReader extends PointValues {
       assert splitDim >= 0: "splitDim=" + splitDim + ", numIndexDims=" + numIndexDims;
       assert splitDim < numIndexDims: "splitDim=" + splitDim + ", numIndexDims=" + numIndexDims;
 
-      byte[] splitPackedValue = state.index.getSplitPackedValue();
+      byte[] splitPackedValue = state.index.getSplitPackedValue();// 临时变量， 
       BytesRef splitDimValue = state.index.getSplitDimValue();
       assert splitDimValue.length == bytesPerDim;
       //System.out.println("  splitDimValue=" + splitDimValue + " splitDim=" + splitDim);
@@ -668,7 +668,7 @@ public final class BKDReader extends PointValues {
       // make sure cellMin <= splitValue <= cellMax:
       assert FutureArrays.compareUnsigned(cellMinPacked, splitDim * bytesPerDim, splitDim * bytesPerDim + bytesPerDim, splitDimValue.bytes, splitDimValue.offset, splitDimValue.offset + bytesPerDim) <= 0: "bytesPerDim=" + bytesPerDim + " splitDim=" + splitDim + " numIndexDims=" + numIndexDims + " numDataDims=" + numDataDims;
       assert FutureArrays.compareUnsigned(cellMaxPacked, splitDim * bytesPerDim, splitDim * bytesPerDim + bytesPerDim, splitDimValue.bytes, splitDimValue.offset, splitDimValue.offset + bytesPerDim) >= 0: "bytesPerDim=" + bytesPerDim + " splitDim=" + splitDim + " numIndexDims=" + numIndexDims + " numDataDims=" + numDataDims;
-      // 连续两次给splitPackedValue赋值，存在覆盖的情况
+      // 产生新的上限
       // Recurse on left sub-tree:
       System.arraycopy(cellMaxPacked, 0, splitPackedValue, 0, packedIndexBytesLength); // 当前最大值
       System.arraycopy(splitDimValue.bytes, splitDimValue.offset, splitPackedValue, splitDim*bytesPerDim, bytesPerDim);
@@ -687,7 +687,7 @@ public final class BKDReader extends PointValues {
       state.index.pop();
     }
   }
-  // 预估匹配个数，代表着匹配cost。交互,和intersect()大致相似，不同的是，estimatePointCount只会大致评估多少符合
+  // 预估匹配个数，代表着匹配cost。交互,和intersect()大致相似，不同的是，estimatePointCount只会大致评估多少符合（叶子节点有一个满足的话，就是预估512/2节点满足）
   private long estimatePointCount(IntersectState state, byte[] cellMinPacked, byte[] cellMaxPacked) {
 
     /*
@@ -787,8 +787,8 @@ public final class BKDReader extends PointValues {
   protected static class BKDReaderDocIDSetIterator extends DocIdSetIterator {
 
     private int idx;
-    private int length;
-    private int offset;
+    private int length; // 这次可读取文档的长度
+    private int offset; // 这次可读取文档的起始位置(每次读取一个区间)
     private int docID;
     final int[] docIDs; //读取的一个叶子节点的所有DocId内容
 

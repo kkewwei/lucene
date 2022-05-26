@@ -145,14 +145,14 @@ public abstract class PriorityQueue<T> implements Iterable<T> {
   public T insertWithOverflow(T element) { // 优先级队列插入，若满了并不会抛异常，而是先去查找合适的再删除
     if (size < maxSize) { // 若堆未满，直接加入元素
       add(element);
-      return null;
+      return null; //返回null
     } else if (size > 0 && !lessThan(element, heap[1])) { // 若满了，那么和堆顶元素
       T ret = heap[1];
       heap[1] = element;
       updateTop();
-      return ret;
+      return ret; // 和栈顶对比下，返回栈顶
     } else {
-      return element;
+      return element; // 返回原始值
     }
   }
 
@@ -198,7 +198,7 @@ public abstract class PriorityQueue<T> implements Iterable<T> {
    *
    * @return the new 'top' element.
    */
-  public final T updateTop() {
+  public final T updateTop() { // 重新更新下栈顶元素
     downHeap(1);
     return heap[1];
   }

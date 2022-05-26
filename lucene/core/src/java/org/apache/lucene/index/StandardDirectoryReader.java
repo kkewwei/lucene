@@ -34,7 +34,7 @@ import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.IOContext;
 import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.IOUtils;
-// 近实时性搜索靠的该函数
+// 近实时性搜索靠的该函数， 只要有refresh操作，就会从IndexWriter中重新构建产生新的StandardDirectoryReader
 /** Default implementation of {@link DirectoryReader}. */
 public final class StandardDirectoryReader extends DirectoryReader {
 
@@ -52,7 +52,7 @@ public final class StandardDirectoryReader extends DirectoryReader {
     this.applyAllDeletes = applyAllDeletes;
     this.writeAllDeletes = writeAllDeletes;
   }
-
+  //从IndexCommit或者文件中恢复StandardDirectoryReader
   /** called from DirectoryReader.open(...) methods */
   static DirectoryReader open(final Directory directory, final IndexCommit commit) throws IOException {
     return new SegmentInfos.FindSegmentsFile<DirectoryReader>(directory) {
@@ -467,7 +467,7 @@ public final class StandardDirectoryReader extends DirectoryReader {
   }
 
   private final Set<ClosedListener> readerClosedListeners = new CopyOnWriteArraySet<>();
-
+  // 只要有refresh操作（merge）导致segment变更，都会产生新的StandardDirectoryReader。同时cacheHelper也产生新的了
   private final CacheHelper cacheHelper = new CacheHelper() {// Shard粒度的共享的
     private final CacheKey cacheKey = new CacheKey();
 
@@ -493,6 +493,6 @@ public final class StandardDirectoryReader extends DirectoryReader {
 
   @Override
   public CacheHelper getReaderCacheHelper() {
-    return cacheHelper;
+    return cacheHelper;// 只要有refresh操作，就会从IndexWriter中重新构建产生新的StandardDirectoryReader。cacheHelper也就变了
   }
 }

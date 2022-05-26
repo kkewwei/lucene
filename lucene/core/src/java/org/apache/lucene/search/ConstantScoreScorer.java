@@ -18,14 +18,14 @@ package org.apache.lucene.search;
 
 
 import java.io.IOException;
-
+// 会缓存下当前读取到的哪个文档
 /**
  * A constant-scoring {@link Scorer}.
  * @lucene.internal
  */
 public final class ConstantScoreScorer extends Scorer {
-
-  private class DocIdSetIteratorWrapper extends DocIdSetIterator {
+   // 会缓存下当前读取到的哪个文档
+  private class DocIdSetIteratorWrapper extends DocIdSetIterator { // 包装下，顺便记录下读取到哪个docID
     int doc = -1; // 当前打分时，选取的文档Id
     DocIdSetIterator delegate;
 
@@ -56,7 +56,7 @@ public final class ConstantScoreScorer extends Scorer {
 
   private final float score;
   private final ScoreMode scoreMode;
-  private final DocIdSetIterator approximation;
+  private final DocIdSetIterator approximation; //  匹配的文档数放在这里了
   private final TwoPhaseIterator twoPhaseIterator;
   private final DocIdSetIterator disi; // 存储的匹配的文档
 
@@ -66,7 +66,7 @@ public final class ConstantScoreScorer extends Scorer {
    *  @param score the score to return on each document
    *  @param scoreMode the score mode
    *  @param disi the iterator that defines matching documents */
-  public ConstantScoreScorer(Weight weight, float score, ScoreMode scoreMode, DocIdSetIterator disi) {
+  public ConstantScoreScorer(Weight weight, float score, ScoreMode scoreMode, DocIdSetIterator disi) { // disi=BitSetIterator
     super(weight);
     this.score = score;
     this.scoreMode = scoreMode;

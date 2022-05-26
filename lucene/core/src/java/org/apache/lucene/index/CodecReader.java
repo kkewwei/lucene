@@ -167,7 +167,7 @@ public abstract class CodecReader extends LeafReader implements Accountable {
     }
     return getDocValuesReader().getSortedNumeric(fi);
   }
-
+  // 跑到这里加载
   @Override
   public final SortedSetDocValues getSortedSetDocValues(String field) throws IOException {
     ensureOpen();
@@ -175,7 +175,7 @@ public abstract class CodecReader extends LeafReader implements Accountable {
     if (fi == null) {
       return null;
     }
-    return getDocValuesReader().getSortedSet(fi);
+    return getDocValuesReader().getSortedSet(fi);// 将进入 PerFieldDocValuesFormat$FieldsReader.getSortedSet()
   }
   
   @Override
@@ -199,7 +199,7 @@ public abstract class CodecReader extends LeafReader implements Accountable {
       return null;
     }
 
-    return getPointsReader().getValues(field);
+    return getPointsReader().getValues(field);// 跑到SegmentReader.getPointsReader(),最终进入Lucene86PointsReader.getValues()
   }
 
   @Override

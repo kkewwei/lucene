@@ -27,17 +27,17 @@ import org.apache.lucene.util.Bits;
  *  across a range of documents need to override this.
  *  Otherwise, a default implementation is wrapped around
  *  the {@link Scorer} returned by {@link Weight#scorer}. */
-
+// 对一批文档评分，只有更优的评分方法，才会覆盖该函数
 public abstract class BulkScorer {
-
+//给每个docID进行打分
   /** Scores and collects all matching documents.
    * @param collector The collector to which all matching documents are passed.
    * @param acceptDocs {@link Bits} that represents the allowed documents to match, or
    *                   {@code null} if they are all allowed to match.
    */
-  public void score(LeafCollector collector, Bits acceptDocs) throws IOException {
+  public void score(LeafCollector collector, Bits acceptDocs) throws IOException { //acceptDocs= liveDocs
     final int next = score(collector, acceptDocs, 0, DocIdSetIterator.NO_MORE_DOCS); // 跑到CancellableBulkScorer.score中了
-    assert next == DocIdSetIterator.NO_MORE_DOCS;
+    assert next == DocIdSetIterator.NO_MORE_DOCS; // 到最后一定是没有docId的
   }
 
   /**

@@ -48,7 +48,7 @@ import org.apache.lucene.index.Term;
  * <p><b>NOTE</b>This query currently only works well with point range/exact
  * queries and their equivalent doc values queries.
  * @lucene.experimental
- */
+ */ // 只要设置为keyword的话，都会默认创建DocValue字段（可参考KeywordFieldMapper和NumberFieldMapper）
 public final class IndexOrDocValuesQuery extends Query {
  // 为什么会设计IndexOrDocValuesQuery，可以看下这篇文档https://www.amazingkoala.com.cn/Lucene/Search/2021/0701/196.html
   private final Query indexQuery, dvQuery; //可以分别是LongPoint$1，SortedNumericDocValuesRangeQuery$1
@@ -125,7 +125,7 @@ public final class IndexOrDocValuesQuery extends Query {
       public void extractTerms(Set<Term> terms) {
         indexWeight.extractTerms(terms);
       }
-      // 单个文档的匹配，使用docValue更合适
+      // 单个文档的匹配，使用docValue更合适，而不是二叉树遍历。批量处理，使用Point处理更合适
       @Override
       public Matches matches(LeafReaderContext context, int doc) throws IOException {
         // We need to check a single doc, so the dv query should perform better
@@ -142,34 +142,34 @@ public final class IndexOrDocValuesQuery extends Query {
       public BulkScorer bulkScorer(LeafReaderContext context) throws IOException {
         // Bulk scorers need to consume the entire set of docs, so using an
         // index structure should perform better
-        return indexWeight.bulkScorer(context); // bulk Scores需要读取全部的doc，所以使用indexWeight更好
+        return indexWeight.bulkScorer(context); // bulk Scores需要读取全部的doc（也会读取docId），使用point比较更快
       }
 
       @Override
       public ScorerSupplier scorerSupplier(LeafReaderContext context) throws IOException {
-        final ScorerSupplier indexScorerSupplier = indexWeight.scorerSupplier(context);
+        final ScorerSupplier indexScorerSupplier = indexWeight.scorerSupplier(context);//更适合少量匹配的文档
         final ScorerSupplier dvScorerSupplier = dvWeight.scorerSupplier(context);
         if (indexScorerSupplier == null || dvScorerSupplier == null) {
           return null;
         }
         return new ScorerSupplier() {
-          @Override
+          @Override // 看起来是不始终不会跑这里的
           public Scorer get(long leadCost) throws IOException {
             // At equal costs, doc values tend to be worse than points since they 若cost相同，
             // still need to perform one comparison per document while points can
             // do much better than that given how values are organized. So we give
             // an arbitrary 8x penalty to doc values.
-            final long threshold = cost() >>> 3; // 我们给与Point 8倍的得分和DocValue进行比较，选中哪个最合适
+            final long threshold = cost() >>> 3; // 我们给与Point 8倍的得分和DocValue进行比较，选中哪个最合适（预估满足的多不多）
             if (threshold <= leadCost) {
               return indexScorerSupplier.get(leadCost);
-            } else {
+            } else { // 若满足
               return dvScorerSupplier.get(leadCost);
             }
           }
 
           @Override
           public long cost() {
-            return indexScorerSupplier.cost();
+            return indexScorerSupplier.cost();// point的预估耗时
           }
         };
       }

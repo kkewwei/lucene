@@ -140,7 +140,7 @@ public abstract class RadixSelector extends Selector { // 基数选择器
       // otherwise recurse
       if (d + commonPrefixLength < maxLength
           && histogram[0] < to - from) {
-        radixSelect(from, to, k, d + commonPrefixLength, l); // 忽略过相同的前缀部分
+        radixSelect(from, to, k, d + commonPrefixLength, l); // 忽略过相同的前缀部分，继续排序
       }
       return;
     }
@@ -157,7 +157,7 @@ public abstract class RadixSelector extends Selector { // 基数选择器
           // all elements in bucket 0 are equal so we only need to recurse if bucket != 0
           select(bucketFrom, bucketTo, k, d + 1, l + 1);
         }
-        return;
+        return; // 只要拍完序，立马返回
       }
       bucketFrom = bucketTo;
     }

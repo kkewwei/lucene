@@ -47,7 +47,7 @@ public class BitSetIterator extends DocIdSetIterator {
     return getBitSet(iterator, SparseFixedBitSet.class);
   }
 
-  private final BitSet bits;
+  private final BitSet bits; // FixedBitSet
   private final int length;
   private final long cost;
   private int doc = -1;
@@ -84,10 +84,10 @@ public class BitSetIterator extends DocIdSetIterator {
 
   @Override
   public int advance(int target) {
-    if (target >= length) {
+    if (target >= length) {  // 若没有了，就超过
       return doc = NO_MORE_DOCS;
     }
-    return doc = bits.nextSetBit(target);
+    return doc = bits.nextSetBit(target); // 通过bkd树判断有值的文档id
   }
 
   @Override

@@ -61,7 +61,7 @@ final class HitQueue extends PriorityQueue<ScoreDoc> {
    */
   HitQueue(int size, boolean prePopulate) { // 是一个优先级队里
     super(size, () -> {
-      if (prePopulate) { // 哨兵元素，站位元素
+      if (prePopulate) { // 初始化优先级队列每个元素时，是否有必要每个元素都初始化下
         // Always set the doc Id to MAX_VALUE so that it won't be favored by
         // lessThan. This generally should not happen since if score is not NEG_INF,
         // TopScoreDocCollector will always add the object to the queue.

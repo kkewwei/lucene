@@ -400,7 +400,7 @@ public abstract class FSDirectory extends BaseDirectory {
      * The maximum chunk size is 8192 bytes, because file channel mallocs
      * a native buffer outside of stack if the write buffer size is larger.
      */
-    static final int CHUNK_SIZE = 8192;
+    static final int CHUNK_SIZE = 8192; // 若buffer更大的话， file channel在栈外分配一个native buffer
     
     public FSIndexOutput(String name) throws IOException {
       this(name, StandardOpenOption.WRITE, StandardOpenOption.CREATE_NEW);

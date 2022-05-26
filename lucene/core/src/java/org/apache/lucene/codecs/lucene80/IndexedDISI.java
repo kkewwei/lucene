@@ -100,11 +100,11 @@ final class IndexedDISI extends DocIdSetIterator {
   
   private static final int BLOCK_SIZE = 65536;   // The number of docIDs that a single block represents
 
-  private static final int DENSE_BLOCK_LONGS = BLOCK_SIZE/Long.SIZE; // 1024  使用long存储，需要多少个long
-  public static final byte DEFAULT_DENSE_RANK_POWER = 9; // Every 512 docIDs / 8 longs
+  private static final int DENSE_BLOCK_LONGS = BLOCK_SIZE/Long.SIZE; // 1024  稠密型bitmap，需要多少个long来装
+  public static final byte DEFAULT_DENSE_RANK_POWER = 9; // Every 512 docIDs / 8 longs   哪怕512个位置，只有1个文档存在，也占用8个long
 
   static final int MAX_ARRAY_LENGTH = (1 << 12) - 1;// 4095
-  // 写dvd文件
+  // 写dvd文件 每65536个文档存储间隔就flush一次
   private static void flush(
       int block, FixedBitSet buffer, int cardinality, byte denseRankPower, IndexOutput out) throws IOException {
     assert block >= 0 && block < 65536;
@@ -133,18 +133,18 @@ final class IndexedDISI extends DocIdSetIterator {
   // One rank-entry for every {@code 2^denseRankPower} bits, with each rank-entry using 2 bytes.
   // Represented as a byte[] for fast flushing and mirroring of the retrieval representation.
   private static byte[] createRank(FixedBitSet buffer, byte denseRankPower) {
-    final int longsPerRank = 1 << (denseRankPower-6);// 需要几个long，来产生一个索引（rank）
+    final int longsPerRank = 1 << (denseRankPower-6);// 需要几个long，来产生一个索引（rank）,比如默认8个词
     final int rankMark = longsPerRank-1; // 只要检查每存储7个long，就产生一个（rank）
     final int rankIndexShift = denseRankPower-7; // 6 for the long (2^6) + 1 for 2 bytes/entry
-    final byte[] rank = new byte[DENSE_BLOCK_LONGS >> rankIndexShift]; // 每多少个long,产生一个二级索引（rank）
+    final byte[] rank = new byte[DENSE_BLOCK_LONGS >> rankIndexShift]; // 每多少个long,产生一个二级索引（rank）。共128个rank，len(rank)=256
     final long[] bits = buffer.getBits();
-    int bitCount = 0;
-    for (int word = 0 ; word < DENSE_BLOCK_LONGS ; word++) {// 需要多少个long来存储，就遍历多少次
-      if ((word & rankMark) == 0) { // Every longsPerRank longs,  每存储8个long(64*8=512个文档)
+    int bitCount = 0; // 这个block内的累加文档数
+    for (int word = 0 ; word < DENSE_BLOCK_LONGS ; word++) {// 需要多少个long来存储，就遍历多少次（1000个long）
+      if ((word & rankMark) == 0) { // Every longsPerRank longs,  每存储8个long(64*8=512个文档)，统计下
         rank[word >> rankIndexShift] = (byte)(bitCount>>8);//  一个block最多存储2^16个文档，需要16位存储，高8位
         rank[(word >> rankIndexShift)+1] = (byte)(bitCount & 0xFF);// 低8位
       }
-      bitCount += Long.bitCount(bits[word]); // 累加文档数
+      bitCount += Long.bitCount(bits[word]); // 这个block内的累加文档数
     }
     return rank;
   }
@@ -227,14 +227,14 @@ final class IndexedDISI extends DocIdSetIterator {
     // offset+index jump-table stored at the end
     return flushBlockJumps(jumps, lastBlock+1, out, origo);
   }
-
+  // 每间隔一个区间（65536）
   // Adds entries to the offset & index jump-table for blocks
   private static int[] addJumps(int[] jumps, long offset, int index, int startBlock, int endBlock) {
     assert offset < Integer.MAX_VALUE : "Logically the offset should not exceed 2^30 but was >= Integer.MAX_VALUE";
     jumps = ArrayUtil.grow(jumps, (endBlock+1)*2);
     for (int b = startBlock; b < endBlock; b++) {
-      jumps[b*2] = index; // 当前segment docValue中所有block中，当前该block第一个词是第几个写入文档（总的block打通统计）
-      jumps[b*2+1] = (int) offset; // 在dvd中的偏移量
+      jumps[b*2] = index; // 当前segment 当前该block之前写的总文档数（总的block打通统计）
+      jumps[b*2+1] = (int) offset; // 当前该block写之前截止写入dvd的偏移量
     }
     return jumps;
   }
@@ -258,10 +258,10 @@ final class IndexedDISI extends DocIdSetIterator {
 
   /** The slice that stores the {@link DocIdSetIterator}. */
   final IndexInput slice; // 映射docIds中非尾部跳表前面的内容
-  final int jumpTableEntryCount;
+  final int jumpTableEntryCount;  // jumper元素个数为17个
   final byte denseRankPower;
   final RandomAccessInput jumpTable; // Skip blocks of 64K bits   映射jumps部分
-  final byte[] denseRankTable;
+  final byte[] denseRankTable; //rank的长度，每个rank占用2 bit。共有128个rank,每8个long产生一个rank
   final long cost;// 存储的总文档数
 
   /**
@@ -278,7 +278,7 @@ final class IndexedDISI extends DocIdSetIterator {
    * @param cost normally the number of logical docIDs.
    */
   IndexedDISI(IndexInput in, long offset, long length, int jumpTableEntryCount, byte denseRankPower, long cost) throws IOException {
-    this(createBlockSlice(in,"docs", offset, length, jumpTableEntryCount),// 没有映射block中存储jumps的内容
+    this(createBlockSlice(in,"docs", offset, length, jumpTableEntryCount),// 没有映射末尾的jumps的内容
         createJumpTable(in, offset, length, jumpTableEntryCount),// 映射jumps的内容
         jumpTableEntryCount, denseRankPower, cost);
   }
@@ -303,9 +303,9 @@ final class IndexedDISI extends DocIdSetIterator {
     this.slice = blockSlice;
     this.jumpTable = jumpTable;
     this.jumpTableEntryCount = jumpTableEntryCount;
-    this.denseRankPower = denseRankPower;
-    final int rankIndexShift = denseRankPower-7;
-    this.denseRankTable = denseRankPower == -1 ? null : new byte[DENSE_BLOCK_LONGS >> rankIndexShift];
+    this.denseRankPower = denseRankPower; //9 （每512个间隔，使用一个rank）
+    final int rankIndexShift = denseRankPower-7; // 每个rank占用2 bite
+    this.denseRankTable = denseRankPower == -1 ? null : new byte[DENSE_BLOCK_LONGS >> rankIndexShift]; // rank长度为256bit=(65536/512*2)
     this.cost = cost;
   }
 
@@ -346,25 +346,25 @@ final class IndexedDISI extends DocIdSetIterator {
     }
   }
 
-  int block = -1;
-  long blockEnd;
-  long denseBitmapOffset = -1; // Only used for DENSE blocks
-  int nextBlockIndex = -1;
-  Method method;
+  int block = -1; // 当前正在读取到的blockdId<<16位
+  long blockEnd; // 下个block的起始位置
+  long denseBitmapOffset = -1; // Only used for DENSE blocks    跑到存放1024个long的long区起始位置
+  int nextBlockIndex = -1; // 截止到目前block（包含），读取到多少个docId-1
+  Method method; // 稀疏还是稠密bitmap
 
-  int doc = -1;
-  int index = -1;
-
+  int doc = -1; // 当前读取的文档编号
+  int index = -1;// 统计所有block合起来，截止到当前是第几个写入的。在全局排序中需要根据该segment第几个写入的，判断对应的ordId，以获取到全局globalId
+  // index是读取到的文档个数-1，也就是下标个数
   // SPARSE variables
   boolean exists;
 
   // DENSE variables
-  long word;
-  int wordIndex = -1;
-  // number of one bits encountered so far, including those of `word`
-  int numberOfOnes;
+  long word;// 当前wordIndex对应的long到的值(读取roarmap中的一个，1024个long中的一个)
+  int wordIndex = -1;// 该block 1024个读取到的是第几个workd
+  // number of one bits encountered so far, including those of `word
+  int numberOfOnes;  // 截止到目前wordIndex（包含当前wordIndex），所有long读取到多少个docId
   // Used with rank for jumps inside of DENSE as they are absolute instead of relative
-  int denseOrigoIndex;
+  int denseOrigoIndex;  // 截止到目前block（不包含当前block），所有block读取到多少个docId。仅当移动block才会修改。
 
   // ALL variables
   int gap;
@@ -390,66 +390,66 @@ final class IndexedDISI extends DocIdSetIterator {
     assert found;
     return doc;
   }
-
+  // target是docId,看这个文档是否存在
   public boolean advanceExact(int target) throws IOException {
     final int targetBlock = target & 0xFFFF0000;
-    if (block < targetBlock) {
+    if (block < targetBlock) { //跳到目标block上
       advanceBlock(targetBlock);
     }
     boolean found = block == targetBlock && method.advanceExactWithinBlock(this, target);
     this.doc = target;
     return found;
   }
-
-  private void advanceBlock(int targetBlock) throws IOException {
-    final int blockIndex = targetBlock >> 16;
+  // 在block之间跳动，直到读取到目标block上.  跳到dvd中对应的block处，读取rank数组。
+  private void advanceBlock(int targetBlock) throws IOException {//targetBlock=docId & 0xFFFF0000
+    final int blockIndex = targetBlock >> 16; // 属于哪个blockIndex
     // If the destination block is 2 blocks or more ahead, we use the jump-table.
-    if (jumpTable != null && blockIndex >= (block >> 16)+2) {
+    if (jumpTable != null && blockIndex >= (block >> 16)+2) { // 仅读取深度大于2个block时，使用jumper跳转
       // If the jumpTableEntryCount is exceeded, there are no further bits. Last entry is always NO_MORE_DOCS
       final int inRangeBlockIndex = blockIndex < jumpTableEntryCount ? blockIndex : jumpTableEntryCount-1;
-      final int index = jumpTable.readInt(inRangeBlockIndex*Integer.BYTES*2);
-      final int offset = jumpTable.readInt(inRangeBlockIndex*Integer.BYTES*2+Integer.BYTES);
-      this.nextBlockIndex = index-1; // -1 to compensate for the always-added 1 in readBlockHeader
+      final int index = jumpTable.readInt(inRangeBlockIndex*Integer.BYTES*2);//前面所有block累加的文档数
+      final int offset = jumpTable.readInt(inRangeBlockIndex*Integer.BYTES*2+Integer.BYTES); // 当前该block写之前截止写入dvd的偏移量
+      this.nextBlockIndex = index-1; // -1 to compensate for the always-added 1 in readBlockHeader  //前面所有block累加的文档数-1
       slice.seek(offset);
-      readBlockHeader();
+      readBlockHeader();//使用rank跳转
       return;
     }
 
     // Fallback to iteration of blocks
-    do {
-      slice.seek(blockEnd);
+    do { // 非要读取到目标block上
+      slice.seek(blockEnd);// 跳到下个block的起始位置
       readBlockHeader();
     } while (block < targetBlock);
   }
-
+  // 就是读取单个block读取rank部分
   private void readBlockHeader() throws IOException {
-    block = Short.toUnsignedInt(slice.readShort()) << 16;
+    block = Short.toUnsignedInt(slice.readShort()) << 16; // 读取的blockId
     assert block >= 0;
-    final int numValues = 1 + Short.toUnsignedInt(slice.readShort());
-    index = nextBlockIndex;
-    nextBlockIndex = index + numValues;
-    if (numValues <= MAX_ARRAY_LENGTH) {
+    final int numValues = 1 + Short.toUnsignedInt(slice.readShort()); // 当前block多少个文档（增加了一位）
+    index = nextBlockIndex; // 截止到目前block（不包含当前block），所有block读取到多少个docId-1
+    nextBlockIndex = index + numValues;// 截止到目前block（包含当前block），所有block读取到多少个docId-1
+    if (numValues <= MAX_ARRAY_LENGTH) {// 是稀疏还是稠密bitmap
       method = Method.SPARSE;
       blockEnd = slice.getFilePointer() + (numValues << 1);
     } else if (numValues == 65536) {
       method = Method.ALL;
       blockEnd = slice.getFilePointer();
       gap = block - index - 1;
-    } else {
+    } else {// 稠密矩阵
       method = Method.DENSE;
-      denseBitmapOffset = slice.getFilePointer() + (denseRankTable == null ?  0 : denseRankTable.length);
-      blockEnd = denseBitmapOffset + (1 << 13);
+      denseBitmapOffset = slice.getFilePointer() + (denseRankTable == null ?  0 : denseRankTable.length);// 直接跳过rank
+      blockEnd = denseBitmapOffset + (1 << 13); // 1<<13=8192 (1024个long*8=8192)，1024个long构成一个block,8是一个long的长度
       // Performance consideration: All rank (default 128 * 16 bits) are loaded up front. This should be fast with the
       // reusable byte[] buffer, but it is still wasted if the DENSE block is iterated in small steps.
       // If this results in too great a performance regression, a heuristic strategy might work where the rank data
       // are loaded on first in-block advance, if said advance is > X docIDs. The hope being that a small first
       // advance means that subsequent advances will be small too.
       // Another alternative is to maintain an extra slice for DENSE rank, but IndexedDISI is already slice-heavy.
-      if (denseRankPower != -1) {
+      if (denseRankPower != -1) { // 将rank完全读取出来了
         slice.readBytes(denseRankTable, 0, denseRankTable.length);
       }
       wordIndex = -1;
-      numberOfOnes = index + 1;
+      numberOfOnes = index + 1; // 截止到目前wordIndex（包含当前wordIndex），所有long读取到多少个docId
       denseOrigoIndex = numberOfOnes;
     }
   }
@@ -460,7 +460,7 @@ final class IndexedDISI extends DocIdSetIterator {
   }
 
   public int index() {
-    return index;
+    return index;//返回的是第几个顺序写入的
   }
 
   @Override
@@ -551,27 +551,27 @@ final class IndexedDISI extends DocIdSetIterator {
         return false;
       }
 
-      @Override
+      @Override // target是文档id，精确的查看这个target是否在存在这个block上
       boolean advanceExactWithinBlock(IndexedDISI disi, int target) throws IOException {
-        final int targetInBlock = target & 0xFFFF;
-        final int targetWordIndex = targetInBlock >>> 6;
+        final int targetInBlock = target & 0xFFFF; // 低16位
+        final int targetWordIndex = targetInBlock >>> 6; // 落在1024个long中的哪个long上了
 
         // If possible, skip ahead using the rank cache
         // If the distance between the current position and the target is < rank-longs
-        // there is no sense in using rank
+        // there is no sense in using rank   每8个long会建立一个rank，假如目前long比当前long大于8个long，那就需要在这个block中通过跳过rank了
         if (disi.denseRankPower != -1 && targetWordIndex - disi.wordIndex >= (1 << (disi.denseRankPower-6) )) {
-          rankSkip(disi, targetInBlock);
+          rankSkip(disi, targetInBlock);// 直接通过1024个long跳
         }
-
+        // 在一个rank内查询，读取到目标long上
         for (int i = disi.wordIndex + 1; i <= targetWordIndex; ++i) {
           disi.word = disi.slice.readLong();
-          disi.numberOfOnes += Long.bitCount(disi.word);
+          disi.numberOfOnes += Long.bitCount(disi.word);// 该block多少个文档
         }
         disi.wordIndex = targetWordIndex;
 
-        long leftBits = disi.word >>> target;
-        disi.index = disi.numberOfOnes - Long.bitCount(leftBits);
-        return (leftBits & 1L) != 0;
+        long leftBits = disi.word >>> target;// 还有多少个词没有判断是否否和
+        disi.index = disi.numberOfOnes - Long.bitCount(leftBits); //  当前block截止到目前判断，判断到第几个真正的写入文档了。（为了获取）
+        return (leftBits & 1L) != 0; // 看下这位是否为0，若为0，则存在
       }
 
 
@@ -606,25 +606,25 @@ final class IndexedDISI extends DocIdSetIterator {
    * responsibility of the caller to iterate further to reach target.
    * @param disi standard DISI.
    * @param targetInBlock lower 16 bits of the target
-   * @throws IOException if a DISI seek failed.
-   */
-  private static void rankSkip(IndexedDISI disi, int targetInBlock) throws IOException {
+   * @throws IOException if a DISI seek failed.  1024个long，其中8个long建立一个rank
+   */ // 起始可以直接跳到对应的1024个long中的那个long位置处，但是这里没有直接跳过去，仅仅跳到以8个long为一个地方的对齐地方，不跳过去的原因是为了通过rank确定当前block是第几个写入，后面会为了获取全局排序的
+  private static void rankSkip(IndexedDISI disi, int targetInBlock) throws IOException { // targetInBlock=文档Id取低16位
     assert disi.denseRankPower >= 0 : disi.denseRankPower;
     // Resolve the rank as close to targetInBlock as possible (maximum distance is 8 longs)
     // Note: rankOrigoOffset is tracked on block open, so it is absolute (e.g. don't add origo)
-    final int rankIndex = targetInBlock >> disi.denseRankPower; // Default is 9 (8 longs: 2^3 * 2^6 = 512 docIDs)
-
-    final int rank =
+    final int rankIndex = targetInBlock >> disi.denseRankPower; // Default is 9 (8 longs: 2^3 * 2^6 = 512 docIDs)，每512一个rank,这是第几个rank
+    //   属于哪个rank,一个rank包含8个long
+    final int rank = // 这个block内当前rank起始位置累加文档个数（不包含当前rank）
         (disi.denseRankTable[rankIndex<<1] & 0xFF) << 8 |
         (disi.denseRankTable[(rankIndex<<1)+1] & 0xFF);
-
+    // 本可以在1024个long中，直接跳到对应rank那里，但是没有。跳到8个倍数的long处，为了获取当前已经写入文档个数，进而用于全局排序
     // Position the counting logic just after the rank point
-    final int rankAlignedWordIndex = rankIndex << disi.denseRankPower >> 6;
-    disi.slice.seek(disi.denseBitmapOffset + rankAlignedWordIndex*Long.BYTES);
-    long rankWord = disi.slice.readLong();
-    int denseNOO = rank + Long.bitCount(rankWord);
+    final int rankAlignedWordIndex = rankIndex << disi.denseRankPower >> 6; // 从1024个long中、这个rank对应的那个long是该block内第几个long
+    disi.slice.seek(disi.denseBitmapOffset + rankAlignedWordIndex*Long.BYTES); //1024个long中、定位到这个rank的起始位置
+    long rankWord = disi.slice.readLong();// 从读取1024个long读取对应的rank的起始位置
+    int denseNOO = rank + Long.bitCount(rankWord);//该block ,截止该wordIndex（包含当前wordIndex）,包含的总文档数）
 
-    disi.wordIndex = rankAlignedWordIndex;
+    disi.wordIndex = rankAlignedWordIndex;//  从1024个long中、这个rank开始的那个long是该block内第几个long
     disi.word = rankWord;
     disi.numberOfOnes = disi.denseOrigoIndex + denseNOO;
   }

@@ -403,7 +403,7 @@ public final class DocValues {
    * @throws IOException if an I/O error occurs.
    */
   public static SortedSetDocValues getSortedSet(LeafReader reader, String field) throws IOException {
-    SortedSetDocValues dv = reader.getSortedSetDocValues(field);
+    SortedSetDocValues dv = reader.getSortedSetDocValues(field); //进入 FilterLeafReader.getSortedSetDocValues(), 主要做dvd部分的全量映射(没有缓存)
     if (dv == null) {
       SortedDocValues sorted = reader.getSortedDocValues(field);
       if (sorted == null) {

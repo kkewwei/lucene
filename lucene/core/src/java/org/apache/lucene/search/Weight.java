@@ -40,16 +40,16 @@ import org.apache.lucene.util.Bits;
  * callers must maintain the relationship between the searcher's top-level
  * {@link IndexReaderContext} and the context used to create a {@link Scorer}. 
  * <p>
- * A <code>Weight</code> is used in the following way:
+ * A <code>Weight</code> is used in the following way:  weight以下面的方式被使用
  * <ol>
- * <li>A <code>Weight</code> is constructed by a top-level query, given a
+ * <li>A <code>Weight</code> is constructed by a top-level query, given a 
  * <code>IndexSearcher</code> ({@link Query#createWeight(IndexSearcher, ScoreMode, float)}).
  * <li>A <code>Scorer</code> is constructed by
  * {@link #scorer(org.apache.lucene.index.LeafReaderContext)}.
  * </ol>
  * 
  * @since 2.9
- */ // 定义了条件
+ */ // 由Weight构建Scorer
 public abstract class Weight implements SegmentCacheable {
 
   protected final Query parentQuery; // 可以是BooleanQuery，LongPoint$1或者LatLonDocValuesBoxQuery
@@ -69,7 +69,7 @@ public abstract class Weight implements SegmentCacheable {
    *
    * @deprecated Use {@link Query#visit(QueryVisitor)} with {@link QueryVisitor#termCollector(Set)}
    */
-  @Deprecated
+  @Deprecated // 将所有出现在这个查询中的terms添加到这个set中
   public abstract void extractTerms(Set<Term> terms);
 
   /**
@@ -135,7 +135,7 @@ public abstract class Weight implements SegmentCacheable {
    * @throws IOException if there is a low-level I/O error
    */
   public abstract Scorer scorer(LeafReaderContext context) throws IOException;
-
+  // Scorer是Lucene在搜索流程用于计算Query与文档相似度计算的外围组件，它实际上并不负责文档得分的计算，这部分工作委托给了Similarity。Similarity才是真正的评分器，而Scorer只是负责评分外围的工作
   /**
    * Optional method.
    * Get a {@link ScorerSupplier}, which allows to know the cost of the {@link Scorer}
@@ -176,8 +176,8 @@ public abstract class Weight implements SegmentCacheable {
    * passes them to a collector.
    * @throws IOException if there is a low-level I/O error
    */
-  public BulkScorer bulkScorer(LeafReaderContext context) throws IOException {
-    // 可能跑到TermQuery$TermWeight.scorer()
+  public BulkScorer bulkScorer(LeafReaderContext context) throws IOException { // 会有BKD树中查找匹配的docId
+    // 可能跑到TermQuery$TermWeight.scorer(), 在一个segment上搜索
     Scorer scorer = scorer(context); // 可以返回ConstantScoreScorer
     if (scorer == null) {
       // No docs match
@@ -193,7 +193,7 @@ public abstract class Weight implements SegmentCacheable {
    *  @lucene.internal */
   protected static class DefaultBulkScorer extends BulkScorer {
     private final Scorer scorer; // 可以是ConstantScoreScorer
-    private final DocIdSetIterator iterator;
+    private final DocIdSetIterator iterator;// BitSetIterator
     private final TwoPhaseIterator twoPhase;
 
     /** Sole constructor. */
@@ -202,7 +202,7 @@ public abstract class Weight implements SegmentCacheable {
         throw new NullPointerException();
       }
       this.scorer = scorer;
-      this.iterator = scorer.iterator();
+      this.iterator = scorer.iterator(); // BitSetIterator
       this.twoPhase = scorer.twoPhaseIterator();
     }
 
@@ -210,26 +210,26 @@ public abstract class Weight implements SegmentCacheable {
     public long cost() {
       return iterator.cost();
     }
-    
+
     @Override
     public int score(LeafCollector collector, Bits acceptDocs, int min, int max) throws IOException {
-      collector.setScorer(scorer);
+      collector.setScorer(scorer); // 要在collect前调用下
       if (scorer.docID() == -1 && min == 0 && max == DocIdSetIterator.NO_MORE_DOCS) {
-        scoreAll(collector, iterator, twoPhase, acceptDocs);
+        scoreAll(collector, iterator, twoPhase, acceptDocs); // 全部满足
         return DocIdSetIterator.NO_MORE_DOCS;
       } else { // 进来
         int doc = scorer.docID();
         if (doc < min) {// 文档号码
           if (twoPhase == null) { // 都会跑到这里
-            doc = iterator.advance(min); // 文档Id向后找一个
+            doc = iterator.advance(min); // 文档Id向后找一个。
           } else {
             doc = twoPhase.approximation().advance(min); // 起始doc
-          }
+          } // 是常量score，所以没有打分一项，直接进入了collect里面
         } //一个docId范围打分
         return scoreRange(collector, iterator, twoPhase, acceptDocs, doc, max);
       }
     }
-
+     // acceptDocs=getLiving
     /** Specialized method to bulk-score a range of hits; we
      *  separate this from {@link #scoreAll} to help out
      *  hotspot. // 查找docId从currentDoc到end之间的docId
@@ -238,7 +238,7 @@ public abstract class Weight implements SegmentCacheable {
         Bits acceptDocs, int currentDoc, int end) throws IOException {
       if (twoPhase == null) {// 进来
         while (currentDoc < end) {
-          if (acceptDocs == null || acceptDocs.get(currentDoc)) {
+          if (acceptDocs == null || acceptDocs.get(currentDoc)) {// acceptDocs=LivesDocs不该被删除
             collector.collect(currentDoc); // 会跑大SimpleTopScoreDocCollector.collect()，进行打分，将保存打分最小的几个
           }
           currentDoc = iterator.nextDoc();

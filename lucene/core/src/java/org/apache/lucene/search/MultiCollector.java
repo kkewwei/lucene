@@ -103,13 +103,13 @@ public class MultiCollector implements Collector {
   }
 
   @Override
-  public ScoreMode scoreMode() {
+  public ScoreMode scoreMode() { // 只要mode不一样，就是混合的
     ScoreMode scoreMode = null;
     for (Collector collector : collectors) {
       if (scoreMode == null) {
         scoreMode = collector.scoreMode();
-      } else if (scoreMode != collector.scoreMode()) {
-        return ScoreMode.COMPLETE;
+      } else if (scoreMode != collector.scoreMode()) { // 聚合部分可以跑到AggregatorBase.scoreMode()
+        return ScoreMode.COMPLETE; // 符合聚合器
       }
     }
     return scoreMode;
@@ -118,10 +118,10 @@ public class MultiCollector implements Collector {
   @Override
   public LeafCollector getLeafCollector(LeafReaderContext context) throws IOException {
     final List<LeafCollector> leafCollectors = new ArrayList<>(collectors.length);
-    for (Collector collector : collectors) {
+    for (Collector collector : collectors) {//
       final LeafCollector leafCollector;
       try {
-        leafCollector = collector.getLeafCollector(context);
+        leafCollector = collector.getLeafCollector(context); // content是实时更新对应每个segment的
       } catch (CollectionTerminatedException e) {
         // this leaf collector does not need this segment
         continue;
@@ -133,7 +133,7 @@ public class MultiCollector implements Collector {
         throw new CollectionTerminatedException();
       case 1:
         return leafCollectors.get(0);
-      default:
+      default: // 多个聚合器
         return new MultiLeafCollector(leafCollectors, cacheScores, scoreMode() == ScoreMode.TOP_SCORES);
     }
   }
@@ -148,16 +148,16 @@ public class MultiCollector implements Collector {
     private MultiLeafCollector(List<LeafCollector> collectors, boolean cacheScores, boolean skipNonCompetitive) {
       this.collectors = collectors.toArray(new LeafCollector[collectors.size()]);
       this.cacheScores = cacheScores;
-      this.skipNonCompetitiveScores = skipNonCompetitive;
+      this.skipNonCompetitiveScores = skipNonCompetitive; // ScoreMode.COMPLETE != ScoreMode.TOP_SCORES
       this.minScores = this.skipNonCompetitiveScores ? new float[this.collectors.length] : null;
     }
 
     @Override
     public void setScorer(Scorable scorer) throws IOException {
-      if (cacheScores) {
+      if (cacheScores) { // 跳过
         scorer = new ScoreCachingWrappingScorer(scorer);
       }
-      if (skipNonCompetitiveScores) {
+      if (skipNonCompetitiveScores) { // 跳过
         for (int i = 0; i < collectors.length; ++i) {
           final LeafCollector c = collectors[i];
           if (c != null) {
@@ -182,12 +182,12 @@ public class MultiCollector implements Collector {
         }
       }
     }
-
+   // 一个doc满足查询条件，开始收集起来
     @Override
     public void collect(int doc) throws IOException {
       for (int i = 0; i < collectors.length; i++) {
         final LeafCollector collector = collectors[i];
-        if (collector != null) {
+        if (collector != null) { // 进入不同的collector接受doc
           try {
             collector.collect(doc);
           } catch (CollectionTerminatedException e) {

@@ -105,7 +105,7 @@ public abstract class PointRangeQuery extends Query {
       visitor.visitLeaf(this);
     }
   }
-
+  //精确匹配的Weight都是常量得分匹配。（匹配与否比较明确）
   @Override
   public final Weight createWeight(IndexSearcher searcher, ScoreMode scoreMode, float boost) throws IOException {
 
@@ -128,19 +128,19 @@ public abstract class PointRangeQuery extends Query {
         }
         return true;
       }
-      // 查询与数据范围的关系
+      // 查询与数据范围的关系,  minPackedValue: 该segment中最大/最小的那个值
       private Relation relate(byte[] minPackedValue, byte[] maxPackedValue) {
-
+        // 是否相交
         boolean crosses = false;
 
         for(int dim=0;dim<numDims;dim++) {
           int offset = dim*bytesPerDim;
-          // 对比每一阶，只要有一阶不在范围内，就outside
+          // 对比每一阶，只要有一阶大于，就outside
           if (FutureArrays.compareUnsigned(minPackedValue, offset, offset + bytesPerDim, upperPoint, offset, offset + bytesPerDim) > 0 ||
               FutureArrays.compareUnsigned(maxPackedValue, offset, offset + bytesPerDim, lowerPoint, offset, offset + bytesPerDim) < 0) {
             return Relation.CELL_OUTSIDE_QUERY; // 查询不在数据范围之内
           }
-
+          
           crosses |= FutureArrays.compareUnsigned(minPackedValue, offset, offset + bytesPerDim, lowerPoint, offset, offset + bytesPerDim) < 0 ||
               FutureArrays.compareUnsigned(maxPackedValue, offset, offset + bytesPerDim, upperPoint, offset, offset + bytesPerDim) > 0;
         }
@@ -151,7 +151,7 @@ public abstract class PointRangeQuery extends Query {
           return Relation.CELL_INSIDE_QUERY;
         }
       }
-
+       // 为了遍历匹配使用的，下面还有个getInverseIntersectVisitor。结果中间保持者
       private IntersectVisitor getIntersectVisitor(DocIdSetBuilder result) {
         return new IntersectVisitor() {
 
@@ -159,7 +159,7 @@ public abstract class PointRangeQuery extends Query {
 
           @Override
           public void grow(int count) {
-            adder = result.grow(count); // 先留好保存空间的结构，等待后面存储数据
+            adder = result.grow(count); // 先留好保存空间的结构，等待后面存储docId
           }
 
           @Override
@@ -193,19 +193,19 @@ public abstract class PointRangeQuery extends Query {
 
       /**
        * Create a visitor that clears documents that do NOT match the range.
-       */
+       */ //相反visit，不match的会被置0
       private IntersectVisitor getInverseIntersectVisitor(FixedBitSet result, int[] cost) {
         return new IntersectVisitor() {
 
           @Override
           public void visit(int docID) {
-            result.clear(docID);
+            result.clear(docID); // 对应位置标记0
             cost[0]--;
           }
 
           @Override
           public void visit(int docID, byte[] packedValue) {
-            if (matches(packedValue) == false) {
+            if (matches(packedValue) == false) { // 不mathc的，会被置0
               visit(docID);
             }
           }
@@ -219,15 +219,15 @@ public abstract class PointRangeQuery extends Query {
               }
             }
           }
-
+          //反着来
           @Override
           public Relation compare(byte[] minPackedValue, byte[] maxPackedValue) {
             Relation relation = relate(minPackedValue, maxPackedValue);
-            switch (relation) {
+            switch (relation) {//也是反着来的
               case CELL_INSIDE_QUERY:
                 // all points match, skip this subtree
                 return Relation.CELL_OUTSIDE_QUERY;
-              case CELL_OUTSIDE_QUERY:
+              case CELL_OUTSIDE_QUERY: // 是找哪些没匹配的，对这些docId进行置0操作
                 // none of the points match, clear all documents
                 return Relation.CELL_INSIDE_QUERY;
               default:
@@ -256,7 +256,7 @@ public abstract class PointRangeQuery extends Query {
 
         boolean allDocsMatch;
         if (values.getDocCount() == reader.maxDoc()) { // 每个文档都包含的有这个字段
-          final byte[] fieldPackedLower = values.getMinPackedValue();
+          final byte[] fieldPackedLower = values.getMinPackedValue(); // 这个字段的最小值
           final byte[] fieldPackedUpper = values.getMaxPackedValue(); // 获取最大值和最小值
           allDocsMatch = true;
           for (int i = 0; i < numDims; ++i) {
@@ -267,7 +267,7 @@ public abstract class PointRangeQuery extends Query {
               break;
             }
           }
-        } else {//说明有删除，也不能全部包含
+        } else {//是否所有文档都包含该字段，并且查询范围包含在内
           allDocsMatch = false;
         }
 
@@ -287,37 +287,37 @@ public abstract class PointRangeQuery extends Query {
           };
         } else {
           return new ScorerSupplier() {
-
-            final DocIdSetBuilder result = new DocIdSetBuilder(reader.maxDoc(), values, field);
+            // result中记录了在BKD树中查找文档id的记录
+            final DocIdSetBuilder result = new DocIdSetBuilder(reader.maxDoc(), values, field);// 仅仅申明文档收集器
             final IntersectVisitor visitor = getIntersectVisitor(result);
             long cost = -1;
-
+            // 真正对比每条数据，判断是否是在范围内的
             @Override
             public Scorer get(long leadCost) throws IOException { // 参数没用
-              if (values.getDocCount() == reader.maxDoc()
-                  && values.getDocCount() == values.size()
-                  && cost() > reader.maxDoc() / 2) {
+              if (values.getDocCount() == reader.maxDoc() // 判断segment包含的point和最大文档编号是否相等
+                  && values.getDocCount() == values.size() // 每个文档都有一个值
+                  && cost() > reader.maxDoc() / 2) { // 这里有个预估，若大部分匹配上了，那么就找未匹配的
                 // If all docs have exactly one value and the cost is greater
                 // than half the leaf size then maybe we can make things faster
                 // by computing the set of documents that do NOT match the range
                 final FixedBitSet result = new FixedBitSet(reader.maxDoc());
-                result.set(0, reader.maxDoc());
+                result.set(0, reader.maxDoc()); // 全部置位1了
                 int[] cost = new int[] { reader.maxDoc() };
-                values.intersect(getInverseIntersectVisitor(result, cost));
+                values.intersect(getInverseIntersectVisitor(result, cost)); // 相反查找
                 final DocIdSetIterator iterator = new BitSetIterator(result, cost[0]);
                 return new ConstantScoreScorer(weight, score(), scoreMode, iterator);
               }
 
-              values.intersect(visitor); // 会进行具体的比较value,缓存docId，结果保存在了visitor
-              DocIdSetIterator iterator = result.build().iterator();
+              values.intersect(visitor); // 会进行具体的比较value,缓存docId
+              DocIdSetIterator iterator = result.build().iterator(); // 哪些文档符合预期，结果保存在了iterator  BitSetIterator
               return new ConstantScoreScorer(weight, score(), scoreMode, iterator);
             }
-            
+            // 在bkd数中若叶子节点有一个满足，那么就认为预估节点为512/2个数据符合要求。
             @Override
             public long cost() {
               if (cost == -1) {
                 // Computing the cost may be expensive, so only do it if necessary
-                cost = values.estimateDocCount(visitor);//会去遍历索引，预计匹配的分片树
+                cost = values.estimateDocCount(visitor);//会去遍历bkd索引，预计匹配的分片树：在bkd数中根据上下限对比，只要有相交，那么就认为预估节点为512/2个数据符合要求。
                 assert cost >= 0;
               }
               return cost;
@@ -325,14 +325,14 @@ public abstract class PointRangeQuery extends Query {
           };
         }
       }
-
+      // 对一个segment操作
       @Override
       public Scorer scorer(LeafReaderContext context) throws IOException {
-        ScorerSupplier scorerSupplier = scorerSupplier(context);
+        ScorerSupplier scorerSupplier = scorerSupplier(context); // 这里的Scorer直接跑到了scorerSupplier
         if (scorerSupplier == null) {
           return null;
         }
-        return scorerSupplier.get(Long.MAX_VALUE); // PointRangeQuery
+        return scorerSupplier.get(Long.MAX_VALUE); // PointRangeQuery， 会有BKD树中查找匹配的docId
       }
 
       @Override
@@ -354,7 +354,7 @@ public abstract class PointRangeQuery extends Query {
   public int getBytesPerDim() {
     return bytesPerDim;
   }
-
+  // 当前查询条件下限
   public byte[] getLowerPoint() {
     return lowerPoint.clone();
   }

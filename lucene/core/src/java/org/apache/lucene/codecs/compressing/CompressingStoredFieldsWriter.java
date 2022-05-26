@@ -83,7 +83,7 @@ public final class CompressingStoredFieldsWriter extends StoredFieldsWriter {
   private final CompressionMode compressionMode;
   private final int chunkSize;  // 16kb
   private final int maxDocsPerChunk;  // 128
-
+  // 重复利用该值
   private final GrowableByteArrayDataOutput bufferedDocs; // 其中之一存放的是fdt里面的值，域编号->域类型->域value
   private int[] numStoredFields; // number of stored fields // 下标为文档号，value是这个文档有几个域
   private int[] endOffsets; // end offsets in bufferedDocs // 下标是文档号，value是这个文档store value在bufferedDocs中存储域值的截止位置。
@@ -99,7 +99,7 @@ public final class CompressingStoredFieldsWriter extends StoredFieldsWriter {
     assert directory != null;
     this.segment = si.name;   // _0
     this.compressionMode = compressionMode;  // 默认FAST
-    this.compressor = compressionMode.newCompressor(); //CompressionMode$LZ4HighCompressor
+    this.compressor = compressionMode.newCompressor(); //CompressionMode$FAST
     this.chunkSize = chunkSize;
     this.maxDocsPerChunk = maxDocsPerChunk;
     this.docBase = 0;

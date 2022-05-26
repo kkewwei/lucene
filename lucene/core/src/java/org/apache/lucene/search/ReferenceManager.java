@@ -43,8 +43,8 @@ public abstract class ReferenceManager<G> implements Closeable {
 
   private static final String REFERENCE_MANAGER_IS_CLOSED_MSG = "this ReferenceManager is closed";
    // 可进RamAccountingRefreshListener里查看ElasticsearchDirectoryReader， ElasticsearchLeafReader, SegmentReader关系
-  protected volatile G current; //ElasticsearchDirectoryReader
-  // 任何时候只允许有一个线程在refresh
+  protected volatile G current; //ElasticsearchDirectoryReader。每当refresh完成后，就会根据维护的IndexWriter.segmentInfos产生新的ElasticsearchDirectoryReader，然后每次查询，都会使用最新的segents
+  // 任何时候只允许有一个线程在refresh。主要semgent变动，那么ElasticsearchDirectoryReader也会产生新的。一变缓存也将失效
   private final Lock refreshLock = new ReentrantLock(); // refresh线程，只允许一个线程refresh
 
   private final List<RefreshListener> refreshListeners = new CopyOnWriteArrayList<>(); // RefreshListeners和CompletionStatsCache

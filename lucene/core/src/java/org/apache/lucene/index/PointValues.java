@@ -80,7 +80,7 @@ import org.apache.lucene.util.bkd.BKDWriter;
  * {@link BinaryPoint} for more flexibility, or via custom {@link Field} subclasses.
  *
  *  @lucene.experimental */
-public abstract class PointValues {
+public abstract class PointValues { // 为了访问数字型value
 
   /** Maximum number of bytes for each dimension */
   public static final int MAX_NUM_BYTES = 16; // 每个维度最多16byte
@@ -209,7 +209,7 @@ public abstract class PointValues {
      *  should scrutinize the packedValue to decide whether to accept it.  In the 1D case,
      *  values are visited in increasing order, and in the case of ties, in increasing
      *  docID order. */
-    void visit(int docID, byte[] packedValue) throws IOException;
+    void visit(int docID, byte[] packedValue) throws IOException;//会跑到ExitableDirectoryReader$ExitableIntersectVisitor
 
     /** Similar to {@link IntersectVisitor#visit(int, byte[])} but in this case the packedValue
      * can have more than one docID associated to it. The provided iterator should not escape the
@@ -228,7 +228,7 @@ public abstract class PointValues {
     /** Notifies the caller that this many documents are about to be visited */
     default void grow(int count) {};
   }
-
+  // 真正对比每条数据，判断是否是在范围内的
   /** Finds all documents and points matching the provided visitor.
    *  This method does not enforce live documents, so it's up to the caller
    *  to test whether each document is deleted, if necessary. */
@@ -238,7 +238,7 @@ public abstract class PointValues {
    * with the given {@link IntersectVisitor}. This should run many times faster
    * than {@link #intersect(IntersectVisitor)}. */
   public abstract long estimatePointCount(IntersectVisitor visitor);
-
+  //会去遍历bkd索引，预计匹配的分片树：在bkd数中若叶子节点有一个满足，那么就认为预估节点为512/2个数据符合要求。
   /** Estimate the number of documents that would be matched by {@link #intersect}
    * with the given {@link IntersectVisitor}. This should run many times faster
    * than {@link #intersect(IntersectVisitor)}.
@@ -282,8 +282,8 @@ public abstract class PointValues {
   public abstract int getBytesPerDimension() throws IOException;
 
   /** Returns the total number of indexed points across all documents. */
-  public abstract long size();
+  public abstract long size(); // 多少个point，可能一个文档有两个point
 
   /** Returns the total number of documents that have indexed at least one point. */
-  public abstract int getDocCount();
+  public abstract int getDocCount(); // 返回至少有一个point的文档个数
 }

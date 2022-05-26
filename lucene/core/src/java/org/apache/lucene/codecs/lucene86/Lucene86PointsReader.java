@@ -38,7 +38,7 @@ import org.apache.lucene.util.bkd.BKDReader;
 public class Lucene86PointsReader extends PointsReader implements Closeable {
   final IndexInput indexIn, dataIn;
   final SegmentReadState readState;
-  final Map<Integer,BKDReader> readers = new HashMap<>();
+  final Map<Integer,BKDReader> readers = new HashMap<>(); //  该segment内字段编号，是在节点启动的时候，就会产生BKDReader
 
   /** Sole constructor */
   public Lucene86PointsReader(SegmentReadState readState) throws IOException {

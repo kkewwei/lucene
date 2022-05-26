@@ -30,7 +30,7 @@ class DocIdsWriter {
     // docs can be sorted either when all docs in a block have the same value
     // or when a segment is sorted
     boolean sorted = true;
-    for (int i = 1; i < count; ++i) { // 自带检查，若后面的数小于前面的数，则说明无需
+    for (int i = 1; i < count; ++i) { // 自带检查，若后面的数小于前面的数,是递增数列
       if (docIds[start + i - 1] > docIds[start + i]) {
         sorted = false;
         break;

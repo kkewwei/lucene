@@ -19,7 +19,7 @@ package org.apache.lucene.search;
 
 import java.io.IOException;
 import java.util.Objects;
-
+  // 必须存放所有满足条件的结果，然后通过iterator()遍历所有的结果
 /**
  * Expert: Common scoring functionality for different types of queries.
  *
@@ -69,7 +69,7 @@ public abstract class Scorer extends Scorable {
    * The returned iterator is a view: calling this method several times will
    * return iterators that have the same state.
    */
-  public abstract DocIdSetIterator iterator();
+  public abstract DocIdSetIterator iterator(); // 返回所有match的文档
 
   /**
    * Optional method: Return a {@link TwoPhaseIterator} view of this

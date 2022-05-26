@@ -163,7 +163,7 @@ public final class BytesRefHash implements Accountable {
    * order to reuse this {@link BytesRefHash} instance.
    * </p> // 根据termdId对应的值排序，返回的是termdId
    */ //  仅仅根据在pool中存储的每个termId的byte从小到大进行排序
-  public int[] sort() { // 返回的是每个termId
+  public int[] sort() { // 返回的是根据term内容从小到大，的termId
     final int[] compact = compact();//在ids数组中次的的编号顺序
     new StringMSBRadixSorter() {
 

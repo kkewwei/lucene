@@ -153,7 +153,7 @@ public class SortedSetSelector {
 
     private void setOrd() throws IOException {
       if (docID() != NO_MORE_DOCS) {
-        ord = (int) in.nextOrd(); // 这个词排第4小
+        ord = (int) in.nextOrd(); // 这个词排第4小   只会读取最小的那个
       } else {
         ord = (int) NO_MORE_ORDS;
       }

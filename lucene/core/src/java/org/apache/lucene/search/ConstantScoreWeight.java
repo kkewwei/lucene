@@ -31,7 +31,7 @@ import org.apache.lucene.index.Term;
  * @lucene.internal
  */
 public abstract class ConstantScoreWeight extends Weight {
-
+  // 恒定得分
   private final float score;
 
   protected ConstantScoreWeight(Query query, float score) {

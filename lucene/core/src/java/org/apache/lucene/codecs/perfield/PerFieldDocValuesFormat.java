@@ -341,7 +341,7 @@ public abstract class PerFieldDocValuesFormat extends DocValuesFormat {
     @Override
     public SortedSetDocValues getSortedSet(FieldInfo field) throws IOException {
       DocValuesProducer producer = fields.get(field.name);// Lucene80DocValueProducer
-      return producer == null ? null : producer.getSortedSet(field);
+      return producer == null ? null : producer.getSortedSet(field);// 将进入Lucene80DocValuesProducer.getSortedSet()
     }
     
     @Override

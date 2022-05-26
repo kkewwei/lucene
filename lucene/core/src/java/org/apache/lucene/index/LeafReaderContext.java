@@ -25,7 +25,7 @@ import java.util.List;
  */ //LeafReaderContext 即用来描述某一个段的信息，并且通过它能获得一个 LeafCollector 对象
 public final class LeafReaderContext extends IndexReaderContext {
   /** The reader's ord in the top-level's leaves array */
-  public final int ord; //
+  public final int ord; // 什么含义
   /** The reader's absolute doc base */
   public final int docBase; // 这个segment的文档起点，为啥需要对同一个shard的所有segment都要分配一个起始绝对Id呢，是为了保证唯一性，分片节点向协调节点返回的是docId， 这个DocId是Lucene上里面每个semgment的Id,并不是ES层面的Id
   // 当协调节点向shard请求这些Id时，绝对Id就是为了区分这个id是哪个Semgent的

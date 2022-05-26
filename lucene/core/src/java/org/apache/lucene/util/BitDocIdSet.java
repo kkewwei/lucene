@@ -28,7 +28,7 @@ public class BitDocIdSet extends DocIdSet {
 
   private static final long BASE_RAM_BYTES_USED = RamUsageEstimator.shallowSizeOfInstance(BitDocIdSet.class);
 
-  private final BitSet set;
+  private final BitSet set; //可以是FixedBitSet, 匹配的文档
   private final long cost; // 总共多少个文档具体匹配上
 
   /**

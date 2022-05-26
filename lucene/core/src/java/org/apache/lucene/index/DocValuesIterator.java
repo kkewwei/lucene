@@ -29,5 +29,5 @@ abstract class DocValuesIterator extends DocIdSetIterator {
    *  &lt; {@code maxDoc}.
    *  After this method returns, {@link #docID()} returns {@code target}. */
   public abstract boolean advanceExact(int target) throws IOException;
-
+ // target是docId，判断target是否存在
 }

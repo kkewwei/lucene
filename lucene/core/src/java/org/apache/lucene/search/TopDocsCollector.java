@@ -60,8 +60,8 @@ public abstract class TopDocsCollector<T extends ScoreDoc> implements Collector 
    * overridden in case a different ScoreDoc type should be returned.
    */
   protected void populateResults(ScoreDoc[] results, int howMany) {
-    for (int i = howMany - 1; i >= 0; i--) { 
-      results[i] = pq.pop();
+    for (int i = howMany - 1; i >= 0; i--) {
+      results[i] = pq.pop();// 得分最大的放最前面
     }
   }
 
@@ -81,7 +81,7 @@ public abstract class TopDocsCollector<T extends ScoreDoc> implements Collector 
   }
   
   /** The number of valid PQ entries */
-  protected int topDocsSize() {
+  protected int topDocsSize() { // 确定最小的size
     // In case pq was populated with sentinel values, there might be less
     // results than pq.size(). Therefore return all results until either
     // pq.size() or totalHits.
@@ -129,7 +129,7 @@ public abstract class TopDocsCollector<T extends ScoreDoc> implements Collector 
    * returned {@link TopDocs} object, which will contain all the results this
    * search execution collected.
    */
-  public TopDocs topDocs(int start, int howMany) {
+  public TopDocs topDocs(int start, int howMany) {// 从优先级队列中获取第[start，start+howMany]区间的元素
     
     // In case pq was populated with sentinel values, there might be less
     // results than pq.size(). Therefore return all results until either
@@ -153,10 +153,10 @@ public abstract class TopDocsCollector<T extends ScoreDoc> implements Collector 
     // Note that this loop will usually not be executed, since the common usage
     // should be that the caller asks for the last howMany results. However it's
     // needed here for completeness.
-    for (int i = pq.size() - start - howMany; i > 0; i--) { pq.pop(); }
+    for (int i = pq.size() - start - howMany; i > 0; i--) { pq.pop(); } // 开始出，去掉没用的
     
     // Get the requested results from pq.
-    populateResults(results, howMany);
+    populateResults(results, howMany);// 得分最大的放最前面
     
     return newTopDocs(results, start);
   }
