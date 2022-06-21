@@ -330,7 +330,7 @@ final class DocumentsWriterPerThread {// 由ThreadState拥有
     }
     return globalUpdates;
   }
-// 这里进来是因为设置的全局文档个数或者内存大小引起的刷新
+// 这里进来是因为设置的全局文档个数或者内存大小引起的刷新（需要产生segment）
   /** Flush all pending docs to a new segment */
   FlushedSegment flush(DocumentsWriter.FlushNotifications flushNotifications) throws IOException {
     assert flushPending.get() == Boolean.TRUE;

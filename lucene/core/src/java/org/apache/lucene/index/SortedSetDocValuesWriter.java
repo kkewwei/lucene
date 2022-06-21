@@ -230,7 +230,7 @@ class SortedSetDocValuesWriter extends DocValuesWriter<SortedSetDocValues> {
 
   private static class BufferedSortedSetDocValues extends SortedSetDocValues {
     final int[] sortedValues;// 按照byte排序。sortedValues[3]=2:下标是小排到大的序号，sortedValues[3]=2: 大小排第3的termId=2，第2个写入的term
-    final int[] ordMap; //  termsId顺序（与写入顺序还有些区别，比如ordMap[0]=5, termId为0的term, 大小排序第5
+    final int[] ordMap; //  termsId大小顺序（与写入顺序还有些区别，比如ordMap[0]=5, termId为0的term, 大小排序第5
     final BytesRefHash hash;
     final BytesRef scratch = new BytesRef();
     final PackedLongValues.Iterator ordsIter; //   ordsIter[5]=8 第5个写入的词的termId=8

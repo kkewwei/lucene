@@ -114,14 +114,14 @@ public class MultiCollector implements Collector {
     }
     return scoreMode;
   }
-
+  // 每个段都会调用这个函数
   @Override
   public LeafCollector getLeafCollector(LeafReaderContext context) throws IOException {
     final List<LeafCollector> leafCollectors = new ArrayList<>(collectors.length);
     for (Collector collector : collectors) {//
       final LeafCollector leafCollector;
       try {
-        leafCollector = collector.getLeafCollector(context); // content是实时更新对应每个segment的
+        leafCollector = collector.getLeafCollector(context);
       } catch (CollectionTerminatedException e) {
         // this leaf collector does not need this segment
         continue;

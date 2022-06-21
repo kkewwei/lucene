@@ -32,15 +32,15 @@ import static org.apache.lucene.search.DocIdSetIterator.NO_MORE_DOCS;
 
 /** Buffers up pending long[] per doc, sorts, then flushes when segment flushes. */
 class SortedNumericDocValuesWriter extends DocValuesWriter<SortedNumericDocValues> {
-  private PackedLongValues.Builder pending; // stream of all values
-  private PackedLongValues.Builder pendingCounts; // count of values per doc
-  private DocsWithFieldSet docsWithField;
+  private PackedLongValues.Builder pending; // stream of all values   下标是value写入顺序，依次排开
+  private PackedLongValues.Builder pendingCounts; // count of values per doc 下标是写入顺序，vale是当前文档该字段值的个数.  docsWithField[2]=4 第2个文档该字段有3个value
+  private DocsWithFieldSet docsWithField; // 下标是写入顺序，保存的当前文档id.  docsWithField[2]=4 第2个写入的文档id=4
   private final Counter iwBytesUsed;
   private long bytesUsed; // this only tracks differences in 'pending' and 'pendingCounts'
   private final FieldInfo fieldInfo;
-  private int currentDoc = -1;
+  private int currentDoc = -1;// 当前正在写的文档id
   private long currentValues[] = new long[8];
-  private int currentUpto = 0;
+  private int currentUpto = 0;// 统计这个字段当前文档写了几个词了。（一个文档单个字段可以包含多个词）
 
   private PackedLongValues finalValues;
   private PackedLongValues finalValuesCount;
@@ -128,8 +128,8 @@ class SortedNumericDocValuesWriter extends DocValuesWriter<SortedNumericDocValue
     final PackedLongValues valueCounts;
     if (finalValues == null) {
       finishCurrentDoc();
-      values = pending.build();
-      valueCounts = pendingCounts.build();
+      values = pending.build();// 按写入顺序排开的所有values
+      valueCounts = pendingCounts.build();// 每个文档该域包含的文档数
     } else {
       values = finalValues;
       valueCounts = finalValuesCount;
@@ -138,7 +138,7 @@ class SortedNumericDocValuesWriter extends DocValuesWriter<SortedNumericDocValue
     final long[][] sorted;
     if (sortMap != null) {
       sorted = sortDocValues(state.segmentInfo.maxDoc(), sortMap,
-          new BufferedSortedNumericDocValues(values, valueCounts, docsWithField.iterator()));
+          new BufferedSortedNumericDocValues(values, valueCounts, docsWithField.iterator()));// 文档ID
     } else {
       sorted = null;
     }
@@ -162,11 +162,11 @@ class SortedNumericDocValuesWriter extends DocValuesWriter<SortedNumericDocValue
   }
 
   private static class BufferedSortedNumericDocValues extends SortedNumericDocValues {
-    final PackedLongValues.Iterator valuesIter;
-    final PackedLongValues.Iterator valueCountsIter;
-    final DocIdSetIterator docsWithField;
-    private int valueCount;
-    private int valueUpto;
+    final PackedLongValues.Iterator valuesIter;// 具体字段值明细
+    final PackedLongValues.Iterator valueCountsIter;// 每个文档多少个值
+    final DocIdSetIterator docsWithField;// 当前文档iD
+    private int valueCount;// 当前文档当前字段value值个数
+    private int valueUpto; // 当前文档当前字段value读到了第几个
 
     public BufferedSortedNumericDocValues(PackedLongValues values, PackedLongValues valueCounts, DocIdSetIterator docsWithField) {
       valuesIter = values.iterator();

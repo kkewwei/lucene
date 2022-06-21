@@ -952,13 +952,13 @@ public class PackedInts {
         return Packed64SingleBlock.create(valueCount, bitsPerValue);
       case PACKED:
         switch (bitsPerValue) {
-          case 8:
+          case 8: //  使用byte装
             return new Direct8(valueCount);
-          case 16:
+          case 16: //使用short装
             return new Direct16(valueCount);
-          case 32:
+          case 32:// 使用int装
             return new Direct32(valueCount);
-          case 64:
+          case 64://使用long装
             return new Direct64(valueCount);
           case 24:
             if (valueCount <= Packed8ThreeBlocks.MAX_SIZE) {

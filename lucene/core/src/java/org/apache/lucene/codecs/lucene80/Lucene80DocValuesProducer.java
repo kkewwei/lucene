@@ -266,12 +266,12 @@ final class Lucene80DocValuesProducer extends DocValuesProducer implements Close
     entry.termsIndexAddressesOffset = meta.readLong();// 从dvd中加载二级索引第二部分（第1024*x个词和第1024*x-1个词的相同前缀累加值）的数据部分
     entry.termsIndexAddressesLength = meta.readLong();// 从dvd中加载二级索引第二部分（第1024*x个词和第1024*x-1个词的相同前缀累加值）的数据部分长度
   } // profix1 value, profix2 value,, profix2 value,
-  // 这个是读取SORTED_NUMBER类型
+  // 这个是读取SORTED_NUMBER类型， 见Lucene80DocValuesConsumer.addSortedNumericField
   private SortedNumericEntry readSortedNumeric(ChecksumIndexInput meta) throws IOException {
     SortedNumericEntry entry = new SortedNumericEntry();
     readNumeric(meta, entry);
     entry.numDocsWithField = meta.readInt();
-    if (entry.numDocsWithField != entry.numValues) {
+    if (entry.numDocsWithField != entry.numValues) {//
       entry.addressesOffset = meta.readLong();
       final int blockShift = meta.readVInt();
       entry.addressesMeta = DirectMonotonicReader.loadMeta(meta, entry.numDocsWithField + 1, blockShift);
@@ -294,7 +294,7 @@ final class Lucene80DocValuesProducer extends DocValuesProducer implements Close
     long docsWithFieldLength;
     short jumpTableEntryCount;
     byte denseRankPower;
-    long numValues;
+    long numValues; // 包含的文档个数
     long minValue;
     long gcd;
     long valuesOffset;
@@ -364,7 +364,7 @@ final class Lucene80DocValuesProducer extends DocValuesProducer implements Close
   }
 
   private static class SortedNumericEntry extends NumericEntry {
-    int numDocsWithField;
+    int numDocsWithField; // 什么含义
     DirectMonotonicReader.Meta addressesMeta;
     long addressesOffset;
     long addressesLength;
@@ -1110,7 +1110,7 @@ final class Lucene80DocValuesProducer extends DocValuesProducer implements Close
       }
       return term;
     }
-    // 定位到词序为ord的位置
+    // segment内定位到segment内词序为ord的位置
     @Override
     public void seekExact(long ord) throws IOException {
       if (ord < 0 || ord >= entry.termsDictSize) {

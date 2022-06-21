@@ -24,7 +24,7 @@ import org.apache.lucene.util.RamUsageEstimator;
 
 /** Accumulator for documents that have a value for a field. This is optimized
  *  for the case that all documents have a value. */
-final class DocsWithFieldSet extends DocIdSet {
+final class DocsWithFieldSet extends DocIdSet { //用在SortedNumericDocValuesWriter写入时统计文档ID
 
   private static long BASE_RAM_BYTES_USED = RamUsageEstimator.shallowSizeOfInstance(DocsWithFieldSet.class);
 

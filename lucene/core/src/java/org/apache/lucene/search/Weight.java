@@ -221,7 +221,7 @@ public abstract class Weight implements SegmentCacheable {
         int doc = scorer.docID();
         if (doc < min) {// 文档号码
           if (twoPhase == null) { // 都会跑到这里
-            doc = iterator.advance(min); // 文档Id向后找一个。
+            doc = iterator.advance(min); // 单个segment内文档Id向后找一个。
           } else {
             doc = twoPhase.approximation().advance(min); // 起始doc
           } // 是常量score，所以没有打分一项，直接进入了collect里面

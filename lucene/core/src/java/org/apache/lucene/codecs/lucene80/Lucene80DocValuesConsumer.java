@@ -159,14 +159,14 @@ final class Lucene80DocValuesConsumer extends DocValuesConsumer implements Close
   }
 
   private long[] writeValues(FieldInfo field, DocValuesProducer valuesProducer) throws IOException {
-    SortedNumericDocValues values = valuesProducer.getSortedNumeric(field);
+    SortedNumericDocValues values = valuesProducer.getSortedNumeric(field);// 可以跑到SortedNumericDocValuesWriter.flush()里面的匿名类中
     int numDocsWithValue = 0;
-    MinMaxTracker minMax = new MinMaxTracker();
+    MinMaxTracker minMax = new MinMaxTracker();// 最大最小记录器
     MinMaxTracker blockMinMax = new MinMaxTracker();
-    long gcd = 0;
+    long gcd = 0; // Greatest Common Divisor，最大公约数，一般记作称GCD
     Set<Long> uniqueValues = new HashSet<>();
     for (int doc = values.nextDoc(); doc != DocIdSetIterator.NO_MORE_DOCS; doc = values.nextDoc()) {
-      for (int i = 0, count = values.docValueCount(); i < count; ++i) {
+      for (int i = 0, count = values.docValueCount(); i < count; ++i) {// 读取具体的value个数
         long v = values.nextValue();
 
         if (gcd != 1) {
@@ -215,7 +215,7 @@ final class Lucene80DocValuesConsumer extends DocValuesConsumer implements Close
       meta.writeShort((short) -1); // jumpTableEntryCount
       meta.writeByte((byte) -1);   // denseRankPower
     } else {                                  // meta[data.offset, data.length]: IndexedDISI structure for documents with values
-      long offset = data.getFilePointer();
+      long offset = data.getFilePointer();// 部分字段有该值
       meta.writeLong(offset);// docsWithFieldOffset
       values = valuesProducer.getSortedNumeric(field);
       final short jumpTableEntryCount = IndexedDISI.writeBitSet(values, data, IndexedDISI.DEFAULT_DENSE_RANK_POWER);
@@ -602,7 +602,7 @@ final class Lucene80DocValuesConsumer extends DocValuesConsumer implements Close
 
     addTermsDict(DocValues.singleton(valuesProducer.getSorted(field)));
   }
-  // 16个词一个索引。写
+  // 16个词一个索引。写索引结构
   private void addTermsDict(SortedSetDocValues values) throws IOException {
     final long size = values.getValueCount(); // 多少个词cardinatory的个数
     meta.writeVLong(size);
@@ -619,7 +619,7 @@ final class Lucene80DocValuesConsumer extends DocValuesConsumer implements Close
     long start = data.getFilePointer();
     int maxLength = 0;
     TermsEnum iterator = values.termsEnum(); // SortedDocValuesTermsEnum
-    for (BytesRef term = iterator.next(); term != null; term = iterator.next()) { // 从第0、1、2、3...小的词逐个读取
+    for (BytesRef term = iterator.next(); term != null; term = iterator.next()) { // 从第0、1、2、3...小的大小排序词逐个读取
       if ((ord & Lucene80DocValuesFormat.TERMS_DICT_BLOCK_MASK) == 0) {
         writer.add(data.getFilePointer() - start); // 向writer中写入一次data使用位置
         data.writeVInt(term.length); // 写入真实的term长度
@@ -696,11 +696,11 @@ final class Lucene80DocValuesConsumer extends DocValuesConsumer implements Close
       meta.writeLong(data.getFilePointer() - start);
     }
   }
-
+  // flush产生segment时会跑到这里
   @Override
   public void addSortedNumericField(FieldInfo field, DocValuesProducer valuesProducer) throws IOException {
-    meta.writeInt(field.number);
-    meta.writeByte(Lucene80DocValuesFormat.SORTED_NUMERIC);
+    meta.writeInt(field.number); // 见Lucene80DocValuesProducer.readFields()首先读取段号+类型
+    meta.writeByte(Lucene80DocValuesFormat.SORTED_NUMERIC); // 标配
 
     long[] stats = writeValues(field, valuesProducer);
     int numDocsWithField = Math.toIntExact(stats[0]);

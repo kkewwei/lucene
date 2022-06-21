@@ -118,7 +118,7 @@ public abstract class PerFieldDocValuesFormat extends DocValuesFormat {
     public void addSortedField(FieldInfo field, DocValuesProducer valuesProducer) throws IOException {
       getInstance(field).addSortedField(field, valuesProducer);
     }
-
+   // flush产生segment时会跑到这里
     @Override
     public void addSortedNumericField(FieldInfo field, DocValuesProducer valuesProducer) throws IOException {
       getInstance(field).addSortedNumericField(field, valuesProducer);
@@ -331,7 +331,7 @@ public abstract class PerFieldDocValuesFormat extends DocValuesFormat {
       DocValuesProducer producer = fields.get(field.name);
       return producer == null ? null : producer.getSorted(field);
     }
-
+    // 每个long，都有docValue
     @Override
     public SortedNumericDocValues getSortedNumeric(FieldInfo field) throws IOException {
       DocValuesProducer producer = fields.get(field.name);

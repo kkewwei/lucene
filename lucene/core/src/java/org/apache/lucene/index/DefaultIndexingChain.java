@@ -308,7 +308,7 @@ final class DefaultIndexingChain extends DocConsumer {//被DocumentsWriterPerThr
     try {
       for (int i=0;i<fieldHash.length;i++) { // 是个hash链表结构, segment内唯一的域
         PerField perField = fieldHash[i];
-        while (perField != null) {
+        while (perField != null) { // 轮询每个字段
           if (perField.docValuesWriter != null) {
             if (perField.fieldInfo.getDocValuesType() == DocValuesType.NONE) {
               // BUG
@@ -508,7 +508,7 @@ final class DefaultIndexingChain extends DocConsumer {//被DocumentsWriterPerThr
       verifyUnIndexedFieldType(fieldName, fieldType);
     }
 
-    // Add stored fields:
+    // Add stored fields: 看es中，只有_source和id字段作为stored存储
     if (fieldType.stored()) {
       if (fp == null) {
         fp = getOrAddField(fieldName, fieldType, false);

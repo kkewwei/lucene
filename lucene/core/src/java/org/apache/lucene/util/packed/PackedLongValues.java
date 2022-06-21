@@ -23,11 +23,11 @@ import org.apache.lucene.util.Accountable;
 import org.apache.lucene.util.ArrayUtil;
 import org.apache.lucene.util.LongValues;
 import org.apache.lucene.util.RamUsageEstimator;
-
+// 压缩原理非常简单，看最大值需要多少位，则选择什么装，比如最大8位，使用byte装，若16位，使用short装，若24位，使用3个byte装，若48，则使用3个short装
 /**
  * Utility class to compress integers into a {@link LongValues} instance.
  */
-public class PackedLongValues extends LongValues implements Accountable {
+public class PackedLongValues extends LongValues implements Accountable {// 若最大值为负数，退化为64位long装数
 
   private static final long BASE_RAM_BYTES_USED = RamUsageEstimator.shallowSizeOfInstance(PackedLongValues.class);
 

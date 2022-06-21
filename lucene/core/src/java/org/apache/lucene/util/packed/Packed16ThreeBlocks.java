@@ -38,7 +38,7 @@ final class Packed16ThreeBlocks extends PackedInts.MutableImpl {
     if (valueCount > MAX_SIZE) {
       throw new ArrayIndexOutOfBoundsException("MAX_SIZE exceeded");
     }
-    blocks = new short[valueCount * 3];
+    blocks = new short[valueCount * 3];//
   }
 
   Packed16ThreeBlocks(int packedIntsVersion, DataInput in, int valueCount) throws IOException {

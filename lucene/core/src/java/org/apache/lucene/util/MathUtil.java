@@ -59,9 +59,9 @@ public final class MathUtil {
    *  {@link Long#MIN_VALUE} and {@link Long#MIN_VALUE}. So in these 2 cases,
    *  and only them, this method will return {@link Long#MIN_VALUE}. */
   // see http://en.wikipedia.org/wiki/Binary_GCD_algorithm#Iterative_version_in_C.2B.2B_using_ctz_.28count_trailing_zeros.29
-  public static long gcd(long a, long b) {
-    a = Math.abs(a);
-    b = Math.abs(b);
+  public static long gcd(long a, long b) {// Greatest Common Divisor，最大公约数，一般记作称GCD
+    a = Math.abs(a); //该方法是求最大公约数
+    b = Math.abs(b);//证
     if (a == 0) {
       return b;
     } else if (b == 0) {
