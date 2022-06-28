@@ -651,7 +651,7 @@ public abstract class MergePolicy {
    * iff the size of the given mergedInfo is less or equal to
    * {@link #getMaxCFSSegmentSizeMB()} and the size is less or equal to the
    * TotalIndexSize * {@link #getNoCFSRatio()} otherwise <code>false</code>.// 从IndexWriter.mergeMiddle()中跑过来，
-   */ // 合并产生的端是否需要符合文件。而flush产生的段是否需要复合文件，是在LiveIndexWriterConfig.useCompoundFile控制的
+   */ // 合并产生的段是否需要复合文件。而flush产生的段是否需要复合文件，是在LiveIndexWriterConfig.useCompoundFile控制的
   public boolean useCompoundFile(SegmentInfos infos, SegmentCommitInfo mergedInfo, MergeContext mergeContext) throws IOException {
     if (getNoCFSRatio() == 0.0) { // infos是这个IndexWriter维护的所有段，就是一个shard包含的所有段
       return false;

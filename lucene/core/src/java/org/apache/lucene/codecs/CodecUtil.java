@@ -344,7 +344,7 @@ public final class CodecUtil {
   
   /** Expert: just reads and verifies the object ID of an index header */
   public static byte[] checkIndexHeaderID(DataInput in, byte[] expectedID) throws IOException {
-    byte id[] = new byte[StringHelper.ID_LENGTH]; // segment id进行校验，拿从semgent元数据中获取的和某个segment符合文件名称中的做对比
+    byte id[] = new byte[StringHelper.ID_LENGTH]; // segment id进行校验，拿从semgent元数据中获取的和某个segment复合文件名称中的做对比
     in.readBytes(id, 0, id.length);
     if (!Arrays.equals(id, expectedID)) {
       throw new CorruptIndexException("file mismatch, expected id=" + StringHelper.idToString(expectedID) 

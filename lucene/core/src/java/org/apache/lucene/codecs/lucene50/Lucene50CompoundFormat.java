@@ -68,7 +68,7 @@ public final class Lucene50CompoundFormat extends CompoundFormat {
   
   @Override
   public CompoundDirectory getCompoundReader(Directory dir, SegmentInfo si, IOContext context) throws IOException {
-    return new Lucene50CompoundReader(dir, si, context);// 仅仅是从当前segment的符合文件的cfe中获取每个文件在数据文件cfs中位置信息。若是集群元数据读取，使用nio。
+    return new Lucene50CompoundReader(dir, si, context);// 仅仅是从当前segment的复合文件的cfe中获取每个文件在数据文件cfs中位置信息。若是集群元数据读取，使用nio。
   }
    //建立_n.cfs和_n.cfe文件，并写入必要的前缀。然后从每个索引文件中读取数据，组装成复合文件
   @Override

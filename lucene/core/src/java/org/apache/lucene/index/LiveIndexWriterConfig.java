@@ -93,7 +93,7 @@ public class LiveIndexWriterConfig {
 
   /** True if segment flushes should use compound file format */
   protected volatile boolean useCompoundFile = IndexWriterConfig.DEFAULT_USE_COMPOUND_FILE_SYSTEM; //flush产生的segment是否该是复合文件
-   // 针对merge阶段产生的段是否使用复合文件，在MergePolicy.useCompoundFile()中判断，根据
+   // 针对merge阶段产生的段是否使用复合文件，在MergePolicy.useCompoundFile()中判断
   /** True if calls to {@link IndexWriter#close()} should first do a commit. */
   protected boolean commitOnClose = IndexWriterConfig.DEFAULT_COMMIT_ON_CLOSE;
 
