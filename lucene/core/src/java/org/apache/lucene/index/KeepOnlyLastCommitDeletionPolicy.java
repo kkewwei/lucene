@@ -25,7 +25,7 @@ import java.util.List;
  * all prior commits after a new commit is done.  This is
  * the default deletion policy.
  */
-
+// 仅仅保留最后面那个IndexCommit
 public final class KeepOnlyLastCommitDeletionPolicy extends IndexDeletionPolicy {
 
   /** Sole constructor. */
@@ -44,12 +44,12 @@ public final class KeepOnlyLastCommitDeletionPolicy extends IndexDeletionPolicy 
   /**
    * Deletes all commits except the most recent one.
    */
-  @Override
+  @Override//这里删除的时候，把最新的那个commit给保留了
   public void onCommit(List<? extends IndexCommit> commits) {
     // Note that commits.size() should normally be 2 (if not
     // called by onInit above):
     int size = commits.size();
-    for(int i=0;i<size-1;i++) { //这里删除的时候，把最新的那个commit给保留了
+    for(int i=0;i<size-1;i++) { 
       commits.get(i).delete();
     }
   }

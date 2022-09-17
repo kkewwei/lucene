@@ -87,9 +87,9 @@ public final class CodecUtil {
     if (bytes.length != codec.length() || bytes.length >= 128) {
       throw new IllegalArgumentException("codec must be simple ASCII, less than 128 characters in length [got " + codec + "]");
     }
-    out.writeInt(CODEC_MAGIC); //魔术
-    out.writeString(codec);  //文件的标志
-    out.writeInt(version); // 版本号
+    out.writeInt(CODEC_MAGIC); //魔术   4
+    out.writeString(codec);  //文件的标志   
+    out.writeInt(version); // 版本号   4
   }
   
   /**
@@ -148,7 +148,7 @@ public final class CodecUtil {
    * @see #writeHeader(DataOutput, String, int)
    */
   public static int headerLength(String codec) {
-    return 9+codec.length();
+    return 9+codec.length(); //  CODEC_MAGIC, codec, version
   }
   
   /**
@@ -191,7 +191,7 @@ public final class CodecUtil {
    */  // 主要校验： magic   文件名    版本
   public static int checkHeader(DataInput in, String codec, int minVersion, int maxVersion) throws IOException {
     // Safety to guard against reading a bogus string:
-    final int actualHeader = in.readInt(); // 校验header部分
+    final int actualHeader = in.readInt(); // 校验header部分, 魔术
     if (actualHeader != CODEC_MAGIC) {
       throw new CorruptIndexException("codec header mismatch: actual header=" + actualHeader + " vs expected header=" + CODEC_MAGIC, in);
     }
@@ -314,13 +314,13 @@ public final class CodecUtil {
    * not appear to be an index file. */
   public static byte[] readIndexHeader(IndexInput in) throws IOException {
     in.seek(0);
-    final int actualHeader = in.readInt();
+    final int actualHeader = in.readInt(); // 读取长度为4   CODEC_MEGIC  
     if (actualHeader != CODEC_MAGIC) {
       throw new CorruptIndexException("codec header mismatch: actual header=" + actualHeader + " vs expected header=" + CODEC_MAGIC, in);
     }
-    String codec = in.readString();
-    in.readInt();
-    in.seek(in.getFilePointer() + StringHelper.ID_LENGTH);
+    String codec = in.readString(); // 读取string 
+    in.readInt(); //  读取versuon
+    in.seek(in.getFilePointer() + StringHelper.ID_LENGTH); // 跳过id长度
     int suffixLength = in.readByte() & 0xFF;
     byte[] bytes = new byte[headerLength(codec) + StringHelper.ID_LENGTH + 1 + suffixLength];
     in.seek(0);

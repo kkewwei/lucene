@@ -94,7 +94,7 @@ public final class StandardDirectoryReader extends DirectoryReader {
     final SegmentInfos segmentInfos = infos.clone();
     int infosUpto = 0;
     try {
-      for (int i = 0; i < numSegments; i++) { // 轮训所有segment
+      for (int i = 0; i < numSegments; i++) { // 轮询所有segment
         // NOTE: important that we use infos not
         // segmentInfos here, so that we are passing the
         // actual instance of SegmentInfoPerCommit in
@@ -103,10 +103,10 @@ public final class StandardDirectoryReader extends DirectoryReader {
         assert info.info.dir == dir;
         final ReadersAndUpdates rld = writer.getPooledInstance(info, true);// 这里会创建ReadersAndUpdates。
         try { // 会去进行fst结构文件mmap
-          final SegmentReader reader = rld.getReadOnlyClone(IOContext.READ);
+          final SegmentReader reader = rld.getReadOnlyClone(IOContext.READ);// 比较重要
           if (reader.numDocs() > 0 || writer.getConfig().mergePolicy.keepFullyDeletedSegment(() -> reader)) {
             // Steal the ref:
-            readers.add(reader); //只要有数据，就放入
+            readers.add(reader); //只要有数据，就放入（产生新的SegmentReader）
             infosUpto++;
           } else {
             reader.decRef();
@@ -116,7 +116,7 @@ public final class StandardDirectoryReader extends DirectoryReader {
           writer.release(rld);
         }
       }
-
+      // 当StandardDirectoryReader.close时候会decRefDeleter
       writer.incRefDeleter(segmentInfos);
 
       StandardDirectoryReader result = new StandardDirectoryReader(dir,
@@ -287,7 +287,7 @@ public final class StandardDirectoryReader extends DirectoryReader {
       return doOpenFromCommit(commit);
     }
     // //检查IndexWriter,这个IndexWriter所有的元素，若发生了变化，就需要重新产生新的(没发生变化，就返回空)
-    if (writer.nrtIsCurrent(segmentInfos)) {
+    if (writer.nrtIsCurrent(segmentInfos)) { //Near Real Time
       return null;
     }
     // 会触发主动merge操作&会将缓存的doc生产一个segment，并再次mmap打开。es周期性refresh时，applyAllDeletes=true,writeAllDeletes=false
@@ -319,7 +319,7 @@ public final class StandardDirectoryReader extends DirectoryReader {
 
     return doOpenFromCommit(commit);
   }
-
+  // 仅仅是为了通过commit获取segments_n
   private DirectoryReader doOpenFromCommit(IndexCommit commit) throws IOException {
     return new SegmentInfos.FindSegmentsFile<DirectoryReader>(directory) {
       @Override

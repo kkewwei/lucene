@@ -33,7 +33,7 @@ import org.apache.lucene.util.StringHelper;
  *  fields.
  * 一个只读的segmentInfo
  *  @lucene.experimental */
-public class SegmentCommitInfo {
+public class SegmentCommitInfo { // 一个只读的SegmentInfo
   
   /** The {@link SegmentInfo} that we wrap. */
   public final SegmentInfo info;

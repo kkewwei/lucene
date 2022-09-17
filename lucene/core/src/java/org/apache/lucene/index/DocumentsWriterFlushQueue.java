@@ -32,7 +32,7 @@ final class DocumentsWriterFlushQueue {
   private final Queue<FlushTicket> queue = new LinkedList<>(); // 全局打包待删除的Node
   // we track tickets separately since count must be present even before the ticket is
   // constructed ie. queue.size would not reflect it.
-  private final AtomicInteger ticketCount = new AtomicInteger(); // 记录有多少个ticket
+  private final AtomicInteger ticketCount = new AtomicInteger(); // 记录有多少个ticket, 在放入queue之前，还需要时间
   private final ReentrantLock purgeLock = new ReentrantLock();
 
   synchronized boolean addDeletes(DocumentsWriterDeleteQueue deleteQueue) throws IOException {
@@ -98,17 +98,17 @@ final class DocumentsWriterFlushQueue {
     assert ticketCount.get() >= 0 : "ticketCount should be >= 0 but was: " + ticketCount.get();
     return ticketCount.get() != 0;
   }
-
+  //innerPurge函数依次从该队列中获取SegmentFlushTicket，调用其publish函数将其写入IndexWriter的BufferedUpdatesStream中。操作成功后通过poll函数从队列中删除该SegmentFlushTicket。
   private void innerPurge(IOUtils.IOConsumer<FlushTicket> consumer) throws IOException {
     assert purgeLock.isHeldByCurrentThread();
-    while (true) {
+    while (true) { //这里会依次发布每个segment
       final FlushTicket head;
       final boolean canPublish;
       synchronized (this) { // 循环进行publish
         head = queue.peek(); // 获取顶部，并没有拿出来
         canPublish = head != null && head.canPublish(); // do this synced  是否可以publish
       }
-      if (canPublish) {
+      if (canPublish) { // 拿出来一个进行publish
         try {
           /*
            * if we block on publish -> lock IW -> lock BufferedDeletes we don't block
@@ -155,7 +155,7 @@ final class DocumentsWriterFlushQueue {
   }
 
   int getTicketCount() {
-    return ticketCount.get(); // 只有
+    return ticketCount.get();
   }
 
   static final class FlushTicket { // frozenUpdates是一个包含删除信息且作用于其他段中的文档的全局FrozenBufferedUpdate对象

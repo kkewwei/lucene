@@ -89,7 +89,7 @@ public abstract class FilterDirectoryReader extends DirectoryReader {
    */
   public FilterDirectoryReader(DirectoryReader in, SubReaderWrapper wrapper) throws IOException {
     super(in.directory(), wrapper.wrap(in.getSequentialSubReaders())); //  仅仅这里封装下
-    this.in = in;// 只要有segment变更，就会更新in=StandardDirectoryReader
+    this.in = in;// 只要有segment变更，就会更新in= StandardDirectoryReader
   }
 
   /**
@@ -109,7 +109,7 @@ public abstract class FilterDirectoryReader extends DirectoryReader {
 
   @Override // 刷新时进来
   protected final DirectoryReader doOpenIfChanged() throws IOException {
-    return wrapDirectoryReader(in.doOpenIfChanged()); // in=StandardDirectoryReader
+    return wrapDirectoryReader(in.doOpenIfChanged()); // in= StandardDirectoryReader.doOpenIfChanged()
   }
 
   @Override // in = StandardDirectoryReader

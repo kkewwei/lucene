@@ -69,7 +69,7 @@ import org.apache.lucene.util.InfoStream;
  * update fails before the DeleteSlice could have been updated the deleteTerm
  * will also not be added to its private deletes neither to the global deletes.
  *  // 删除操作可参考：https://www.jianshu.com/p/26ba09055175
- */  // 一个DocuentsWriter会私下产生一个DocumentsWriterFlushQueue
+ */  // 一个DocuentsWriter会私下维持一个DocumentsWriterFlushQueue。每次full flush 都会产生一个新的
 final class DocumentsWriterDeleteQueue implements Accountable, Closeable {
   // 主要用于在flush时记录每个DWPT的刷新操作，这里记录的刷新操作主要是刷新之后形成的FlushedSegment以及全局删除操作，FlushedSegment是此次刷新之后的最终段内存视图。其中各种更新操作已经进行过具体处理，Term删除也进行了处理，但是Query删除还依然保持未处理，所以FlushedSegment中还保存了Query删除操作，但是没有Term删除操作。
   // the current end (latest delete operation) in the delete queue:
@@ -79,7 +79,7 @@ final class DocumentsWriterDeleteQueue implements Accountable, Closeable {
 
   /** Used to record deletes against all prior (already written to disk) segments.  Whenever any segment flushes, we bundle up this set of
    *  deletes and insert into the buffered updates stream before the newly flushed segment(s). */
-  private final DeleteSlice globalSlice;
+  private final DeleteSlice globalSlice; // 具体作用
   private final BufferedUpdates globalBufferedUpdates; // 它描述了所有的删除信息，该删除信息会被保存在全局BufferedUpdates。把node从globalSlice中给迁移到这里
   
   // only acquired to update the global deletes, pkg-private for access by tests:
@@ -92,9 +92,9 @@ final class DocumentsWriterDeleteQueue implements Accountable, Closeable {
 
   private final InfoStream infoStream;
 
-  private volatile long maxSeqNo = Long.MAX_VALUE; /// 启动的时候为0,当前已经使用的
+  private volatile long maxSeqNo = Long.MAX_VALUE; /// 启动的时候为0,当前已经使用的最大的
 
-  private final long startSeqNo;
+  private final long startSeqNo; //三个
   private final LongSupplier previousMaxSeqId;
   private boolean advanced; // 这个queue是否已经被替换了
   
@@ -102,7 +102,7 @@ final class DocumentsWriterDeleteQueue implements Accountable, Closeable {
     // seqNo must start at 1 because some APIs negate this to also return a boolean
     this(infoStream, 0, 1, () -> 0);
   }
-
+  // 每次flush时产生新的
   private DocumentsWriterDeleteQueue(InfoStream infoStream, long generation, long startSeqNo, LongSupplier previousMaxSeqId) {
     this.infoStream = infoStream;
     this.globalBufferedUpdates = new BufferedUpdates("global");
@@ -200,7 +200,7 @@ final class DocumentsWriterDeleteQueue implements Accountable, Closeable {
        * tail the next time we can get the lock!
        */
       try {
-        if (updateSliceNoSeqNo(globalSlice)) { // 若global的tail不是最新的，那么将gloabl跳到最新
+        if (updateSliceNoSeqNo(globalSlice)) { // 若globalSlice的sliceTail不是最新的，那么将globalSlice的sliceTail指向最新
           globalSlice.apply(globalBufferedUpdates, BufferedUpdates.MAX_INT);
         }
       } finally {
@@ -270,14 +270,14 @@ final class DocumentsWriterDeleteQueue implements Accountable, Closeable {
       return null;
     }
   }
-
+  // 每个DocumentsWriterPerThread都拥有一个
   DeleteSlice newSlice() {
     return new DeleteSlice(tail); // 若tail修改了，这里可以立马感知到
   }
   // 多线程共享的
   /** Negative result means there were new deletes since we last applied */
-  synchronized long updateSlice(DeleteSlice slice) {
-    ensureOpen();
+  synchronized long updateSlice(DeleteSlice slice) {// 每个DocumentsWriterPerThread.finishDocuments()写完一个文档，会更新这里。
+    ensureOpen();//
     long seqNo = getNextSequenceNumber();
     if (slice.sliceTail != tail) { // 映射了这个DWPT工作期间，tail的删除情况(并没有冻结DWDQ的)
       // new deletes arrived since we last checked
@@ -325,7 +325,7 @@ final class DocumentsWriterDeleteQueue implements Accountable, Closeable {
   // 一个DocumentsWriterPerThread会产生一个DeleteSlice，而每个DeleteSlice都会作为DocumentsWriterDeleteQueue中一个节点存放起来
   static class DeleteSlice {
     // No need to be volatile, slices are thread captive (only accessed by one thread)!
-    Node<?> sliceHead; // we don't apply this one
+    Node<?> sliceHead; // we don't apply this one 这个是过期的那个头，开区间
     Node<?> sliceTail; // 用来存globalQueue上截取自上次flush之后自己需要记录的删除操作。一般都是sliceTail记录最新的那部分
 
     DeleteSlice(Node<?> currentTail) {
@@ -349,13 +349,13 @@ final class DocumentsWriterDeleteQueue implements Accountable, Closeable {
        * tail in this slice are not equal then there will be at least one more
        * non-null node in the slice!
        */
-      Node<?> current = sliceHead; // 从head
+      Node<?> current = sliceHead; // 从head，过期的头
       do {
-        current = current.next;
+        current = current.next; // 
         assert current != null : "slice property violated between the head on the tail must not be a null node";
         current.apply(del, docIDUpto); // 默认会跑到DocumentsWriterDeleteQueue$TermArrayNode，或者QueryArrayNode
       } while (current != sliceTail);
-      reset(); //将globalSlice中sliceHead=sliceTail，清位
+      reset(); //将DeleteSlice中sliceHead=sliceTail，清位
     }
 
     void reset() {
@@ -543,7 +543,7 @@ final class DocumentsWriterDeleteQueue implements Accountable, Closeable {
     return "DWDQ: [ generation: " + generation + " ]";
   }
   // 每个写入文档都会获取一个nextSeqNo,会在每个DocumentsWriterPerThread.finishDocuments()调用这个函数
-  public long getNextSequenceNumber() {
+  public long getNextSequenceNumber() { // 任何add delete, update都会调用该函数
     long seqNo = nextSeqNo.getAndIncrement();
     assert seqNo <= maxSeqNo: "seqNo=" + seqNo + " vs maxSeqNo=" + maxSeqNo;
     return seqNo;
@@ -594,7 +594,7 @@ final class DocumentsWriterDeleteQueue implements Accountable, Closeable {
       throw new IllegalStateException("queue was already advanced");
     }
     advanced = true;
-    long seqNo = getLastSequenceNumber() + maxNumPendingOps + 1;
+    long seqNo = getLastSequenceNumber() + maxNumPendingOps + 1;// nextSeq+正在使用的+1
     maxSeqNo = seqNo;
     return new DocumentsWriterDeleteQueue(infoStream, generation + 1, seqNo + 1,
         // don't pass ::getMaxCompletedSeqNo here b/c otherwise we keep an reference to this queue

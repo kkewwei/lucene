@@ -163,7 +163,7 @@ final class ReadersAndUpdates { // 为了更新某个segment，而专门产生�
     return count;
   }
   
-
+  //产生新的
   /** Returns a {@link SegmentReader}. */
   public synchronized SegmentReader getReader(IOContext context) throws IOException {
     if (reader == null) { //若reader为null的话，就创建一个。新产生的segment的reader就为空
@@ -210,17 +210,17 @@ final class ReadersAndUpdates { // 为了更新某个segment，而专门产生�
    */ //
   public synchronized SegmentReader getReadOnlyClone(IOContext context) throws IOException {
     if (reader == null) { // 首先reader为null的话，就创建SegmentReader， 比较重要，获取读取fst文件头，并映射
-      getReader(context).decRef();
+      getReader(context).decRef(); 
       assert reader != null;
     }
     // force new liveDocs
     Bits liveDocs = pendingDeletes.getLiveDocs();
-    if (liveDocs != null) {
+    if (liveDocs != null) { // 
       return new SegmentReader(info, reader, liveDocs, pendingDeletes.getHardLiveDocs(), pendingDeletes.numDocs(), true); // 产生一个新的
-    } else {
+    } else {// 已经存在了
       // liveDocs == null and reader != null. That can only be if there are no deletes
       assert reader.getLiveDocs() == null;
-      reader.incRef();
+      reader.incRef(); // 复制一次
       return reader;
     }
   }

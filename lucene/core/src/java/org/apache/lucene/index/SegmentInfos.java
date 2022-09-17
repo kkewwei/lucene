@@ -140,7 +140,7 @@ public final class SegmentInfos implements Cloneable, Iterable<SegmentCommitInfo
                                // there was an IOException that had interrupted a commit
 
   /** Opaque Map&lt;String, String&gt; that user can specify during IndexWriter.commit */
-  public Map<String,String> userData = Collections.emptyMap(); // history_uuid / local_checkpoint / max_seq_np / max_unsafe_auto_id_timestamp min_rrtained_seq_no  translog_uuid
+  public Map<String,String> userData = Collections.emptyMap(); // history_uuid / local_checkpoint / max_seq_np / max_unsafe_auto_id_timestamp min_retained_seq_no  translog_uuid
   // userData:history_uuid,local_checkpoint,max_seq_no,max_unsafe_auto_id_timestamp, tanslog_uuid
   private List<SegmentCommitInfo> segments = new ArrayList<>(); // 目前产生的segment(里面包含了SegmentInfo)
   
@@ -695,7 +695,7 @@ public final class SegmentInfos implements Cloneable, Iterable<SegmentCommitInfo
       // don't, then the original error is real and we throw
       // it.
       
-      for (;;) {
+      for (;;) { // 找到最大那个segments_n
         lastGen = gen;
         String files[] = directory.listAll();
         String files2[] = directory.listAll();
@@ -800,7 +800,7 @@ public final class SegmentInfos implements Cloneable, Iterable<SegmentCommitInfo
     if (pendingCommit) {
       throw new IllegalStateException("prepareCommit was already called");
     }
-    dir.syncMetaData();
+    dir.syncMetaData();// 跑到哪里了
     write(dir); // 创建了临时文件pending_segments_(n+1)
   }
 
@@ -810,7 +810,7 @@ public final class SegmentInfos implements Cloneable, Iterable<SegmentCommitInfo
   public Collection<String> files(boolean includeSegmentsFile) throws IOException {
     HashSet<String> files = new HashSet<>();
     if (includeSegmentsFile) {
-      final String segmentFileName = getSegmentsFileName();
+      final String segmentFileName = getSegmentsFileName(); // segments_N
       if (segmentFileName != null) {
         files.add(segmentFileName);
       }
@@ -943,7 +943,7 @@ public final class SegmentInfos implements Cloneable, Iterable<SegmentCommitInfo
     final Set<SegmentCommitInfo> mergedAway = new HashSet<>(merge.segments);
     boolean inserted = false;
     int newSegIdx = 0;
-    for (int segIdx = 0, cnt = segments.size(); segIdx < cnt; segIdx++) {
+    for (int segIdx = 0, cnt = segments.size(); segIdx < cnt; segIdx++) { // merge后紧凑点
       assert segIdx >= newSegIdx;
       final SegmentCommitInfo info = segments.get(segIdx);
       if (mergedAway.contains(info)) {
@@ -967,7 +967,7 @@ public final class SegmentInfos implements Cloneable, Iterable<SegmentCommitInfo
     // be the case that the new segment is also all deleted,
     // we insert it at the beginning if it should not be dropped:
     if (!inserted && !dropSegment) {
-      segments.add(0, merge.info);
+      segments.add(0, merge.info);// 真正放入segments中
     }
   }
 

@@ -48,7 +48,7 @@ public class LiveIndexWriterConfig {
   // modified by IndexWriterConfig
   /** {@link IndexDeletionPolicy} controlling when commit
    *  points are deleted. */
-  protected volatile IndexDeletionPolicy delPolicy;
+  protected volatile IndexDeletionPolicy delPolicy; // 默认直接是KeepOnlyLastCommitDeletionPolicy
 
   /** {@link IndexCommit} that {@link IndexWriter} is
    *  opened on. */
@@ -133,8 +133,8 @@ public class LiveIndexWriterConfig {
     mergePolicy = new TieredMergePolicy(); // 初始化的
     flushPolicy = new FlushByRamOrCountsPolicy();
     readerPooling = IndexWriterConfig.DEFAULT_READER_POOLING;
-    perThreadHardLimitMB = IndexWriterConfig.DEFAULT_RAM_PER_THREAD_HARD_LIMIT_MB; // 1945M
-    maxCommitMergeWaitMillis = IndexWriterConfig.DEFAULT_MAX_COMMIT_MERGE_WAIT_MILLIS;
+    perThreadHardLimitMB = IndexWriterConfig.DEFAULT_RAM_PER_THREAD_HARD_LIMIT_MB; // es也是1945M
+    maxCommitMergeWaitMillis = IndexWriterConfig.DEFAULT_MAX_COMMIT_MERGE_WAIT_MILLIS;// 0
   }
   
   /** Returns the default analyzer to use for indexing documents. */

@@ -96,8 +96,8 @@ final class SegmentCoreReaders {
     final Directory cfsDir; // confusing name: if (cfs) it's the cfsdir, otherwise it's the segment's directory.
     boolean success = false;
     
-    try {
-      if (si.info.getUseCompoundFile()) { // 是否是复合文件
+    try { // 哪怕还未完全落盘，也可以先使用mmap先映射文件
+      if (si.info.getUseCompoundFile()) { // 是否是复合文件,cfs使用mmap打开了
         cfsDir = cfsReader = codec.compoundFormat().getCompoundReader(dir, si.info, context); // Lucene50CompoundReader,部分文件使用mmap打开了
       } else {
         cfsReader = null;
@@ -164,7 +164,7 @@ final class SegmentCoreReaders {
   }
 
   @SuppressWarnings("try")
-  void decRef() throws IOException {
+  void decRef() throws IOException { // 关闭所有打开器材
     if (ref.decrementAndGet() == 0) {
       Throwable th = null;
       try (Closeable finalizer = this::notifyCoreClosedListeners){

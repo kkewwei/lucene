@@ -53,19 +53,19 @@ final class DocumentsWriterFlushControl implements Accountable, Closeable {
   private int numDocsSinceStalled = 0; // only with assert
   private final AtomicBoolean flushDeletes = new AtomicBoolean(false);
   private boolean fullFlush = false; // 比如ES周期性refresh，会将fullFlush置位
-  private boolean fullFlushMarkDone = false; // only for assertion that we don't get stale DWPTs from the pool  需要进行fullFlush的DWPT被标记完成
+  private boolean fullFlushMarkDone = false; // only for assertion that we don't get stale DWPTs from the pool，已经将需要refresh的标记完成了
   // The flushQueue is used to concurrently distribute DWPTs that are ready to be flushed ie. when a full flush is in
   // progress. This might be triggered by a commit or NRT refresh. The trigger will only walk all eligible DWPTs and
   // mark them as flushable putting them in the flushQueue ready for other threads (ie. indexing threads) to help flushing
-  private final Queue<DocumentsWriterPerThread> flushQueue = new LinkedList<>();// 存放等待刷新的的DWPTs。那么这部分DocumentsWriterPerThread已经从DocumentsWriterPerThreadPool.dwpts中删掉了。
+  private final Queue<DocumentsWriterPerThread> flushQueue = new LinkedList<>();// 存放等待刷新的的DWPTs。等待排队被主动flush的DocumentsWriterPerThread。会依次从flushQueue出队列进行flush
   // only for safety reasons if a DWPT is close to the RAM limit // 正在进行full flush时，本DWPT也正在处于待刷新状态，那么本DWPT会先挂起，知道full flush完成后再继续
   private final Queue<DocumentsWriterPerThread> blockedFlushes = new LinkedList<>();
   // flushingWriters holds all currently flushing writers. There might be writers in this list that
   // are also in the flushQueue which means that writers in the flushingWriters list are not necessarily
   // already actively flushing. They are only in the state of flushing and might be picked up in the future by
-  // polling the flushQueue // 包含的处于刷新状态的，可能部分DocumentsWriterPerThread也处于flushQueue中， 未来会从flushQueue中拿掉
+  // polling the flushQueue // 从flushQueue取出进行flush, 仅当合并doAfterFlush()完成后才从flushingWriters去除。
   private final List<DocumentsWriterPerThread> flushingWriters = new ArrayList<>(); // flushQueue和flushingWriters内容基本一致，flushingWriters先放入，但是写入线程是从flushQueue中拿的待刷新的缓存文件。
-  //只有 DWPT完成刷新后，才会从flushingWriters中去掉
+  //只有 DWPT完成刷新后，才会从flushingWriters中去掉。还未完成flush的DocumentsWriterPerThread。
   private double maxConfiguredRamBuffer = 0;
   private long peakActiveBytes = 0;// only with assert
   private long peakFlushBytes = 0;// only with assert

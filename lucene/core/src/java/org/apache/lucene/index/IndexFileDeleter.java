@@ -76,12 +76,12 @@ import org.apache.lucene.util.InfoStream;
  * instantiating this class.  It opens segments_N file(s)
  * directly with no retry logic.
  */
-
+// 删除无引用的文件
 final class IndexFileDeleter implements Closeable {
 
   /* Reference count for all files in the index.
    * Counts how many existing commits reference a file.
-   **/ // 构建的某个文件被reference的次数，IndexFileDeleter如何判断某个文件是否可以被删除：使用引用计数的方式。
+   **/ // 存储当前所有文件的引用次数，当引用计数为0后，就会彻底删除。
   private Map<String, RefCount> refCounts = new HashMap<>();
 
   /* Holds all commits (segments_N) currently in the index.
@@ -92,16 +92,16 @@ final class IndexFileDeleter implements Closeable {
   private List<CommitPoint> commits = new ArrayList<>(); // 存储的这个索引结构所有的commit。若是KeepOnlyLastCommitDeletionPolicy，只会保留最后一个
  // IndexFileDeleter$CommitPoint
   /* Holds files we had incref'd from the previous
-   * non-commit checkpoint: */ // 在上次非commit时保存的文件
+   * non-commit checkpoint: */ // 在上次调用checkpoint，参数非commit时保存的文件。
   private final List<String> lastFiles = new ArrayList<>();
 
   /* Commits that the IndexDeletionPolicy have decided to delete: */
-  private List<CommitPoint> commitsToDelete = new ArrayList<>();
+  private List<CommitPoint> commitsToDelete = new ArrayList<>();//在commit阶段，若小于安全点的commit, 都会被删除。 若被删除的话，则放的是本身
 
   private final InfoStream infoStream;
   private final Directory directoryOrig; // for commit point metadata
   private final Directory directory;
-  private final IndexDeletionPolicy policy;
+  private final IndexDeletionPolicy policy; // 是CombinedDeletionPolicy类
 
   final boolean startingCommitDeleted;
   private SegmentInfos lastSegmentInfos;
@@ -123,7 +123,7 @@ final class IndexFileDeleter implements Closeable {
    * the policy to let it delete commits.  This will remove
    * any files not referenced by any of the commits.
    * @throws IOException if there is a low-level IO error
-   */ // 删除无引用的文件
+   */ // IndexWriter初始化时会调用
   public IndexFileDeleter(String[] files, Directory directoryOrig, Directory directory, IndexDeletionPolicy policy, SegmentInfos segmentInfos,
                           InfoStream infoStream, IndexWriter writer, boolean initialIndexExists,
                           boolean isReaderInit) throws IOException {
@@ -131,13 +131,13 @@ final class IndexFileDeleter implements Closeable {
     this.infoStream = infoStream;
     this.writer = writer;
 
-    final String currentSegmentsFile = segmentInfos.getSegmentsFileName();// 获取旧的segments_n
+    final String currentSegmentsFile = segmentInfos.getSegmentsFileName();// 获取给定的segments_n
 
     if (infoStream.isEnabled("IFD")) {
       infoStream.message("IFD", "init: current segments file is \"" + currentSegmentsFile + "\"; deletionPolicy=" + policy);
     }
 
-    this.policy = policy;
+    this.policy = policy; // 是CombinedDeletionPolicy类
     this.directoryOrig = directoryOrig;
     this.directory = directory;
 
@@ -147,7 +147,7 @@ final class IndexFileDeleter implements Closeable {
     // 遍历每个segment,若磁盘下某个文件不被某个semgent所拥有的，那么就将删除
     if (currentSegmentsFile != null) {
       Matcher m = IndexFileNames.CODEC_FILE_PATTERN.matcher("");
-      for (String fileName : files) {// 列举了所有的文件
+      for (String fileName : files) {// 列举了所有的文件,  找segments_n文件
         m.reset(fileName);
         if (!fileName.endsWith("write.lock") && (m.matches() || fileName.startsWith(IndexFileNames.SEGMENTS) || fileName.startsWith(IndexFileNames.PENDING_SEGMENTS))) {
           
@@ -220,7 +220,7 @@ final class IndexFileDeleter implements Closeable {
     // presumably abandoned files eg due to crash of
     // IndexWriter.
     Set<String> toDelete = new HashSet<>();
-    for(Map.Entry<String, RefCount> entry : refCounts.entrySet() ) {// 首先删除没别任何CommitPoint引用的文档
+    for(Map.Entry<String, RefCount> entry : refCounts.entrySet() ) {// 首先删除没别任何CommitPoint引用的文档，segment
       RefCount rc = entry.getValue();
       final String fileName = entry.getKey();
       if (0 == rc.count) {// 若无任何segments_n引用的话，则删除
@@ -364,7 +364,7 @@ final class IndexFileDeleter implements Closeable {
    * Remove the CommitPoints in the commitsToDelete List by
    * DecRef'ing all files from each SegmentInfos.
    */
-  private void deleteCommits() throws IOException {
+  private void deleteCommits() throws IOException { // 可以删除就的提交点了，确定是用在 CombinedDeletionPolicy.onCommit()之后的
 
     int size = commitsToDelete.size();
 
@@ -472,7 +472,7 @@ final class IndexFileDeleter implements Closeable {
    * {@link IndexWriter#deleteUnusedFiles()}, which will attempt to delete the
    * unused commits again.
    */
-  void revisitPolicy() throws IOException {
+  void revisitPolicy() throws IOException { // 再次访问下这个IndexDeletionPolicy，用来删除一些没用的commits
     assert locked();
     if (infoStream.isEnabled("IFD")) {
       infoStream.message("IFD", "now revisitPolicy");
@@ -505,14 +505,14 @@ final class IndexFileDeleter implements Closeable {
    * removed, we decref their files as well.
    */  // 如果修改的/新的 SegmentInfos 被写入磁盘 - 作为新的（一代）segments_N 文件 - 这个检查点也是一个 IndexCommit。
   public void checkpoint(SegmentInfos segmentInfos, boolean isCommit) throws IOException {
-    assert locked();
+    assert locked(); //只有lucene commit的时候，isCommit=true, 才有大作用，否则lucene flush阶段，仅仅是替换下lastFiles
 
     assert Thread.holdsLock(writer);
     long t0 = System.nanoTime();
     if (infoStream.isEnabled("IFD")) {
       infoStream.message("IFD", "now checkpoint \"" + writer.segString(writer.toLiveInfos(segmentInfos)) + "\" [" + segmentInfos.size() + " segments " + "; isCommit = " + isCommit + "]");
     }
-    // 所有文件引用全部+1
+    // 当前所有存活文件引用全部+1
     // Incref the files:
     incRef(segmentInfos, isCommit);// 最安全那个CommitPoint引用+1
 
@@ -522,9 +522,9 @@ final class IndexFileDeleter implements Closeable {
 
       // Tell policy so it can remove commits:// 在ES中，将跑到CombinedDeletionPolicy中
       policy.onCommit(commits); // KeepOnlyLastCommitDeletionPolicy 告诉可以删除commit了
-
+      // policy.onCommit()和deleteCommits是一起用的
       // Decref files for commits that were deleted by the policy:
-      deleteCommits(); // 会删除旧提交的commit
+      deleteCommits(); // 会删除所有旧的commit
     } else {
       // DecRef old files from the last checkpoint, if any:
       try {
@@ -748,7 +748,7 @@ final class IndexFileDeleter implements Closeable {
     String segmentsFileName; // segments_n
     boolean deleted; // 默认没有删除
     Directory directoryOrig;
-    Collection<CommitPoint> commitsToDelete;// 默认为，若被删除的话，则放的是本身
+    Collection<CommitPoint> commitsToDelete;//在commit阶段，若小于安全点的commit, 都会被删除。 若被删除的话，则放的是本身
     long generation;
     final Map<String,String> userData;
     private final int segmentCount;

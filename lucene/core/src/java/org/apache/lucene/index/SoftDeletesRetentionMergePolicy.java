@@ -34,7 +34,7 @@ import org.apache.lucene.search.Weight;
 import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.FixedBitSet;
 import org.apache.lucene.util.IOSupplier;
-
+// mergePolicy=ElasticsearchMergePolicy(ShuffleForcedMergePolicy(RecoverySourcePruneMergePolicy(SoftDeletesRetentionMergePolicy(PrunePostingsMergePolicy(EsTieredMergePolicy([TieredMergePolicy: maxMergeAtOnce=10, maxMergeAtOnceExplicit=30, maxMergedSegmentMB=5120.0, floorSegmentMB=2.0, forceMergeDeletesPctAllowed=10.0, segmentsPerTier=10.0, maxCFSSegmentSizeMB=8.796093022207999E12, noCFSRatio=0.1, deletesPctAllowed=33.0))))))， MergeTrigger=FULL_FLUSH
 /**
  * This {@link MergePolicy} allows to carry over soft deleted documents across merges. The policy wraps
  * the merge reader and marks documents as "live" that have a value in the soft delete field and match the

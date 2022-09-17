@@ -241,7 +241,7 @@ public abstract class IndexReader implements Closeable {
       closed = true;
       try (Closeable finalizer = this::reportCloseToParentReaders;
             Closeable finalizer1 = this::notifyReaderClosedListeners) {
-        doClose();
+        doClose();// 可以跑到StandardDirectoryReader.doClose()
       }
     } else if (rc < 0) {
       throw new IllegalStateException("too many decRef calls: refCount is " + rc + " after decrement");

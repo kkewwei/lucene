@@ -505,13 +505,13 @@ final class DocumentsWriter implements Closeable, Accountable {// 在索引的�
         /*
          * Now we are done and try to flush the ticket queue if the head of the
          * queue has already finished the flush.
-         */ // 正在合并的Segment>待合并的segment,
+         */ // 排队合并的Segment>可以写入的DocumentsWriterPerThread个数
         if (ticketQueue.getTicketCount() >= perThreadPool.size()) {
           // This means there is a backlog: the one// 积压了，那么就不再flush产生别的segment
           // thread in innerPurge can't keep up with all
           // other threads flushing segments.  In this case
           // we forcefully stall the producers.
-          flushNotifications.onTicketBacklog(); // 会进入IndexWriter 395行的onTicketBacklog()，增加一个事件
+          flushNotifications.onTicketBacklog(); // 会进入IndexWriter 395行的 onTicketBacklog()，增加一个事件
           break; // 那么就直接退出，避免产生新的segment，让当前线程帮忙publish,然后再继续flush DWPT
         }
       } finally {
@@ -520,8 +520,8 @@ final class DocumentsWriter implements Closeable, Accountable {// 在索引的�
       // 若有堆积(前面4行有个break，有堆积，就不会跳过)，会不再flush
       flushingDWPT = flushControl.nextPendingFlush();
     }
-    // 刷新后，会将新产生的段放入IndexWriter的segmentInfos中（）
-    if (hasEvents) { // 有需要处理的事件
+   
+    if (hasEvents) {//  刷新后，会将新产生的段放入IndexWriter的 segmentInfos 中。后面查询就可以使用新的segmentInfos了
       flushNotifications.afterSegmentsFlushed(); // 将跑到IndexWriter$FlushNotifications.afterSegmentsFlushed()(在IndexWriter中)
     } //实际跑到的是IndexWriter.publishFlushedSegments()中，帮忙publishFlushedSegments
 
@@ -660,7 +660,7 @@ final class DocumentsWriter implements Closeable, Accountable {// 在索引的�
         anythingFlushed |= doFlush(flushingDWPT); // 开始真正的flush
       }
       // If a concurrent flush is still in flight wait for it
-      flushControl.waitForFlush();  // 若有刷新的时候，就暂停继续了
+      flushControl.waitForFlush();  // 若有等待刷新的segment，就暂停继续了
       if (anythingFlushed == false && flushingDeleteQueue.anyChanges()) { // apply deletes if we did not flush any document
         if (infoStream.isEnabled("DW")) {
           infoStream.message("DW", Thread.currentThread().getName() + ": flush naked frozen global deletes");
@@ -690,7 +690,7 @@ final class DocumentsWriter implements Closeable, Accountable {// 在索引的�
       assert setFlushingDeleteQueue(null);
       if (success) {
         // Release the flush lock
-        flushControl.finishFullFlush(); // 
+        flushControl.finishFullFlush(); // 没啥用 
       } else {
         flushControl.abortFullFlushes();
       }

@@ -42,7 +42,7 @@ import org.apache.lucene.util.Bits;
  <code>IndexReader</code> instance; use your own
  (non-Lucene) objects instead.
 */
-public abstract class LeafReader extends IndexReader {
+public abstract class LeafReader extends IndexReader {// 一个shard
 
   private final LeafReaderContext readerContext = new LeafReaderContext(this);
 

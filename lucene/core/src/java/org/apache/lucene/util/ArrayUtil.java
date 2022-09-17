@@ -476,7 +476,7 @@ public final class ArrayUtil {//数组作为一个对象，需要一定的内存
    * algorithm, but falls back to binary sort for small arrays.
    */ //
   public static <T extends Comparable<? super T>> void timSort(T[] a) {
-    timSort(a, 0, a.length);
+    timSort(a, 0, a.length);// 自然排序
   }
 
   /**

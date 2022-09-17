@@ -89,7 +89,7 @@ final class DocumentsWriterPerThreadPool implements Iterable<DocumentsWriterPerT
    */
   private synchronized DocumentsWriterPerThread newWriter() throws IOException {// 使用了并发控制，难道只能有一个线程获取takenThreadStatePermits
     assert takenWriterPermits >= 0;
-    while (takenWriterPermits > 0) {
+    while (takenWriterPermits > 0) { // 只能一直等待
       // we can't create new DWPTs while not all permits are available
       try {
         wait();
@@ -97,7 +97,7 @@ final class DocumentsWriterPerThreadPool implements Iterable<DocumentsWriterPerT
         throw new ThreadInterruptedException(ie);
       }
     }
-    DocumentsWriterPerThread dwpt = dwptFactory.get(); // 将跑到DocumentsWriter构造函数perThreadPool的构造中
+    DocumentsWriterPerThread dwpt = dwptFactory.get(); // 将跑到 DocumentsWriter 构造函数perThreadPool的构造中
     dwpt.lock(); // lock so nobody else will get this DWPT
     dwpts.add(dwpt);
     return dwpt;

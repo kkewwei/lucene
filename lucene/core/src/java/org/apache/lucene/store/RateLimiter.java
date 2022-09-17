@@ -79,7 +79,7 @@ public abstract class RateLimiter {
     @Override
     public void setMBPerSec(double mbPerSec) {
       this.mbPerSec = mbPerSec;
-      minPauseCheckBytes = (long) ((MIN_PAUSE_CHECK_MSEC / 1000.0) * mbPerSec * 1024 * 1024);
+      minPauseCheckBytes = (long) ((MIN_PAUSE_CHECK_MSEC / 1000.0) * mbPerSec * 1024 * 1024);// 每次写5ms, 检查一次速度
     }
 
     @Override

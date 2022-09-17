@@ -40,12 +40,12 @@ import org.apache.lucene.store.AlreadyClosedException;
  * @lucene.experimental
  */
 public abstract class ReferenceManager<G> implements Closeable {
-
+ //有ExternalReaderManager externalReaderManager和ElasticsearchReaderManager internalReaderManager 两种实现，只是externalReaderManager.current=internalReaderManager.current
   private static final String REFERENCE_MANAGER_IS_CLOSED_MSG = "this ReferenceManager is closed";
    // 可进RamAccountingRefreshListener里查看ElasticsearchDirectoryReader， ElasticsearchLeafReader, SegmentReader关系
-  protected volatile G current; //ElasticsearchDirectoryReader。每当refresh完成后，就会根据维护的IndexWriter.segmentInfos产生新的ElasticsearchDirectoryReader，然后每次查询，都会使用最新的segents
+  protected volatile G current; // ElasticsearchDirectoryReader。每当refresh完成后，就会根据维护的IndexWriter.segmentInfos产生新的ElasticsearchDirectoryReader，然后每次查询，都会使用最新的segents
   // 任何时候只允许有一个线程在refresh。主要semgent变动，那么ElasticsearchDirectoryReader也会产生新的。一变缓存也将失效
-  private final Lock refreshLock = new ReentrantLock(); // refresh线程，只允许一个线程refresh
+  private final Lock refreshLock = new ReentrantLock(); // refresh线程，只允许一个线程refresh（可重入锁）
 
   private final List<RefreshListener> refreshListeners = new CopyOnWriteArrayList<>(); // RefreshListeners和CompletionStatsCache
 
@@ -59,7 +59,7 @@ public abstract class ReferenceManager<G> implements Closeable {
     ensureOpen();
     final G oldReference = current;
     current = newReference;
-    release(oldReference);
+    release(oldReference);// 释放依次引用
   }
 
   /**
@@ -97,8 +97,8 @@ public abstract class ReferenceManager<G> implements Closeable {
       if ((ref = current) == null) {
         throw new AlreadyClosedException(REFERENCE_MANAGER_IS_CLOSED_MSG);
       }
-      if (tryIncRef(ref)) { // 这里增加一次引用。一般都会成功
-        return ref;
+      if (tryIncRef(ref)) { // 这里增加一次引用。一般都会成功 。查询时也会进来，
+        return ref;// ElasticsearchDirectoryReader
       }
       if (getRefCount(ref) == 0 && current == ref) {
         assert ref != null;
@@ -170,7 +170,7 @@ public abstract class ReferenceManager<G> implements Closeable {
     refreshLock.lock(); // 本不需要，做这个是为了防止一个偶发的bug，我们假设只有maybeRefreshBlocking和maybeRefresh调用这个函数，但是不能保证这个函数别别的地方乱调用，为了以防万一，才加上的
     boolean refreshed = false;
     try {
-      final G reference = acquire(); // IndexSearcher，就是当前正在使用的索引
+      final G reference = acquire(); // ElasticsearchDirectoryReader，每refresh一次，就产生一个新的
       try {
         notifyRefreshListenersBefore(); // 会进一次LiveVersionMap.beforeRefresh。RefreshMetricUpdater.beforeRefresh、RefreshListeners.beforeRefresh()
         G newReference = refreshIfNeeded(reference); // 重要函数，会进入ElasticsearchReaderManager，产生新的ElasticsearchDirectoryReader，会触发主动merge操作
@@ -271,7 +271,7 @@ public abstract class ReferenceManager<G> implements Closeable {
    */
   public final void release(G reference) throws IOException {
     assert reference != null;
-    decRef(reference);
+    decRef(reference);// 跑到 ElasticsearchReaderManager.decRef()
   }
 
   private void notifyRefreshListenersBefore() throws IOException {

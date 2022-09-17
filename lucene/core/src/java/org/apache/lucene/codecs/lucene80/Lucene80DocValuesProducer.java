@@ -1514,9 +1514,9 @@ final class Lucene80DocValuesProducer extends DocValuesProducer implements Close
     final RandomAccessInput slice; // 2 slices to avoid cache thrashing when using rank
     final RandomAccessInput rankSlice;
     final NumericEntry entry;
-    final int shift;
-    final long mul;
-    final int mask;
+    final int shift;// 14
+    final long mul; // 1
+    final int mask; // 16383
 
     long block = -1;
     long delta;
@@ -1533,7 +1533,7 @@ final class Lucene80DocValuesProducer extends DocValuesProducer implements Close
       mul = entry.gcd;
       mask = (1 << shift) - 1;
     }
-
+    // 查找segment内文档编号为index对应的?
     long getLongValue(long index) throws IOException {
       final long block = index >>> shift;
       if (this.block != block) {

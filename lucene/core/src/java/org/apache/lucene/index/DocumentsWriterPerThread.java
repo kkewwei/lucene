@@ -145,7 +145,7 @@ final class DocumentsWriterPerThread {// 由ThreadState拥有
   private final FieldInfos.Builder fieldInfos;
   private final InfoStream infoStream; // LoggerInfoStream，控制了lucene日志在es中打印
   private int numDocsInRAM;  // 该DWPT在内存中写的数据量，索引结构已经建立。每es flush一次，该对象就新产生一个
-  final DocumentsWriterDeleteQueue deleteQueue; // 一个DocuentsWriter会私下产生一个DocumentsWriterFlushQueue
+  final DocumentsWriterDeleteQueue deleteQueue; // 一个DocuentsWriter会唯一会维持一个DocumentsWriterFlushQueue
   private final DeleteSlice deleteSlice; //每个DocumentsWriterPerThread自己拥有的
   private final NumberFormat nf = NumberFormat.getInstance(Locale.ROOT);
   final Allocator byteBlockAllocator; // 默认使用DirectTrackingAllocator，和IntBlockAllocator使用同一个SerialCounter统计内存使用情况。
@@ -245,7 +245,7 @@ final class DocumentsWriterPerThread {// 由ThreadState拥有
       maybeAbort("updateDocuments", flushNotifications);
     }
   }
-  
+  // docIdUpTo: 写该文档之前的docId
   private long finishDocuments(DocumentsWriterDeleteQueue.Node<?> deleteNode, int docIdUpTo) {
     /*
      * here we actually finish the document in two steps 1. push the delete into
@@ -319,7 +319,7 @@ final class DocumentsWriterPerThread {// 由ThreadState拥有
    */
   FrozenBufferedUpdates prepareFlush() {
     assert numDocsInRAM > 0;
-    final FrozenBufferedUpdates globalUpdates = deleteQueue.freezeGlobalBuffer(deleteSlice); // 冻结了全局的，作用于其他段（私有FrozenBufferedUpdates会作用于当前段）
+    final FrozenBufferedUpdates globalUpdates = deleteQueue.freezeGlobalBuffer(deleteSlice); // 冻结了旧的（全局的），作用于其他段（私有FrozenBufferedUpdates会作用于当前段）
     /* deleteSlice can possibly be null if we have hit non-aborting exceptions during indexing and never succeeded 
     adding a document. */
     if (deleteSlice != null) {
@@ -371,7 +371,7 @@ final class DocumentsWriterPerThread {// 由ThreadState拥有
     final Sorter.DocMap sortMap;
     try {
       DocIdSetIterator softDeletedDocs;
-      if (getIndexWriterConfig().getSoftDeletesField() != null) {
+      if (getIndexWriterConfig().getSoftDeletesField() != null) {// 有字段__soft_deletes
         softDeletedDocs = consumer.getHasDocValues(getIndexWriterConfig().getSoftDeletesField());
       } else {
         softDeletedDocs = null; // 到这里
@@ -446,7 +446,7 @@ final class DocumentsWriterPerThread {// 由ThreadState拥有
       }
     }
   }
-  
+  //  准备删除的文件
   private final Set<String> filesToDelete = new HashSet<>(); // 12个索引文件
   
   Set<String> pendingFilesToDelete() {
@@ -472,10 +472,10 @@ final class DocumentsWriterPerThread {// 由ThreadState拥有
   void sealFlushedSegment(FlushedSegment flushedSegment, Sorter.DocMap sortMap, DocumentsWriter.FlushNotifications flushNotifications) throws IOException {
     assert flushedSegment != null;
     SegmentCommitInfo newSegment = flushedSegment.segmentInfo;
-
+    
     IndexWriter.setDiagnostics(newSegment.info, IndexWriter.SOURCE_FLUSH);
     
-    IOContext context = new IOContext(new FlushInfo(newSegment.info.maxDoc(), newSegment.sizeInBytes()));
+    IOContext context = new IOContext(new FlushInfo(newSegment.info.maxDoc(), newSegment.sizeInBytes()));//sizeInBytes：每个文件的累加值 
 
     boolean success = false;
     try {
