@@ -51,7 +51,7 @@ public abstract class DataOutput {
    * @see DataInput#readBytes(byte[],int,int)
    */
   public void writeBytes(byte[] b, int length) throws IOException {
-    writeBytes(b, 0, length);
+    writeBytes(b, 0, length); // 到这里
   }
 
   /**
@@ -200,7 +200,7 @@ public abstract class DataOutput {
       writeByte((byte) ((i & 0x7F) | 0x80));
       i >>>= 7;
     }
-    writeByte((byte) i);
+    writeByte((byte) i);// 一般都有缓存，buffer缓存8k大小
   }
 
   /**
@@ -276,18 +276,18 @@ public abstract class DataOutput {
 
   private static final int COPY_BUFFER_SIZE = 16384;
   private byte[] copyBuffer;
-
+  // 可以是RateLimitedIndexOutput，在merge的时候会用，这里会限速
   /** Copy numBytes bytes from input to ourself. */
   public void copyBytes(DataInput input, long numBytes) throws IOException {
     assert numBytes >= 0 : "numBytes=" + numBytes;
     long left = numBytes;
-    if (copyBuffer == null) copyBuffer = new byte[COPY_BUFFER_SIZE];
+    if (copyBuffer == null) copyBuffer = new byte[COPY_BUFFER_SIZE]; // 一次读取16kb
     while (left > 0) {
       final int toCopy;
       if (left > COPY_BUFFER_SIZE) toCopy = COPY_BUFFER_SIZE;
-      else toCopy = (int) left;
-      input.readBytes(copyBuffer, 0, toCopy);
-      writeBytes(copyBuffer, 0, toCopy);
+      else toCopy = (int) left;// 一次读取16k数据
+      input.readBytes(copyBuffer, 0, toCopy);//input=ByteBufferIndexInput$SingleBufferImpl
+      writeBytes(copyBuffer, 0, toCopy);// 这里会限速，将跑到RateLimitedIndexOutput
       left -= toCopy;
     }
   }

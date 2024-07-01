@@ -23,7 +23,7 @@ import java.util.Collections;
 /**
  * A Scorer for queries with a required subscorer and an excluding (prohibited) sub {@link Scorer}.
  */
-class ReqExclScorer extends Scorer {
+class ReqExclScorer extends Scorer { // 有must_not的话，// 这个主要是从必须里面去掉must_not
 
   private final Scorer reqScorer;
   // approximations of the scorers, or the scorers themselves if they don't support approximations
@@ -39,7 +39,7 @@ class ReqExclScorer extends Scorer {
    * @param reqScorer The scorer that must match, except where
    * @param exclScorer indicates exclusion.
    */
-  public ReqExclScorer(Scorer reqScorer, Scorer exclScorer) {
+  public ReqExclScorer(Scorer reqScorer, Scorer exclScorer) {// 排除的score
     this.reqScorer = reqScorer;
     reqTwoPhaseIterator = reqScorer.twoPhaseIterator();
     if (reqTwoPhaseIterator == null) {
@@ -172,11 +172,11 @@ class ReqExclScorer extends Scorer {
 
         @Override
         public boolean matches() throws IOException {
-          final int doc = reqApproximation.docID();
+          final int doc = reqApproximation.docID();//先拿出来一个文档必须匹配的
           // check if the doc is not excluded
-          int exclDoc = exclApproximation.docID();
+          int exclDoc = exclApproximation.docID();// must_not
           if (exclDoc < doc) {
-            exclDoc = exclApproximation.advance(doc);
+            exclDoc = exclApproximation.advance(doc);// 从must_not中找到一个不小于doc的文档。
           }
           if (exclDoc != doc) {
             return matchesOrNull(reqTwoPhaseIterator);

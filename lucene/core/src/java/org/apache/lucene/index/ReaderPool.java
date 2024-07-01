@@ -36,15 +36,15 @@ import org.apache.lucene.util.CollectionUtil;
 import org.apache.lucene.util.IOUtils;
 import org.apache.lucene.util.InfoStream;
 
-/**
+/**   IndexWriter使用SegmentReaders有三个目的：1.删除、更新操作. 2.合并   3.分发实时reader
  * Holds shared SegmentReader instances. IndexWriter uses SegmentReaders for 1) applying deletes/DV
  * updates, 2) doing merges, 3) handing out a real-time reader. This pool reuses instances of the
  * SegmentReaders in all these places if it is in "near real-time mode" (getReader() has been called
  * on this instance).
  */
-final class ReaderPool implements Closeable {
-
-  private final Map<SegmentCommitInfo, ReadersAndUpdates> readerMap = new HashMap<>();
+final class ReaderPool implements Closeable { // 详见https://www.amazingkoala.com.cn/Lucene/Index/2020/1209/184.html介绍，非常牛逼
+  // ReaderPool描述了所有SegmentCommitInfo的信息，在本篇文章中我们只需要知道，ReaderPool类中包含了一个容器:readerMap
+  private final Map<SegmentCommitInfo, ReadersAndUpdates> readerMap = new HashMap<>();// 存放所有SegmentReader的地方
   private final Directory directory;
   private final Directory originalDirectory;
   private final FieldInfos.FieldNumbers fieldNumbers;
@@ -64,7 +64,7 @@ final class ReaderPool implements Closeable {
   // readers.
   // in practice this should be called once the readers are likely
   // to be needed and reused ie if IndexWriter#getReader is called.
-  private volatile boolean poolReaders;
+  private volatile boolean poolReaders; //es和Lucene都为true，只要设置为true, 就永远不会再被设置为false, 没有=false的代码
   private final AtomicBoolean closed = new AtomicBoolean(false);
 
   ReaderPool(
@@ -84,7 +84,7 @@ final class ReaderPool implements Closeable {
     this.completedDelGenSupplier = completedDelGenSupplier;
     this.infoStream = infoStream;
     this.softDeletesField = softDeletesField;
-    if (reader != null) {
+    if (reader != null) { // 为null
       // Pre-enroll all segment readers into the reader pool; this is necessary so
       // any in-memory NRT live docs are correctly carried over, and so NRT readers
       // pulled from this IW share the same segment reader:
@@ -165,7 +165,7 @@ final class ReaderPool implements Closeable {
    * #release(ReadersAndUpdates, boolean)} until the segment get dropped via calls to {@link
    * #drop(SegmentCommitInfo)} or {@link #dropAll()} or {@link #close()}. Reader pooling is disabled
    * upon construction but can't be disabled again once it's enabled.
-   */
+   */// 一旦这些SemgentReader（包含在readerMap里）决定被共享，那么就设置为true
   void enableReaderPooling() {
     poolReaders = true;
   }
@@ -185,7 +185,7 @@ final class ReaderPool implements Closeable {
     // Matches incRef in get:
     rld.decRef();
 
-    if (rld.refCount() == 0) {
+    if (rld.refCount() == 0) { // 若没人引用，则释放
       // This happens if the segment was just merged away,
       // while a buffered deletes packet was still applying deletes/updates to it.
       assert readerMap.containsKey(rld.info) == false
@@ -236,7 +236,7 @@ final class ReaderPool implements Closeable {
    * Writes all doc values updates to disk if there are any.
    *
    * @return <code>true</code> iff any files where written
-   */
+   */ // 将更新的文档写入磁盘，同时打开新的SegmentReader，以便软删除生效
   boolean writeAllDocValuesUpdates() throws IOException {
     Collection<ReadersAndUpdates> copy;
     synchronized (this) {
@@ -341,17 +341,17 @@ final class ReaderPool implements Closeable {
    * Commit live docs changes for the segment readers for the provided infos.
    *
    * @throws IOException If there is a low-level I/O error
-   */
+   */ // 1.提交_n.live文件   2.提交docValueUpdate文件修改
   synchronized boolean commit(SegmentInfos infos) throws IOException {
     boolean atLeastOneChange = false;
     for (SegmentCommitInfo info : infos) {
       final ReadersAndUpdates rld = readerMap.get(info);
       if (rld != null) {
         assert rld.info == info;
-        boolean changed = rld.writeLiveDocs(directory);
+        boolean changed = rld.writeLiveDocs(directory); // 这个segment的_n.liv文件产生，不一定落到了pageCache中
         changed |=
             rld.writeFieldUpdates(
-                directory, fieldNumbers, completedDelGenSupplier.getAsLong(), infoStream);
+                directory, fieldNumbers, completedDelGenSupplier.getAsLong(), infoStream); // 写docValueUpdate文件
 
         if (changed) {
           // Make sure we only write del docs for a live segment:
@@ -389,7 +389,7 @@ final class ReaderPool implements Closeable {
    * Obtain a ReadersAndLiveDocs instance from the readerPool. If create is true, you must later
    * call {@link #release(ReadersAndUpdates, boolean)}.
    */
-  synchronized ReadersAndUpdates get(SegmentCommitInfo info, boolean create) {
+  synchronized ReadersAndUpdates get(SegmentCommitInfo info, boolean create) {// 打开某个是互斥了的
     assert info.info.dir == originalDirectory
         : "info.dir=" + info.info.dir + " vs " + originalDirectory;
     if (closed.get()) {
@@ -399,9 +399,9 @@ final class ReaderPool implements Closeable {
 
     ReadersAndUpdates rld = readerMap.get(info);
     if (rld == null) {
-      if (create == false) {
+      if (create == false) { // 没有就算了
         return null;
-      }
+      }// 没有这个segment的ReadersAndUpdates。若可以创建的话，就创建下。后面会检查该类的reader，没值会直接去赋值
       rld =
           new ReadersAndUpdates(
               segmentInfos.getIndexCreatedVersionMajor(), info, newPendingDeletes(info));
@@ -419,7 +419,7 @@ final class ReaderPool implements Closeable {
               + assertInfoIsLive(info);
     }
 
-    if (create) {
+    if (create) { // 创建的时候，引用技术
       // Return ref to caller:
       rld.incRef();
     }

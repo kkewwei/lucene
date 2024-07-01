@@ -31,14 +31,14 @@ final class ByteSliceReader extends DataInput {
   ByteBlockPool pool;
   int bufferUpto;
   byte[] buffer;
-  public int upto;
-  int limit;
+  public int upto; // bytePool内部长度
+  int limit; // 当前slice可以读取到的最大值
   int level;
-  public int bufferOffset;
+  public int bufferOffset; // 这个bytePool在所有buffer[]中的绝对起始位置
 
-  public int endIndex;
-
-  public void init(ByteBlockPool pool, int startIndex, int endIndex) {
+  public int endIndex; // 当前变长数组的终点位置
+  // startIndex 和 endIndex都是绝对位置
+  public void init(ByteBlockPool pool, int startIndex, int endIndex) { // 读取第i个stream的value
 
     assert endIndex - startIndex >= 0;
     assert startIndex >= 0;
@@ -49,16 +49,16 @@ final class ByteSliceReader extends DataInput {
 
     level = 0;
     bufferUpto = startIndex / ByteBlockPool.BYTE_BLOCK_SIZE;
-    bufferOffset = bufferUpto * ByteBlockPool.BYTE_BLOCK_SIZE;
+    bufferOffset = bufferUpto * ByteBlockPool.BYTE_BLOCK_SIZE;// 偏移量
     buffer = pool.getBuffer(bufferUpto);
     upto = startIndex & ByteBlockPool.BYTE_BLOCK_MASK;
 
-    final int firstSize = ByteSlicePool.LEVEL_SIZE_ARRAY[0];
+    final int firstSize = ByteSlicePool.LEVEL_SIZE_ARRAY[0];// 5
 
-    if (startIndex + firstSize >= endIndex) {
+    if (startIndex + firstSize >= endIndex) {// 就是在一个slice之内
       // There is only this one slice to read
       limit = endIndex & ByteBlockPool.BYTE_BLOCK_MASK;
-    } else limit = upto + firstSize - 4;
+    } else limit = upto + firstSize - 4;// 多级slice, 说的是跳过那4个byte(往前推4位)
   }
 
   public boolean eof() {
@@ -70,7 +70,7 @@ final class ByteSliceReader extends DataInput {
   public byte readByte() {
     assert !eof();
     assert upto <= limit;
-    if (upto == limit) nextSlice();
+    if (upto == limit) nextSlice();//这个buffer读完了，接着到下一个buffer
     return buffer[upto++];
   }
 
@@ -91,13 +91,13 @@ final class ByteSliceReader extends DataInput {
 
     return size;
   }
-
+   // 读取下一个slice，变长数组上一个slice读取完了
   public void nextSlice() {
-
+    // 下一个级别，读取4位组成的地址
     // Skip to our next slice
     final int nextIndex = (int) BitUtil.VH_LE_INT.get(buffer, limit);
 
-    level = ByteSlicePool.NEXT_LEVEL_ARRAY[level];
+    level = ByteSlicePool.NEXT_LEVEL_ARRAY[level];// 当前级别size
     final int newSize = ByteSlicePool.LEVEL_SIZE_ARRAY[level];
 
     bufferUpto = nextIndex / ByteBlockPool.BYTE_BLOCK_SIZE;

@@ -42,8 +42,8 @@ public final class TermStates {
 
   // Important: do NOT keep hard references to index readers
   private final Object topReaderContextIdentity;
-  private final TermState[] states;
-  private final Term term; // null if stats are to be used
+  private final TermState[] states; // 该shard拥有的segment个数
+  private final Term term; // null if stats are to be used 如果term不打分，那么term就为null
   private int docFreq;
   private long totalTermFreq;
 
@@ -54,7 +54,7 @@ public final class TermStates {
     topReaderContextIdentity = context.identity;
     docFreq = 0;
     totalTermFreq = 0;
-    states = new TermState[context.leaves().size()];
+    states = new TermState[context.leaves().size()];// 该shard上的segment个数
     this.term = term;
   }
 
@@ -98,22 +98,22 @@ public final class TermStates {
     IndexReaderContext context = indexSearcher.getTopReaderContext();
     assert context != null;
     final TermStates perReaderTermState = new TermStates(needsStats ? null : term, context);
-    if (needsStats) {
+    if (needsStats) {// 打分的话就会进来
       PendingTermLookup[] pendingTermLookups = new PendingTermLookup[0];
-      for (LeafReaderContext ctx : context.leaves()) {
-        Terms terms = Terms.getTerms(ctx.reader(), term.field());
-        TermsEnum termsEnum = terms.iterator();
+      for (LeafReaderContext ctx : context.leaves()) {// 每个segment都使用一个线程读取, 顺序遍历该shard上每个segment
+        Terms terms = Terms.getTerms(ctx.reader(), term.field());// 返回 Lucene90BlockTreeTermsReader
+        TermsEnum termsEnum = terms.iterator();// 开始遍历这个segment的所有terms
         // Schedule the I/O in the terms dictionary in the background.
-        IOBooleanSupplier termExistsSupplier = termsEnum.prepareSeekExact(term.bytes());
+        IOBooleanSupplier termExistsSupplier = termsEnum.prepareSeekExact(term.bytes());// 同时定位到这个节点
         if (termExistsSupplier != null) {
           pendingTermLookups = ArrayUtil.grow(pendingTermLookups, ctx.ord + 1);
           pendingTermLookups[ctx.ord] = new PendingTermLookup(termsEnum, termExistsSupplier);
         }
       }
-      for (int ord = 0; ord < pendingTermLookups.length; ++ord) {
+      for (int ord = 0; ord < pendingTermLookups.length; ++ord) {// 每个segment 一个统计信息
         PendingTermLookup pendingTermLookup = pendingTermLookups[ord];
         if (pendingTermLookup != null && pendingTermLookup.supplier.get()) {
-          TermsEnum termsEnum = pendingTermLookup.termsEnum();
+          TermsEnum termsEnum = pendingTermLookup.termsEnum();// 从tim中查找了该term的倒排索引结构,  // 遍历FST结构
           perReaderTermState.register(
               termsEnum.termState(), ord, termsEnum.docFreq(), termsEnum.totalTermFreq());
         }
@@ -136,7 +136,7 @@ public final class TermStates {
   public void register(
       TermState state, final int ord, final int docFreq, final long totalTermFreq) {
     register(state, ord);
-    accumulateStatistics(docFreq, totalTermFreq);
+    accumulateStatistics(docFreq, totalTermFreq);// 统计所有segment的词频等信息
   }
 
   /**
@@ -175,7 +175,7 @@ public final class TermStates {
   public IOSupplier<TermState> get(LeafReaderContext ctx) throws IOException {
     assert ctx.ord >= 0 && ctx.ord < states.length;
     if (term == null) {
-      if (states[ctx.ord] == null) {
+      if (states[ctx.ord] == null) {// 这个term还没有读取出来
         return null;
       } else {
         return () -> states[ctx.ord];

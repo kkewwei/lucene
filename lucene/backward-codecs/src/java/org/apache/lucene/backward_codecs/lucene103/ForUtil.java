@@ -76,9 +76,9 @@ public final class ForUtil {
       arr[64 + i] = l & 0xFFFF;
     }
   }
-
-  static void collapse16(int[] arr) {
-    for (int i = 0; i < 64; ++i) {
+  // 是说int个数=128，算是一个block
+  static void collapse16(int[] arr) {// 一个只占用16 bit
+    for (int i = 0; i < 64; ++i) {//128个doc的，分两批
       arr[i] = (arr[i] << 16) | arr[64 + i];
     }
   }
@@ -99,14 +99,14 @@ public final class ForUtil {
     }
     encode(ints, bitsPerValue, nextPrimitive, out, tmp);
   }
-
+  // 咋编码的？
   static void encode(int[] ints, int bitsPerValue, int primitiveSize, DataOutput out, int[] tmp)
       throws IOException {
     final int numInts = BLOCK_SIZE * primitiveSize / Integer.SIZE;
 
     final int numIntsPerShift = bitsPerValue * 4;
     int idx = 0;
-    int shift = primitiveSize - bitsPerValue;
+    int shift = primitiveSize - bitsPerValue;// 还有多少为空闲的
     for (int i = 0; i < numIntsPerShift; ++i) {
       tmp[i] = ints[idx++] << shift;
     }

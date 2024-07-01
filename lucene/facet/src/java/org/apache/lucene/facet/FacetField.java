@@ -28,7 +28,7 @@ import org.apache.lucene.facet.taxonomy.TaxonomyWriter;
  * <p><b>NOTE:</b> you must call {@link FacetsConfig#build(Document)} before you add the document to
  * IndexWriter.
  */
-public class FacetField extends Field {
+public class FacetField extends Field {// 主要是两种字段类型：FacetField和SortedSetDocValuesFacetField
 
   /**
    * Field type used for storing facet values. Actual field type used for indexing is determined in

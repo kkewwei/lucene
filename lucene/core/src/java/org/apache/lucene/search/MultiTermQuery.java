@@ -49,7 +49,7 @@ import org.apache.lucene.util.AttributeSource;
  * <p>Note that org.apache.lucene.queryparser.classic.QueryParser produces MultiTermQueries using
  * {@link #CONSTANT_SCORE_REWRITE} by default.
  */
-public abstract class MultiTermQuery extends Query {
+public abstract class MultiTermQuery extends Query {//被这些继承：AutomatonQuery， FuzzyQuery， PrefixQuery，RegexpQuery，TermRangeQuery，TermsQuery，WildcardQuery
   protected final String field;
   protected final RewriteMethod rewriteMethod;
 
@@ -83,13 +83,13 @@ public abstract class MultiTermQuery extends Query {
    * cost terms, {@link #CONSTANT_SCORE_REWRITE} may be more performant. While for some use-cases
    * with all high cost terms, {@link #CONSTANT_SCORE_BOOLEAN_REWRITE} may be better.
    */
-  public static final RewriteMethod CONSTANT_SCORE_BLENDED_REWRITE =
+  public static final RewriteMethod CONSTANT_SCORE_BLENDED_REWRITE =// constant_scrore_rewrite
       new RewriteMethod() {
         @Override
         public Query rewrite(IndexSearcher indexSearcher, MultiTermQuery query) {
           return new MultiTermQueryConstantScoreBlendedWrapper<>(query);
-        }
-      };
+        }// PrefixQuery等查询query调用rewrite时就自动跑到这里了。
+      };//  PrefixQuery这些算子的REWRITE函数默认就是这个
 
   /**
    * A rewrite method that first creates a private Filter, by visiting each term in sequence and

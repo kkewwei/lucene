@@ -53,11 +53,11 @@ public class SuggestField extends Field {
   public static final FieldType FIELD_TYPE = new FieldType();
 
   static {
-    FIELD_TYPE.setTokenized(true);
+    FIELD_TYPE.setTokenized(true); // 分词
     FIELD_TYPE.setStored(false);
     FIELD_TYPE.setStoreTermVectors(false);
     FIELD_TYPE.setOmitNorms(false);
-    FIELD_TYPE.setIndexOptions(IndexOptions.DOCS_AND_FREQS_AND_POSITIONS);
+    FIELD_TYPE.setIndexOptions(IndexOptions.DOCS_AND_FREQS_AND_POSITIONS);//变成position
     FIELD_TYPE.freeze();
   }
 

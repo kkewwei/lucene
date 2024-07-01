@@ -491,7 +491,7 @@ public abstract class LogMergePolicy extends MergePolicy {
    * allowing the {@link MergeScheduler} to use concurrency.
    */
   @Override
-  public MergeSpecification findMerges(
+  public MergeSpecification findMerges( // 发现merge
       MergeTrigger mergeTrigger, SegmentInfos infos, MergeContext mergeContext) throws IOException {
 
     final int numSegments = infos.size();

@@ -75,7 +75,7 @@ public class PhraseQuery extends Query {
 
     private int slop;
     private int maxTerms;
-    private final List<Term> terms;
+    private final List<Term> terms; // "query": "this is a test"，然后被分词
     private final IntArrayList positions;
 
     /** Sole constructor. */
@@ -446,8 +446,8 @@ public class PhraseQuery extends Query {
   public static float termPositionsCost(TermsEnum termsEnum) throws IOException {
     int docFreq = termsEnum.docFreq();
     assert docFreq > 0;
-    long totalTermFreq = termsEnum.totalTermFreq();
-    float expOccurrencesInMatchingDoc = totalTermFreq / (float) docFreq;
+    long totalTermFreq = termsEnum.totalTermFreq();// 词出现的频率
+    float expOccurrencesInMatchingDoc = totalTermFreq / (float) docFreq;// 每个文档平均词的个数
     return TERM_POSNS_SEEK_OPS_PER_DOC + expOccurrencesInMatchingDoc * TERM_OPS_PER_POS;
   }
 
@@ -517,11 +517,11 @@ public class PhraseQuery extends Query {
         final TermsEnum te = fieldTerms.iterator();
         float totalMatchCost = 0;
 
-        for (int i = 0; i < terms.length; i++) {
+        for (int i = 0; i < terms.length; i++) {// 遍历分词后的每个term，必须全部匹配
           final Term t = terms[i];
           final IOSupplier<TermState> supplier = states[i].get(context);
           final TermState state = supplier == null ? null : supplier.get();
-          if (state == null) {
+          if (state == null) {// 若有一个词不在里面，就认为不满足
             /* term doesnt exist in this segment */
             assert termNotInReader(reader, t) : "no termstate found but term exists in reader";
             return null;
@@ -543,7 +543,7 @@ public class PhraseQuery extends Query {
         }
 
         // sort by increasing docFreq order
-        if (slop == 0) {
+        if (slop == 0) {// 若是slop为0，就比较简单
           ArrayUtil.timSort(postingsFreqs);
           return new ExactPhraseMatcher(postingsFreqs, scoreMode, scorer, totalMatchCost);
         } else {
@@ -576,7 +576,7 @@ public class PhraseQuery extends Query {
       maxPosition = positions[positions.length - 1];
     }
     String[] pieces = new String[maxPosition + 1];
-    for (int i = 0; i < terms.length; i++) {
+    for (int i = 0; i < terms.length; i++) {// 遍历分词后的每个term，必须全部匹配
       int pos = positions[i];
       String s = pieces[pos];
       if (s == null) {

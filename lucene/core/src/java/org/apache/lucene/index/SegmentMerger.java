@@ -118,7 +118,7 @@ final class SegmentMerger {
     }
     mergeFieldInfos();
 
-    int numMerged = mergeWithLogging(this::mergeFields, "stored fields");
+    int numMerged = mergeWithLogging(this::mergeFields, "stored fields");// StoredFields合并，可能会发生merge中断,使用的是RateLimitedIndexOutput
     assert numMerged == mergeState.segmentInfo.maxDoc()
         : "numMerged="
             + numMerged
@@ -243,11 +243,11 @@ final class SegmentMerger {
    * @throws CorruptIndexException if the index is corrupt
    * @throws IOException if there is a low-level IO error
    */
-  private int mergeFields() throws IOException {
+  private int mergeFields() throws IOException {// merge合并，可能会发生merge中断
     MergeState mergeState = mergeState();
     try (StoredFieldsWriter fieldsWriter =
-        codec.storedFieldsFormat().fieldsWriter(directory, mergeState.segmentInfo, context)) {
-      return fieldsWriter.merge(mergeState);
+        codec.storedFieldsFormat().fieldsWriter(directory, mergeState.segmentInfo, context)) { // storedFieldsFormat()直接进入的是Lucene50StoredFieldsFormat.fieldsWriter(), 返回的是创建的CompressingStoredFieldsWriter
+      return fieldsWriter.merge(mergeState);// 进的是CompressingStoredFieldsWriter.merge()
     }
   }
 

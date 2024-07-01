@@ -68,7 +68,7 @@ public class Field implements IndexableField {
   protected final String name;
 
   /** Field's value */
-  protected Object fieldsData;
+  protected Object fieldsData;// 里面存放着编码后的数据，编码后的long
 
   /**
    * Expert: creates a field with no initial value. This is intended to be used by custom {@link
@@ -262,7 +262,7 @@ public class Field implements IndexableField {
    */
   @Override
   public String stringValue() {
-    if (fieldsData instanceof CharSequence || fieldsData instanceof Number) {
+    if (fieldsData instanceof CharSequence || fieldsData instanceof Number) { // 字符串或数字
       return fieldsData.toString();
     } else {
       return null;
@@ -469,7 +469,7 @@ public class Field implements IndexableField {
     }
 
     if (!fieldType().tokenized()) {
-      if (stringValue() != null) {
+      if (stringValue() != null) { // 是否是StringValue
         if (!(reuse instanceof StringTokenStream)) {
           // lazy init the TokenStream as it is heavy to instantiate
           // (attributes,...) if not needed
@@ -477,7 +477,7 @@ public class Field implements IndexableField {
         }
         ((StringTokenStream) reuse).setValue(stringValue());
         return reuse;
-      } else if (binaryValue() != null) {
+      } else if (binaryValue() != null) { // 是binaryValue
         if (!(reuse instanceof BinaryTokenStream)) {
           // lazy init the TokenStream as it is heavy to instantiate
           // (attributes,...) if not needed
@@ -489,13 +489,13 @@ public class Field implements IndexableField {
         throw new IllegalArgumentException("Non-Tokenized Fields must have a String value");
       }
     }
-
+    // 会跑到这里
     if (tokenStreamValue() != null) {
       return tokenStreamValue();
-    } else if (readerValue() != null) {
+    } else if (readerValue() != null) {// 值是Reader
       return analyzer.tokenStream(name(), readerValue());
-    } else if (stringValue() != null) {
-      return analyzer.tokenStream(name(), stringValue());
+    } else if (stringValue() != null) { // 值就是string
+      return analyzer.tokenStream(name(), stringValue()); // 这里就是开始进行的分词
     }
 
     throw new IllegalArgumentException(

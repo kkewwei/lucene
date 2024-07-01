@@ -54,7 +54,7 @@ class DeltaPackedLongValues extends PackedLongValues {
     private static final long BASE_RAM_BYTES_USED =
         RamUsageEstimator.shallowSizeOfInstance(Builder.class);
 
-    long[] mins;
+    long[] mins;  // 第几次压缩的最小值
 
     Builder(int pageSize, float acceptableOverheadRatio) {
       super(pageSize, acceptableOverheadRatio);
@@ -90,7 +90,7 @@ class DeltaPackedLongValues extends PackedLongValues {
         values[i] -= min;
       }
       super.pack(values, numValues, block, acceptableOverheadRatio);
-      mins[block] = min;
+      mins[block] = min; //
     }
 
     @Override

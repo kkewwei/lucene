@@ -48,30 +48,30 @@ public class Automaton implements Accountable, TransitionAccessor {
    * Where we next write to the int[] states; this increments by 2 for each added state because we
    * pack a pointer to the transitions array and a count of how many transitions leave the state.
    */
-  private int nextState;
+  private int nextState;// 还未使用的state的位置,是state*2的值
 
   /**
    * Where we next write to in int[] transitions; this increments by 3 for each added transition
    * because we pack min, max, dest in sequence.
    */
-  private int nextTransition;
+  private int nextTransition;// 一定是3的倍数，下个可直接写入数据的transition位置
 
   /**
    * Current state we are adding transitions to; the caller must add all transitions for this state
    * before moving onto another state.
    */
-  private int curState = -1;
+  private int curState = -1;// 一直记录的是当前正在进行的state。是去掉/2的state
 
   /**
    * Index in the transitions array, where this states leaving transitions are stored, or -1 if this
    * state has not added any transitions yet, followed by number of transitions.
    */
-  private int[] states;
-
-  private final BitSet isAccept;
+  private int[] states;//数组中使用固定的连续的两个数组元素来描述当前状态的两个信息。第一个信息：当前状态的第一个转移函数信息在transitions数组中的起始位置
+  // 第二个信息：当前状态的转移函数的数量
+  private final BitSet isAccept;//  设置状态位可接受，这里设置的目的是为了查询时能提前结束字符的比较
 
   /** Holds toState, min, max for each transition. */
-  private int[] transitions;
+  private int[] transitions;// 数组中使用固定的连续的三个数组元素来描述一个转移函数的三个信息
 
   /** True if no state has two transitions leaving with the same label. */
   private boolean deterministic = true;
@@ -95,18 +95,18 @@ public class Automaton implements Accountable, TransitionAccessor {
   }
 
   /** Create a new state. */
-  public int createState() {
+  public int createState() {// 新创建的state下标
     growStates();
     int state = nextState / 2;
-    states[nextState] = -1;
-    nextState += 2;
+    states[nextState] = -1;// 将需要的state设置为-1
+    nextState += 2;// 一个state占用2格
     return state;
   }
 
   /** Set or clear this state as an accept state. */
   public void setAccept(int state, boolean accept) {
     Objects.checkIndex(state, getNumStates());
-    isAccept.set(state, accept);
+    isAccept.set(state, accept);// 设置某一个state为可接受
   }
 
   /**
@@ -149,7 +149,7 @@ public class Automaton implements Accountable, TransitionAccessor {
   public void addTransition(int source, int dest, int label) {
     addTransition(source, dest, label, label);
   }
-
+// 0-255
   /** Add a new transition with the specified source, dest, min, max. */
   public void addTransition(int source, int dest, int min, int max) {
     assert nextTransition % 3 == 0;
@@ -159,13 +159,13 @@ public class Automaton implements Accountable, TransitionAccessor {
     Objects.checkIndex(dest, bounds);
 
     growTransitions();
-    if (curState != source) {
+    if (curState != source) {// 发现state发生了变化，这个state一定是第一次进来，不然保证不了states[2 * curState + 1]=0
       if (curState != -1) {
-        finishCurrentState();
+        finishCurrentState();// 结束记录当前state
       }
 
       // Move to next source:
-      curState = source;
+      curState = source;// 移动到下一个curState
       if (states[2 * curState] != -1) {
         throw new IllegalStateException(
             "from state (" + source + ") already had transitions added");
@@ -173,13 +173,13 @@ public class Automaton implements Accountable, TransitionAccessor {
       assert states[2 * curState + 1] == 0;
       states[2 * curState] = nextTransition;
     }
-
-    transitions[nextTransition++] = dest;
+// 连续存放3个
+    transitions[nextTransition++] = dest;// 转移的目标
     transitions[nextTransition++] = min;
     transitions[nextTransition++] = max;
 
     // Increment transition count for this state
-    states[2 * curState + 1]++;
+    states[2 * curState + 1]++; // 增加本state对应的transition个数
   }
 
   /**
@@ -237,26 +237,26 @@ public class Automaton implements Accountable, TransitionAccessor {
 
   /** Freezes the last state, sorting and reducing the transitions. */
   private void finishCurrentState() {
-    int numTransitions = states[2 * curState + 1];
+    int numTransitions = states[2 * curState + 1];// 这有几个transitions
     assert numTransitions > 0;
 
-    int offset = states[2 * curState];
-    int start = offset / 3;
-    destMinMaxSorter.sort(start, start + numTransitions);
+    int offset = states[2 * curState];// 起始位置
+    int start = offset / 3;// 第几个
+    destMinMaxSorter.sort(start, start + numTransitions);// 针对numTransitions个进行排序，destination优先, min max次之
 
     // Reduce any "adjacent" transitions:
-    int upto = 0;
+    int upto = 0;// 往前腾挪，删掉没用/不符合要求的的transitions（比如第一个a->a, 第二个b->b，那么可以折叠成a->b）
     int min = -1;
     int max = -1;
     int dest = -1;
 
-    for (int i = 0; i < numTransitions; i++) {
+    for (int i = 0; i < numTransitions; i++) {// 遍历每个numTransitions
       int tDest = transitions[offset + 3 * i];
       int tMin = transitions[offset + 3 * i + 1];
       int tMax = transitions[offset + 3 * i + 2];
 
-      if (dest == tDest) {
-        if (tMin <= max + 1) {
+      if (dest == tDest) {// 如果目标相同，紧凑下这几个transition
+        if (tMin <= max+1) {// 第二个的min小于第一个的max，那么说明两者可以合并
           if (tMax > max) {
             max = tMax;
           }
@@ -291,17 +291,17 @@ public class Automaton implements Accountable, TransitionAccessor {
       upto++;
     }
 
-    nextTransition -= (numTransitions - upto) * 3;
-    states[2 * curState + 1] = upto;
+    nextTransition -= (numTransitions-upto)*3;// 去掉删除掉几个transition
+    states[2*curState+1] = upto;//只有几个满足
 
     // Sort transitions by min/max/dest:
     minMaxDestSorter.sort(start, start + upto);
 
-    if (deterministic && upto > 1) {
-      int lastMax = transitions[offset + 2];
+    if (deterministic && upto > 1) {//
+      int lastMax = transitions[offset+2];// 当前state第一个transition的最大值
       for (int i = 1; i < upto; i++) {
         min = transitions[offset + 3 * i + 1];
-        if (min <= lastMax) {
+        if (min <= lastMax) {//一定的保证numTransitions的上一个的max要小于下一个的min
           deterministic = false;
           break;
         }
@@ -334,7 +334,7 @@ public class Automaton implements Accountable, TransitionAccessor {
 
   /** How many states this automaton has. */
   public int getNumStates() {
-    return nextState / 2;
+    return nextState / 2;// 多少个state在这个automaton中
   }
 
   /** How many transitions this automaton has. */
@@ -387,13 +387,13 @@ public class Automaton implements Accountable, TransitionAccessor {
 
         @Override
         protected int compare(int i, int j) {
-          int iStart = 3 * i;
+          int iStart = 3 * i;// i是numTransitions的起始位置
           int jStart = 3 * j;
 
           // First dest:
           int iDest = transitions[iStart];
           int jDest = transitions[jStart];
-          if (iDest < jDest) {
+          if (iDest < jDest) {// 小的在前面
             return -1;
           } else if (iDest > jDest) {
             return 1;
@@ -411,7 +411,7 @@ public class Automaton implements Accountable, TransitionAccessor {
           // Then max:
           int iMax = transitions[iStart + 2];
           int jMax = transitions[jStart + 2];
-          if (iMax < jMax) {
+          if (iMax < jMax) {// 小的在前面，就是小的
             return -1;
           } else if (iMax > jMax) {
             return 1;
@@ -475,7 +475,7 @@ public class Automaton implements Accountable, TransitionAccessor {
           return 0;
         }
       };
-
+  // 这个state有几个transitions
   @Override
   public int initTransition(int state, Transition t) {
     assert state < nextState / 2 : "state=" + state + " nextState=" + nextState;
@@ -485,7 +485,7 @@ public class Automaton implements Accountable, TransitionAccessor {
   }
 
   @Override
-  public void getNextTransition(Transition t) {
+  public void getNextTransition(Transition t) {// initTransition和getNextTransition是配合使用的
     // Make sure there is still a transition left:
     assert (t.transitionUpto + 3 - states[2 * t.source]) <= 3 * states[2 * t.source + 1];
 
@@ -736,7 +736,7 @@ public class Automaton implements Accountable, TransitionAccessor {
   public static class Builder {
     private int nextState = 0;
     private final BitSet isAccept;
-    private int[] transitions;
+    private int[] transitions;// 这里面是一个tansition占用4个int
     private int nextTransition = 0;
 
     /** Default constructor, pre-allocating for 16 states and transitions. */
@@ -870,7 +870,7 @@ public class Automaton implements Accountable, TransitionAccessor {
       }
 
       // Create all transitions
-      sorter.sort(0, numTransitions);
+      sorter.sort(0, numTransitions);//全局排序
       for (int upto = 0; upto < nextTransition; upto += 4) {
         a.addTransition(
             transitions[upto], transitions[upto + 1], transitions[upto + 2], transitions[upto + 3]);

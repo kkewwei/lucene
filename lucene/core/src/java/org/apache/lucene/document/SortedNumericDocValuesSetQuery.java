@@ -42,7 +42,7 @@ final class SortedNumericDocValuesSetQuery extends Query implements Accountable 
       RamUsageEstimator.shallowSizeOfInstance(SortedNumericDocValuesSetQuery.class);
 
   private final String field;
-  private final DocValuesLongHashSet numbers;
+  private final DocValuesLongHashSet numbers;// 和普通数组的区别就是快速查找是否存在
 
   SortedNumericDocValuesSetQuery(String field, long[] numbers) {
     this.field = Objects.requireNonNull(field);
@@ -114,10 +114,10 @@ final class SortedNumericDocValuesSetQuery extends Query implements Accountable 
               new TwoPhaseIterator(singleton) {
                 @Override
                 public boolean matches() throws IOException {
-                  long value = singleton.longValue();
-                  return value >= numbers.minValue
+                  long value = singleton.longValue();// 多次精确匹配呢
+                  return value >= numbers.minValue// 使用最大最小值快速匹配
                       && value <= numbers.maxValue
-                      && numbers.contains(value);
+                      && numbers.contains(value);// 任何一个都行
                 }
 
                 @Override

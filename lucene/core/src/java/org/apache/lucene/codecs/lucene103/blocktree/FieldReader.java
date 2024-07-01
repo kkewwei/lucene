@@ -34,18 +34,18 @@ public final class FieldReader extends Terms {
 
   // private final boolean DEBUG = BlockTreeTermsWriter.DEBUG;
 
-  final long numTerms;
+  final long numTerms; //词典词的个数
   final FieldInfo fieldInfo;
-  final long sumTotalTermFreq;
-  final long sumDocFreq;
-  final int docCount;
-  final BytesRef minTerm;
+  final long sumTotalTermFreq; //  //这个semgent这个字段所有词的count（重复词算多个）
+  final long sumDocFreq; // 每个词在多少个文档中出现过，出现的文档相加。 sumDocFreq<sumTotalTermFreq: 假如一个docID存在俩相同term，sumDocFreq只会统计一次，而sumTotalTermFreq就要统计两次了
+  final int docCount;// 包含这个field的文档个数，//这个字段(所有term)再多少个文档中出现过，就是docsSeen.cardinality()
+  final BytesRef minTerm; // 最大值和最小值
   final BytesRef maxTerm;
   final long indexStart;
   final long rootFP;
   final long indexEnd;
   final Lucene103BlockTreeTermsReader parent;
-  final IndexInput indexIn;
+  final IndexInput indexIn;//实际跑到这里，比较占用内存空间， fst文件结构
 
   // private boolean DEBUG;
 
@@ -65,7 +65,7 @@ public final class FieldReader extends Terms {
     this.fieldInfo = fieldInfo;
     // DEBUG = BlockTreeTermsReader.DEBUG && fieldInfo.name.equals("id");
     this.parent = parent;
-    this.numTerms = numTerms;
+    this.numTerms = numTerms;//词典词的个数
     this.sumTotalTermFreq = sumTotalTermFreq;
     this.sumDocFreq = sumDocFreq;
     this.docCount = docCount;
@@ -137,7 +137,7 @@ public final class FieldReader extends Terms {
 
   @Override
   public TermsEnum iterator() throws IOException {
-    return new SegmentTermsEnum(this, newReader());
+    return new SegmentTermsEnum(this, newReader());// 仅仅读取fst第一条边
   }
 
   @Override
@@ -157,7 +157,7 @@ public final class FieldReader extends Terms {
 
   @Override
   public int getDocCount() {
-    return docCount;
+    return docCount;// 包含这个field的文档个数
   }
 
   @Override

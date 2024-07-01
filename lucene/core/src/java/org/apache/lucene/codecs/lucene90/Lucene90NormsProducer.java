@@ -39,9 +39,9 @@ import org.apache.lucene.util.IOUtils;
 /** Reader for {@link Lucene90NormsFormat} */
 final class Lucene90NormsProducer extends NormsProducer implements Cloneable {
   // metadata maps (just file pointers and minimal stuff)
-  private final IntObjectHashMap<NormsEntry> norms = new IntObjectHashMap<>();
+  private final IntObjectHashMap<NormsEntry> norms = new IntObjectHashMap<>();// 读取出来
   private final int maxDoc;
-  private IndexInput data;
+  private IndexInput data; //数据文件读取部分
   private boolean merging;
   private IntObjectHashMap<IndexInput> disiInputs;
   private IntObjectHashMap<RandomAccessInput> disiJumpTables;
@@ -55,12 +55,12 @@ final class Lucene90NormsProducer extends NormsProducer implements Cloneable {
       String metaExtension)
       throws IOException {
     maxDoc = state.segmentInfo.maxDoc();
-    String metaName =
+    String metaName =// _v.nvm
         IndexFileNames.segmentFileName(state.segmentInfo.name, state.segmentSuffix, metaExtension);
     int version = -1;
 
     // read in the entries from the metadata file.
-    try (ChecksumIndexInput in = state.directory.openChecksumInput(metaName)) {
+    try (ChecksumIndexInput in = state.directory.openChecksumInput(metaName)) {//_dk.nvm
       Throwable priorE = null;
       try {
         version =
@@ -79,7 +79,7 @@ final class Lucene90NormsProducer extends NormsProducer implements Cloneable {
       }
     }
 
-    String dataName =
+    String dataName =//_dk.nvd
         IndexFileNames.segmentFileName(state.segmentInfo.name, state.segmentSuffix, dataExtension);
     // Norms have a forward-only access pattern
     data = state.directory.openInput(dataName, state.context.withHints(FileTypeHint.DATA));
@@ -504,7 +504,7 @@ final class Lucene90NormsProducer extends NormsProducer implements Cloneable {
 
   @Override
   public void checkIntegrity() throws IOException {
-    CodecUtil.checksumEntireFile(data);
+    CodecUtil.checksumEntireFile(data); // 这里校验的是nvd文件
   }
 
   @Override

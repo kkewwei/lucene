@@ -47,7 +47,7 @@ class ReqOptSumScorer extends Scorer {
    * @param scoreMode How the produced scorers will be consumed.
    */
   public ReqOptSumScorer(Scorer reqScorer, Scorer optScorer, ScoreMode scoreMode)
-      throws IOException {
+      throws IOException {// 若minShouldMatch不设置，既有必须，又有should，那么仅仅用should来打分，不涉及到文档匹配
     assert reqScorer != null;
     assert optScorer != null;
     this.reqScorer = reqScorer;
@@ -244,9 +244,9 @@ class ReqOptSumScorer extends Scorer {
     int curDoc = reqScorer.docID();
     float score = reqScorer.score();
 
-    int optScorerDoc = optApproximation.docID();
+    int optScorerDoc = optApproximation.docID();//更新这里的optionApprox，有裁剪的作用。
     if (optScorerDoc < curDoc) {
-      optScorerDoc = optApproximation.advance(curDoc);
+      optScorerDoc = optApproximation.advance(curDoc);// 前进到不小于doc
       if (optTwoPhase != null && optScorerDoc == curDoc && optTwoPhase.matches() == false) {
         optScorerDoc = optApproximation.nextDoc();
       }

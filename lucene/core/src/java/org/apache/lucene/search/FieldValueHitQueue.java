@@ -52,7 +52,7 @@ public abstract class FieldValueHitQueue<T extends FieldValueHitQueue.Entry>
   private static final class OneComparatorFieldValueHitQueue<T extends FieldValueHitQueue.Entry>
       extends FieldValueHitQueue<T> {
 
-    private final int oneReverseMul;
+    private final int oneReverseMul;// desc就为1
     private final FieldComparator<?> oneComparator;
 
     public OneComparatorFieldValueHitQueue(SortField[] fields, int size) {
@@ -138,8 +138,8 @@ public abstract class FieldValueHitQueue<T extends FieldValueHitQueue.Entry>
           field.getComparator(
               size,
               i == 0
-                  ? (numComparators > 1 ? Pruning.GREATER_THAN : Pruning.GREATER_THAN_OR_EQUAL_TO)
-                  : Pruning.NONE);
+                  ? (numComparators > 1 ? Pruning.GREATER_THAN : Pruning.GREATER_THAN_OR_EQUAL_TO)// 若大于1个sort，就GREATER_THAN
+                  : Pruning.NONE);// 第二个就不跳过
     }
   }
 
@@ -187,7 +187,7 @@ public abstract class FieldValueHitQueue<T extends FieldValueHitQueue.Entry>
   protected final SortField[] fields;
 
   protected final FieldComparator<?>[] comparators;
-  protected final int[] reverseMul;
+  protected final int[] reverseMul; // desc就为1
 
   @Override
   protected abstract boolean lessThan(final Entry a, final Entry b);

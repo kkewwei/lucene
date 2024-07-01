@@ -52,13 +52,13 @@ public final class Lucene90PointsFormat extends PointsFormat {
   static final String META_CODEC_NAME = "Lucene90PointsFormatMeta";
 
   /** Filename extension for the leaf blocks */
-  public static final String DATA_EXTENSION = "kdd";
+  public static final String DATA_EXTENSION = "kdd";// 叶子节点
 
-  /** Filename extension for the index per field */
+  /** Filename extension for the index per field */ // 每个域的索引结构
   public static final String INDEX_EXTENSION = "kdi";
 
   /** Filename extension for the meta per field */
-  public static final String META_EXTENSION = "kdm";
+  public static final String META_EXTENSION = "kdm"; // 记录的每个域的元信息，
 
   static final int VERSION_START = 0;
   static final int VERSION_BKD_VECTORIZED_BPV24 = 1;

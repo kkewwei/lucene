@@ -18,7 +18,7 @@ package org.apache.lucene.search;
 
 import java.io.IOException;
 import org.apache.lucene.util.Bits;
-
+// 必须存放所有满足条件的结果，然后通过iterator()遍历所有的结果
 /**
  * Expert: Common scoring functionality for different types of queries.
  *
@@ -40,7 +40,7 @@ public abstract class Scorer extends Scorable {
    * <p>The returned iterator is a view: calling this method several times will return iterators
    * that have the same state.
    */
-  public abstract DocIdSetIterator iterator();
+  public abstract DocIdSetIterator iterator(); // 返回所有match的文档
 
   /**
    * Optional method: Return a {@link TwoPhaseIterator} view of this {@link Scorer}. A return value
@@ -68,7 +68,7 @@ public abstract class Scorer extends Scorable {
    * than any doc IDS of the next block. {@code target} must be &gt;= {@link #docID()} as well as
    * all targets that have been passed to {@link #advanceShallow(int)} so far.
    */
-  public int advanceShallow(int target) throws IOException {
+  public int advanceShallow(int target) throws IOException { // 返回当前block中docId大于等于target的文档数个数。针对倒排索引就是
     return DocIdSetIterator.NO_MORE_DOCS;
   }
 

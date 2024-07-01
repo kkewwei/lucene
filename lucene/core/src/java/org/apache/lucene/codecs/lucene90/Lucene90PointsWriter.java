@@ -36,16 +36,16 @@ import org.apache.lucene.util.IORunnable;
 import org.apache.lucene.util.IOUtils;
 import org.apache.lucene.util.bkd.BKDConfig;
 import org.apache.lucene.util.bkd.BKDWriter;
-
+// 该segment该域所有字段都会共享这一个对象（绑定一个dim），当该segment刷新到磁盘后，就会关闭该对象。
 /** Writes dimensional values */
 public class Lucene90PointsWriter extends PointsWriter {
-
+  // kdd是存放的每个叶子的元数据，二叉树结构放在kdi中，然后kdm放的元数据
   /** Outputs used to write the BKD tree data files. */
-  protected final IndexOutput metaOut, indexOut, dataOut;
+  protected final IndexOutput metaOut, indexOut, dataOut;// dataOut=dim文件
 
   final SegmentWriteState writeState;
-  final int maxPointsInLeafNode;
-  final double maxMBSortInHeap;
+  final int maxPointsInLeafNode;// 默认BKDWriter.DEFAULT_MAX_POINTS_IN_LEAF_NODE，1024
+  final double maxMBSortInHeap;// 默认BKDWriter.DEFAULT_MAX_MB_SORT_IN_HEAP， 16
   final int version;
   private boolean finished;
 
@@ -58,13 +58,12 @@ public class Lucene90PointsWriter extends PointsWriter {
     this.maxPointsInLeafNode = maxPointsInLeafNode;
     this.maxMBSortInHeap = maxMBSortInHeap;
     this.version = version;
-    String dataFileName =
+    String dataFileName =// dim文件
         IndexFileNames.segmentFileName(
             writeState.segmentInfo.name,
             writeState.segmentSuffix,
             Lucene90PointsFormat.DATA_EXTENSION);
-    dataOut = writeState.directory.createOutput(dataFileName, writeState.context);
-    boolean success = false;
+    dataOut = writeState.directory.createOutput(dataFileName, writeState.context); // _12.dim
     try {
       CodecUtil.writeIndexHeader(
           dataOut,
@@ -73,7 +72,7 @@ public class Lucene90PointsWriter extends PointsWriter {
           writeState.segmentInfo.getId(),
           writeState.segmentSuffix);
 
-      String metaFileName =
+      String metaFileName = // kdm文件
           IndexFileNames.segmentFileName(
               writeState.segmentInfo.name,
               writeState.segmentSuffix,
@@ -86,7 +85,7 @@ public class Lucene90PointsWriter extends PointsWriter {
           writeState.segmentInfo.getId(),
           writeState.segmentSuffix);
 
-      String indexFileName =
+      String indexFileName =// kdi文件
           IndexFileNames.segmentFileName(
               writeState.segmentInfo.name,
               writeState.segmentSuffix,
@@ -98,12 +97,9 @@ public class Lucene90PointsWriter extends PointsWriter {
           Lucene90PointsFormat.VERSION_CURRENT,
           writeState.segmentInfo.getId(),
           writeState.segmentSuffix);
-
-      success = true;
-    } finally {
-      if (success == false) {
-        IOUtils.closeWhileHandlingException(this);
-      }
+    } catch (Throwable t) {
+      IOUtils.closeWhileHandlingException(this);
+      throw t;
     }
   }
 
@@ -133,7 +129,7 @@ public class Lucene90PointsWriter extends PointsWriter {
         BKDWriter.DEFAULT_MAX_MB_SORT_IN_HEAP,
         version);
   }
-
+  // 该segment的每个域都会进来一次
   @Override
   public void writeField(FieldInfo fieldInfo, PointsReader reader) throws IOException {
 
@@ -145,7 +141,7 @@ public class Lucene90PointsWriter extends PointsWriter {
             fieldInfo.getPointIndexDimensionCount(),
             fieldInfo.getPointNumBytes(),
             maxPointsInLeafNode);
-
+    // 每个维度看来都要建立一个BKDWriter
     try (BKDWriter writer =
         new BKDWriter(
             writeState.segmentInfo.maxDoc(),
@@ -156,9 +152,9 @@ public class Lucene90PointsWriter extends PointsWriter {
             values.size(),
             Lucene90PointsFormat.bkdVersion(version))) {
 
-      if (values instanceof MutablePointTree) {
+      if (values instanceof MutablePointTree) {// 会进来
         IORunnable finalizer =
-            writer.writeField(
+            writer.writeField(// 写入Dim文件
                 metaOut, indexOut, dataOut, fieldInfo.name, (MutablePointTree) values);
         if (finalizer != null) {
           metaOut.writeInt(fieldInfo.number);
@@ -306,8 +302,8 @@ public class Lucene90PointsWriter extends PointsWriter {
     finished = true;
     metaOut.writeInt(-1);
     CodecUtil.writeFooter(indexOut);
-    CodecUtil.writeFooter(dataOut);
-    metaOut.writeLong(indexOut.getFilePointer());
+    CodecUtil.writeFooter(dataOut);// dim文件结尾
+    metaOut.writeLong(indexOut.getFilePointer()); // 开始写入dii文件
     metaOut.writeLong(dataOut.getFilePointer());
     CodecUtil.writeFooter(metaOut);
   }

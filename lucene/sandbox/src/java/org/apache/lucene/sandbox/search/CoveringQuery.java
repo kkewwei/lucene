@@ -166,7 +166,7 @@ public final class CoveringQuery extends Query implements Accountable {
   public Weight createWeight(IndexSearcher searcher, ScoreMode scoreMode, float boost)
       throws IOException {
     final List<Weight> weights = new ArrayList<>(queries.size());
-    for (Query query : queries) {
+    for (Query query : queries) {// 这里的不断计算，效率是有点低。
       weights.add(searcher.createWeight(query, scoreMode, boost));
     }
     return new CoveringWeight(this, weights, minimumNumberMatch.rewrite(searcher));
@@ -186,7 +186,7 @@ public final class CoveringQuery extends Query implements Accountable {
     @Override
     public Matches matches(LeafReaderContext context, int doc) throws IOException {
       LongValues minMatchValues = minimumNumberMatch.getValues(context, null);
-      if (minMatchValues.advanceExact(doc) == false) {
+      if (minMatchValues.advanceExact(doc) == false) {// 文档是否匹配
         return null;
       }
       final long minimumNumberMatch = Math.max(1, minMatchValues.longValue());

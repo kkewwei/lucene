@@ -31,12 +31,12 @@ import org.apache.lucene.util.IOUtils;
 
 final class PendingSoftDeletes extends PendingDeletes {
 
-  private final String field;
+  private final String field;// __soft_deletest
   private long dvGeneration = -2;
   private final PendingDeletes hardDeletes;
 
   PendingSoftDeletes(String field, SegmentCommitInfo info) {
-    super(info, null, info.getDelCount(true) == 0);
+    super(info, null, info.getDelCount(true) == 0);// liveDocs为null
     this.field = field;
     hardDeletes = new PendingDeletes(info);
   }
@@ -76,11 +76,11 @@ final class PendingSoftDeletes extends PendingDeletes {
     hardDeletes.onNewReader(reader, info);
     // only re-calculate this if we haven't seen this generation
     if (dvGeneration < info.getDocValuesGen()) {
-      final int newDelCount;
-      var iterator = FieldExistsQuery.getDocValuesDocIdSetIterator(field, reader);
-      if (iterator != null && iterator.nextDoc() != DocIdSetIterator.NO_MORE_DOCS) {
+      final int newDelCount;// field可以是__soft_deletes
+      var iterator = FieldExistsQuery.getDocValuesDocIdSetIterator(field, reader); // 获取这个segment从当前dvd和dvm中获取已经删除的软删除文档, field=_soft_deletes
+      if (iterator != null && iterator.nextDoc() != DocIdSetIterator.NO_MORE_DOCS) {// 若有软删除。会去
         iterator = FieldExistsQuery.getDocValuesDocIdSetIterator(field, reader);
-        newDelCount = applySoftDeletes(iterator, getMutableBits());
+        newDelCount = applySoftDeletes(iterator, getMutableBits());// 回去
         assert newDelCount >= 0 : " illegal pending delete count: " + newDelCount;
       } else {
         // nothing is deleted we don't have a soft deletes field in this segment
@@ -123,7 +123,7 @@ final class PendingSoftDeletes extends PendingDeletes {
    * @param bits the bit set to apply the deletes to
    * @return the number of bits changed by this function
    */
-  static int applySoftDeletes(DocIdSetIterator iterator, FixedBitSet bits) throws IOException {
+  static int applySoftDeletes(DocIdSetIterator iterator, FixedBitSet bits) throws IOException {// iterator是软删除的doc，bits是从内存中维护的livedoc
     assert iterator != null;
     int newDeletes = 0;
     int docID;
@@ -131,9 +131,9 @@ final class PendingSoftDeletes extends PendingDeletes {
         iterator instanceof DocValuesFieldUpdates.Iterator
             ? (DocValuesFieldUpdates.Iterator) iterator
             : null;
-    while ((docID = iterator.nextDoc()) != DocIdSetIterator.NO_MORE_DOCS) {
-      if (hasValue == null || hasValue.hasValue()) {
-        if (bits.getAndClear(docID)) { // doc is live - clear it
+    while ((docID = iterator.nextDoc()) != DocIdSetIterator.NO_MORE_DOCS) {// 遍历软删除字段的文档
+      if (hasValue == null || hasValue.hasValue()) {//找出真正存活的doc列表
+        if (bits.getAndClear(docID)) { // doc is live - clear it    若在软删除中，也在live中，那么就从live中删掉这个被删除的文档
           newDeletes++;
           // now that we know we deleted it and we fully control the hard deletes we can do correct
           // accounting
@@ -147,14 +147,14 @@ final class PendingSoftDeletes extends PendingDeletes {
     }
     return newDeletes;
   }
-
+ // commit的软删除应用时会进来
   @Override
-  void onDocValuesUpdate(FieldInfo info, DocValuesFieldUpdates.Iterator iterator)
+  void onDocValuesUpdate(FieldInfo info, DocValuesFieldUpdates.Iterator iterator) //iterator: 获取的是软删除的所有文档Id
       throws IOException {
-    if (this.field.equals(info.name)) {
-      pendingDeleteCount += applySoftDeletes(iterator, getMutableBits());
+    if (this.field.equals(info.name)) {// 都是__soft_deletes
+      pendingDeleteCount += applySoftDeletes(iterator, getMutableBits());// 从内存维护的live文件中删除
       assert assertPendingDeletes();
-      this.info.setSoftDelCount(this.info.getSoftDelCount() + pendingDeleteCount);
+      this.info.setSoftDelCount(this.info.getSoftDelCount() + pendingDeleteCount);// 设置新的软删除的文档
       super.dropChanges();
     }
     assert dvGeneration < info.getDocValuesGen()
@@ -258,7 +258,7 @@ final class PendingSoftDeletes extends PendingDeletes {
     int count = 0;
     if (softDeletedDocs != null) {
       int doc;
-      while ((doc = softDeletedDocs.nextDoc()) != DocIdSetIterator.NO_MORE_DOCS) {
+      while ((doc = softDeletedDocs.nextDoc()) != DocIdSetIterator.NO_MORE_DOCS) {// 遍历每个文档ID
         if (hardDeletes == null || hardDeletes.get(doc)) {
           count++;
         }

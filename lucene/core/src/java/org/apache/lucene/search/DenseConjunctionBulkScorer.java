@@ -29,9 +29,9 @@ import org.apache.lucene.util.MathUtil;
  * Whenever sensible, it intersects clauses by loading their matches into a bit set and computing
  * the intersection of clauses by and-ing these bit sets.
  */
-final class DenseConjunctionBulkScorer extends BulkScorer {
+final class DenseConjunctionBulkScorer extends BulkScorer {// 取交集
 
-  private record DisiWrapper(DocIdSetIterator approximation, TwoPhaseIterator twoPhase) {
+  private record DisiWrapper(DocIdSetIterator approximation, TwoPhaseIterator twoPhase) {// 快速修饰一个类
     DisiWrapper(DocIdSetIterator iterator) {
       this(iterator, null);
     }
@@ -67,20 +67,20 @@ final class DenseConjunctionBulkScorer extends BulkScorer {
   // Only use bit sets to compute the intersection if more than 1/32th of the docs are expected to
   // match. Experiments suggested that values that are a bit higher than this would work better, but
   // we're erring on the conservative side.
-  static final int DENSITY_THRESHOLD_INVERSE = Long.SIZE / 2;
+  static final int DENSITY_THRESHOLD_INVERSE = Long.SIZE / 2;   // =32
 
   private final int maxDoc;
   private final List<DisiWrapper> iterators;
   private final SimpleScorable scorable;
 
-  private final FixedBitSet windowMatches = new FixedBitSet(WINDOW_SIZE);
+  private final FixedBitSet windowMatches = new FixedBitSet(WINDOW_SIZE);// 存放匹配的doc set，后面一起处理
   private final FixedBitSet clauseWindowMatches = new FixedBitSet(WINDOW_SIZE);
   private final List<DisiWrapper> windowClauses = new ArrayList<>();
   // Reused by the leap-frog path.
   private final List<DocIdSetIterator> windowApproximations = new ArrayList<>();
   private final List<TwoPhaseIterator> windowTwoPhases = new ArrayList<>();
 
-  static DenseConjunctionBulkScorer of(List<Scorer> filters, int maxDoc, float constantScore) {
+  static DenseConjunctionBulkScorer of(List<Scorer> filters, int maxDoc, float constantScore) {// 固定得分使用
     List<DocIdSetIterator> iterators = new ArrayList<>();
     List<TwoPhaseIterator> twoPhases = new ArrayList<>();
     for (Scorer filter : filters) {
@@ -94,18 +94,18 @@ final class DenseConjunctionBulkScorer extends BulkScorer {
     return new DenseConjunctionBulkScorer(iterators, twoPhases, maxDoc, constantScore);
   }
 
-  DenseConjunctionBulkScorer(
+  DenseConjunctionBulkScorer(// 将从ConstantScoreScorerSupplier.bulkScorer中跳转进来
       List<DocIdSetIterator> iterators,
       List<TwoPhaseIterator> twoPhases,
       int maxDoc,
-      float constantScore) {
+      float constantScore) {// 固定得分使用
     if (iterators.isEmpty() && twoPhases.isEmpty()) {
       throw new IllegalArgumentException("Expected one or more iterators, got 0");
     }
     this.maxDoc = maxDoc;
     this.iterators = new ArrayList<>();
     for (DocIdSetIterator iterator : iterators) {
-      this.iterators.add(new DisiWrapper(iterator));
+      this.iterators.add(new DisiWrapper(iterator));// 很神奇，这里iterators取得是交集
     }
     for (TwoPhaseIterator twoPhase : twoPhases) {
       this.iterators.add(new DisiWrapper(twoPhase));
@@ -114,7 +114,7 @@ final class DenseConjunctionBulkScorer extends BulkScorer {
     // satisfy every approximation; within each group, cheapest approximation first (lead skipping).
     this.iterators.sort(
         Comparator.<DisiWrapper>comparingInt(w -> w.twoPhase() == null ? 0 : 1)
-            .thenComparingLong(w -> w.approximation().cost()));
+            .thenComparingLong(w -> w.approximation().cost()));// 按照cost从小达到排序
     this.scorable = new SimpleScorable();
     scorable.score = constantScore;
   }
@@ -123,8 +123,8 @@ final class DenseConjunctionBulkScorer extends BulkScorer {
   public int score(LeafCollector collector, Bits acceptDocs, int min, int max) throws IOException {
     collector.setScorer(scorable);
 
-    List<DisiWrapper> iterators = this.iterators;
-    if (collector.competitiveIterator() != null) {
+    List<DisiWrapper> iterators = this.iterators;// 就是这个context.query()获取的value列表
+    if (collector.competitiveIterator() != null) {// 若有competitiveIterator
       iterators = new ArrayList<>(iterators);
       iterators.add(new DisiWrapper(collector.competitiveIterator()));
     }
@@ -133,9 +133,9 @@ final class DenseConjunctionBulkScorer extends BulkScorer {
       min = Math.max(min, w.approximation().docID());
     }
 
-    max = Math.min(max, maxDoc);
+    max = Math.min(max, maxDoc);// 这次打分的区间
 
-    DisiWrapper lead = iterators.get(0);
+    DisiWrapper lead = iterators.get(0);// 小的cost在前面
     if (lead.docID() < min) {
       min = lead.approximation.advance(min);
     }
@@ -171,7 +171,7 @@ final class DenseConjunctionBulkScorer extends BulkScorer {
     // Advance all iterators to the first doc that is greater than or equal to min. This is
     // important as this is the only place where we can take advantage of a large gap between
     // consecutive matches in any clause.
-    for (DisiWrapper w : iterators) {
+    for (DisiWrapper w : iterators) {// 若本地iterators维护的min太小，那么就更新下
       if (w.docID() >= min) {
         min = w.docID();
       } else {
@@ -191,17 +191,17 @@ final class DenseConjunctionBulkScorer extends BulkScorer {
     // data, which helps evaluate fewer clauses per window - without allowing windows to become too
     // small thanks to the WINDOW_SIZE/2 threshold.
     int minDocIDRunEnd = max;
-    final int minRunEndThreshold = MathUtil.unsignedMin(min + WINDOW_SIZE / 2, max);
+    final int minRunEndThreshold = MathUtil.unsignedMin(min + WINDOW_SIZE / 2, max);// 获取一半
     for (DisiWrapper w : iterators) {
-      int docIdRunEnd = w.docIDRunEnd();
-      if (w.docID() > min || docIdRunEnd < minRunEndThreshold) {
+      int docIdRunEnd = w.docIDRunEnd();// 这段范围内都有相同的打分
+      if (w.docID() > min || docIdRunEnd < minRunEndThreshold) {// 达不到上限
         windowClauses.add(w);
       } else {
-        minDocIDRunEnd = Math.min(minDocIDRunEnd, docIdRunEnd);
+        minDocIDRunEnd = Math.min(minDocIDRunEnd, docIdRunEnd);// 不能超过我们给的限制，更新下限制
       }
     }
 
-    if (acceptDocs == null && windowClauses.isEmpty()) {
+    if (acceptDocs == null && windowClauses.isEmpty()) {// 全部匹配，也不用check 删除的文档
       // We have a large range of doc IDs that all match.
       collector.collectRange(min, minDocIDRunEnd);
       return minDocIDRunEnd;
@@ -258,7 +258,7 @@ final class DenseConjunctionBulkScorer extends BulkScorer {
       int windowMax)
       throws IOException {
     assert windowMax > windowBase;
-    assert windowMatches.scanIsEmpty();
+    assert windowMatches.scanIsEmpty();// 说明windowMatches还是空的
     assert clauseWindowMatches.scanIsEmpty();
 
     if (iterators.isEmpty()) {
@@ -269,10 +269,10 @@ final class DenseConjunctionBulkScorer extends BulkScorer {
       if (lead.docID() < windowBase) {
         lead.approximation().advance(windowBase);
       }
-      lead.intoBitSet(windowMax, windowMatches, windowBase);
+      lead.intoBitSet(windowMax, windowMatches, windowBase);// 将读取全部的lead的docId到windowMatches
     }
 
-    if (acceptDocs != null) {
+    if (acceptDocs != null) {// 取交集
       // Apply live docs.
       acceptDocs.applyMask(windowMatches, windowBase);
     }
@@ -285,7 +285,7 @@ final class DenseConjunctionBulkScorer extends BulkScorer {
     int upTo = 1; // the leading clause at index 0 is already applied
     for (int cardinality = windowMatches.cardinality();
         upTo < iterators.size() && cardinality >= threshold;
-        upTo++, cardinality = windowMatches.cardinality()) {
+        upTo++, cardinality = windowMatches.cardinality()) {// 从第一个开始弄
       DisiWrapper other = iterators.get(upTo);
       if (other.docID() < windowBase) {
         other.approximation().advance(windowBase);
@@ -312,8 +312,8 @@ final class DenseConjunctionBulkScorer extends BulkScorer {
         // For a two-phase clause this still confirms matches() via its (possibly vectorized)
         // intoBitSet.
         other.intoBitSet(windowMax, clauseWindowMatches, windowBase);
-        windowMatches.and(clauseWindowMatches);
-        clauseWindowMatches.clear();
+        windowMatches.and(clauseWindowMatches);// 把clauseWindowMatches的拿过来放一起
+        clauseWindowMatches.clear();// 直接交接，若clauseWindowMatches是全集，则交集没啥意义
       }
     }
 
@@ -352,7 +352,7 @@ final class DenseConjunctionBulkScorer extends BulkScorer {
         windowMatch = advance(windowMatches, windowMatch + 1);
       }
     } else {
-      collector.collect(new BitSetDocIdStream(windowMatches, windowBase));
+      collector.collect(new BitSetDocIdStream(windowMatches, windowBase));// 然后每个文档都开始collector了
     }
 
     windowMatches.clear();

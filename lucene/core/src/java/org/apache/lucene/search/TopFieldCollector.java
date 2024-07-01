@@ -43,8 +43,8 @@ public abstract class TopFieldCollector extends TopDocsCollector<Entry> {
 
   private abstract class TopFieldLeafCollector implements LeafCollector {
 
-    final LeafFieldComparator comparator;
-    final int reverseMul;
+    final LeafFieldComparator comparator;// 所有segment仅共享一个
+    final int reverseMul; // 递增为1
     Scorable scorer;
     boolean collectedAllCompetitiveHits = false;
 
@@ -64,30 +64,30 @@ public abstract class TopFieldCollector extends TopDocsCollector<Entry> {
       if (comparators.length == 1) {
         this.reverseMul = reverseMuls[0];
         this.comparator = comparators[0];
-      } else {
+      } else {// 若多个字段进行sort
         this.reverseMul = 1;
         this.comparator = new MultiLeafFieldComparator(comparators, reverseMuls);
       }
     }
 
     void countHit() throws IOException {
-      int hitCountSoFar = ++totalHits;
+      int hitCountSoFar = ++totalHits;// 啥事都不做
 
       if (minScoreAcc != null && (hitCountSoFar & minScoreAcc.modInterval) == 0) {
         updateGlobalMinCompetitiveScore(scorer);
       }
-      if (scoreMode.isExhaustive() == false
+      if (scoreMode.isExhaustive() == false // 不用穷举。一般topscore都会穷举（也就是没有排序），有排序就不会穷举。若用户价了
           && totalHitsRelation == TotalHits.Relation.EQUAL_TO
-          && totalHits > totalHitsThreshold) {
+          && totalHits > totalHitsThreshold) {// 以达到阈值，那么就可以提前退出了
         // for the first time hitsThreshold is reached, notify comparator about this
-        comparator.setHitsThresholdReached();
+        comparator.setHitsThresholdReached();// 达到阈值。针对字段类型排序，则将进行裁剪更新CompetitiveIterator
         totalHitsRelation = TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO;
       }
     }
 
-    boolean thresholdCheck(int doc) throws IOException {
-      if (collectedAllCompetitiveHits || reverseMul * comparator.compareBottom(doc) <= 0) {
-        // since docs are visited in doc Id order, if compare is 0, it means
+    boolean thresholdCheck(int doc) throws IOException {//返回true，说明没有找到更合适的
+      if (collectedAllCompetitiveHits || reverseMul * comparator.compareBottom(doc) <= 0) {//
+        // since docs are visited in doc Id order, if compare is 0, it means // 没有找到更合适的（这里是compare(doc, bottom) <=0）
         // this document is larger than anything else in the queue, and
         // therefore not competitive.
         if (searchSortPartOfIndexSort) {
@@ -97,33 +97,33 @@ public abstract class TopFieldCollector extends TopDocsCollector<Entry> {
           } else {
             collectedAllCompetitiveHits = true;
           }
-        } else if (totalHitsRelation == TotalHits.Relation.EQUAL_TO) {
+        } else if (totalHitsRelation == TotalHits.Relation.EQUAL_TO) {//
           // we can start setting the min competitive score if the
           // threshold is reached for the first time here.
           updateMinCompetitiveScore(scorer);
         }
-        return true;
+        return true;// 不具备竞争力
       }
-      return false;
+      return false;// 更具竞争力
     }
-
+    // 具备竞争力
     void collectCompetitiveHit(int doc) throws IOException {
       // This hit is competitive - replace bottom element in queue & adjustTop
       comparator.copy(bottom.slot, doc);
       updateBottom(doc);
       comparator.setBottom(bottom.slot);
-      updateMinCompetitiveScore(scorer);
+      updateMinCompetitiveScore(scorer);// 仅当收集到最小值10,000的时候，才需要更新
     }
 
     void collectAnyHit(int doc, int hitsCollected) throws IOException {
       // Startup transient: queue hasn't gathered numHits yet
       int slot = hitsCollected - 1;
       // Copy hit into queue
-      comparator.copy(slot, doc);
-      add(slot, doc);
-      if (queueFull) {
-        comparator.setBottom(bottom.slot);
-        updateMinCompetitiveScore(scorer);
+      comparator.copy(slot, doc);// 跑到LongLeafComparator，将
+      add(slot, doc);// 会判断是否装满了
+      if (queueFull) {// 满了的话，设置bottom
+        comparator.setBottom(bottom.slot);// 去设置bottom的值
+        updateMinCompetitiveScore(scorer);// 若遍历全部，永远都会跳过
       }
     }
 
@@ -197,14 +197,14 @@ public abstract class TopFieldCollector extends TopDocsCollector<Entry> {
 
             @Override
             public void collect(int doc) throws IOException {
-              countHit();
+              countHit();// 仅仅统计个数，不做变量变更
               if (queueFull) {
-                if (thresholdCheck(doc)) {
+                if (thresholdCheck(doc)) {// 是否不具备竞争力
                   return;
-                }
-                collectCompetitiveHit(doc);
-              } else {
-                collectAnyHit(doc, totalHits);
+                }//
+                collectCompetitiveHit(doc);//更具竞争力
+              } else {// 还没满
+                collectAnyHit(doc, totalHits);// 将hittop存储起来
               }
             }
           };
@@ -222,10 +222,10 @@ public abstract class TopFieldCollector extends TopDocsCollector<Entry> {
   /*
    * Implements a TopFieldCollector when after != null.
    */
-  static final class PagingFieldCollector extends TopFieldCollector {
+  static final class PagingFieldCollector extends TopFieldCollector {// 原来是为了search_after使用的
 
     final Sort sort;
-    int collectedHits;
+    int collectedHits;// 看收集到10个field没
     final FieldValueHitQueue<Entry> queue;
     final FieldDoc after;
 
@@ -263,13 +263,13 @@ public abstract class TopFieldCollector extends TopDocsCollector<Entry> {
             @Override
             public void collect(int doc) throws IOException {
               countHit();
-              if (queueFull) {
-                if (thresholdCheck(doc)) {
+              if (queueFull) {// 满了
+                if (thresholdCheck(doc)) {// 若超过阈值，也就不收集，就直接退出了
                   return;
                 }
               }
               final int topCmp = reverseMul * comparator.compareTop(doc);
-              if (topCmp > 0 || (topCmp == 0 && doc <= afterDoc)) {
+              if (topCmp > 0 || (topCmp == 0 && doc <= afterDoc)) {// 不匹配
                 // Already collected on a previous page
                 if (totalHitsRelation == TotalHits.Relation.EQUAL_TO) {
                   // check if totalHitsThreshold is reached and we can update competitive score
@@ -277,7 +277,7 @@ public abstract class TopFieldCollector extends TopDocsCollector<Entry> {
                   updateMinCompetitiveScore(scorer);
                 }
                 return;
-              }
+              }// 找到了一个合适的
               if (queueFull) {
                 collectCompetitiveHit(doc);
               } else {
@@ -345,8 +345,8 @@ public abstract class TopFieldCollector extends TopDocsCollector<Entry> {
     } else {
       canSetMinScore = false;
       if (totalHitsThreshold != Integer.MAX_VALUE) {
-        scoreMode = needsScores ? ScoreMode.TOP_DOCS_WITH_SCORES : ScoreMode.TOP_DOCS;
-      } else {
+        scoreMode = needsScores ? ScoreMode.TOP_DOCS_WITH_SCORES : ScoreMode.TOP_DOCS;// sort的也会跑这里，只要不是track_total_hits模式
+      } else {// 若指定了totalHitsThreads的话，那么就会统计全量的文档
         scoreMode = needsScores ? ScoreMode.COMPLETE : ScoreMode.COMPLETE_NO_SCORES;
       }
     }
@@ -358,9 +358,9 @@ public abstract class TopFieldCollector extends TopDocsCollector<Entry> {
     return scoreMode;
   }
 
-  protected void updateGlobalMinCompetitiveScore(Scorable scorer) throws IOException {
+  protected void updateGlobalMinCompetitiveScore(Scorable scorer) throws IOException {// 看是否有必要更新下最低分数吗
     assert minScoreAcc != null;
-    if (canSetMinScore) {
+    if (canSetMinScore) {// 是否可以设置最小的分，// 只有达到上限1万后，才有资格更新
       // we can start checking the global maximum score even if the local queue is not full or if
       // the threshold is not reached on the local competitor: the fact that there is a shared min
       // competitive score implies that one of the collectors hit its totalHitsThreshold already
@@ -374,9 +374,9 @@ public abstract class TopFieldCollector extends TopDocsCollector<Entry> {
       }
     }
   }
-
+  // 明确了更具有竞争力score(只有超过了totalHitsThreshold，才会去更新这个)
   protected void updateMinCompetitiveScore(Scorable scorer) throws IOException {
-    if (canSetMinScore && queueFull && totalHits > totalHitsThreshold) {
+    if (canSetMinScore && queueFull && totalHits > totalHitsThreshold) {// 只有超过阈值了，才会考虑更新下minCompetitiveScore
       assert bottom != null;
       float minScore = (float) firstComparator.value(bottom.slot);
       if (minScore > minCompetitiveScore) {
@@ -433,7 +433,7 @@ public abstract class TopFieldCollector extends TopDocsCollector<Entry> {
   }
 
   final void add(int slot, int doc) {
-    bottom = pq.add(new Entry(slot, docBase + doc));
+    bottom = pq.add(new Entry(slot, docBase + doc));// 会调整大小
     // The queue is full either when totalHits == numHits (in SimpleFieldCollector), in which case
     // slot = totalHits - 1, or when hitsCollected == numHits (in PagingFieldCollector this is hits
     // on the current page) and slot = hitsCollected - 1.

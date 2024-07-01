@@ -37,7 +37,7 @@ public class FieldHighlighter {
   protected final FieldOffsetStrategy fieldOffsetStrategy;
   protected final BreakIterator breakIterator; // note: stateful!
   protected final PassageScorer passageScorer;
-  protected final int maxPassages;
+  protected final int maxPassages; // highlight最多少个片段，es层面由number_of_fragments控制，默认为5
   protected final int maxNoHighlightPassages;
   protected final PassageFormatter passageFormatter;
   protected final Comparator<Passage> passageSortComparator;

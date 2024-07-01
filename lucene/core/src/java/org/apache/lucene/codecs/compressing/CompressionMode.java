@@ -34,7 +34,7 @@ import org.apache.lucene.util.compress.LZ4;
  *
  * @lucene.experimental
  */
-public abstract class CompressionMode {
+public abstract class CompressionMode { // 这个是之前低版本默认压缩算法，目前Lucene87已经在LZ4WithPresetDictCompressionMode中重新定义了
 
   /**
    * A compression mode that trades compression ratio for speed. Although the compression ratio
@@ -152,7 +152,7 @@ public abstract class CompressionMode {
     private final LZ4.FastCompressionHashTable ht;
 
     LZ4FastCompressor() {
-      ht = new LZ4.FastCompressionHashTable();
+      ht = new LZ4.FastCompressionHashTable();// 默认是LZ4.FastCompressionHashTable
     }
 
     @Override
@@ -160,7 +160,7 @@ public abstract class CompressionMode {
       final int len = (int) buffersInput.length();
       byte[] bytes = new byte[len];
       buffersInput.readBytes(bytes, 0, len);
-      LZ4.compress(bytes, 0, len, out, ht);
+      LZ4.compress(bytes, 0, len, out, ht);// 使用LZ4进行压缩
     }
 
     @Override

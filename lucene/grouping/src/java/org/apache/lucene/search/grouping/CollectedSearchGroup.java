@@ -26,5 +26,5 @@ import org.apache.lucene.search.FieldComparator; // javadocs
  */
 public class CollectedSearchGroup<T> extends SearchGroup<T> {
   int topDoc;
-  int comparatorSlot;
+  int comparatorSlot;//（若大于topN后，comparatorSlot=topN）
 }

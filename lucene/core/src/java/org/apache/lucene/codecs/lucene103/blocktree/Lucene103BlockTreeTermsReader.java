@@ -168,10 +168,10 @@ public final class Lucene103BlockTreeTermsReader extends FieldsProducer {
             if (fieldInfo == null) {
               throw new CorruptIndexException("invalid field number: " + field, metaIn);
             }
-            final long sumTotalTermFreq = metaIn.readVLong();
+            final long sumTotalTermFreq = metaIn.readVLong();//  //这个semgent这个字段所有词的count（重复词算多个）
             // when frequencies are omitted, sumDocFreq=sumTotalTermFreq and only one value is
             // written.
-            final long sumDocFreq =
+            final long sumDocFreq =// 在读取端，若keyword字段，不保存词频，则sumDocFreq=sumTotalTermFreq
                 fieldInfo.getIndexOptions() == IndexOptions.DOCS
                     ? sumTotalTermFreq
                     : metaIn.readVLong();

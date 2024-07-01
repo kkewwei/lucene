@@ -22,15 +22,15 @@ import org.apache.lucene.util.PriorityQueue;
  * A priority queue of DocIdSetIterators that orders by current doc ID. This specialization is
  * needed over {@link PriorityQueue} because the pluggable comparison function makes the rebalancing
  * quite slow.
- *
+ * // 通过id大小进行排序，id最小的放前面。比如terms查询多个term的话，就每个条件用这个存放。逐个提取
  * @lucene.internal
- */
+ */// 小头堆
 public abstract sealed class DisiPriorityQueue implements Iterable<DisiWrapper>
     permits DisiPriorityQueue2, DisiPriorityQueueN {
 
   /** Create a {@link DisiPriorityQueue} of the given maximum size. */
   public static DisiPriorityQueue ofMaxSize(int maxSize) {
-    if (maxSize <= 2) {
+    if (maxSize <= 2) {// 词典词个数不超过2个
       return new DisiPriorityQueue2();
     } else {
       return new DisiPriorityQueueN(maxSize);

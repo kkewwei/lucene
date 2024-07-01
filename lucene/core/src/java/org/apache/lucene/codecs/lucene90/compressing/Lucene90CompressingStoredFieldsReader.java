@@ -80,32 +80,32 @@ public final class Lucene90CompressingStoredFieldsReader extends StoredFieldsRea
 
   private final int version;
   private final FieldInfos fieldInfos;
-  private final FieldsIndex indexReader;
-  private final long maxPointer;
-  private final IndexInput fieldsStream;
+  private final FieldsIndex indexReader; // 引用较大内存资源,是FieldsIndexReader，fdx
+  private final long maxPointer; // 所有chunk写完时的fdt中的位置（再后面就是footer部分了）
+  private final IndexInput fieldsStream;// 也是用mmap的打开fdt文件, ByteBufferIndexInput$SingleBufferImpl
   private final int chunkSize;
   private final CompressionMode compressionMode;
   private final Decompressor decompressor;
-  private final int numDocs;
-  private final boolean merging;
-  private final BlockState state;
+  private final int numDocs;// 这个segment文档个数
+  private final boolean merging;// 是否用于merge
+  private final BlockState state; // 干嘛的
   private final long numChunks; // number of written blocks
   private final long numDirtyChunks; // number of incomplete compressed blocks written
   private final long numDirtyDocs; // cumulative number of docs in incomplete chunks
   // Cache of recently prefetched block IDs. This helps reduce chances of prefetching the same block
   // multiple times, which is otherwise likely due to index sorting or recursive graph bisection
   // clustering similar documents together. NOTE: this cache must be small since it's fully scanned.
-  private final long[] prefetchedBlockIDCache;
+  private final long[] prefetchedBlockIDCache; // 缓存的预读块，是一个循环块
   private int prefetchedBlockIDCacheIndex;
   private boolean closed;
-
+  // 每个线程读取的时候，都是对这个对这个对象的clone，是非常安全的线程安全操作
   // used by clone
   private Lucene90CompressingStoredFieldsReader(
       Lucene90CompressingStoredFieldsReader reader, boolean merging) {
     this.version = reader.version;
     this.fieldInfos = reader.fieldInfos;
-    this.fieldsStream = reader.fieldsStream.clone();
-    this.indexReader = reader.indexReader.clone();
+    this.fieldsStream = reader.fieldsStream.clone();// fdt 用的时候都会clone的
+    this.indexReader = reader.indexReader.clone(); // 用的时候都会clone的
     this.maxPointer = reader.maxPointer;
     this.chunkSize = reader.chunkSize;
     this.compressionMode = reader.compressionMode;
@@ -119,8 +119,8 @@ public final class Lucene90CompressingStoredFieldsReader extends StoredFieldsRea
     this.merging = merging;
     this.state = new BlockState();
     this.closed = false;
-  }
-
+  } // http://lucene.apache.org/core/8_2_0/core/org/apache/lucene/codecs/lucene50/Lucene50StoredFieldsFormat.html
+  // 分别读取fdx和fdt文件的数据
   /** Sole constructor. */
   public Lucene90CompressingStoredFieldsReader(
       Directory d,
@@ -137,13 +137,13 @@ public final class Lucene90CompressingStoredFieldsReader extends StoredFieldsRea
     fieldInfos = fn;
     numDocs = si.maxDoc();
 
-    final String fieldsStreamFN =
+    final String fieldsStreamFN =// 读取的fdt文件
         IndexFileNames.segmentFileName(segment, segmentSuffix, FIELDS_EXTENSION);
     ChecksumIndexInput metaIn = null;
     try {
       // Open the data file
       fieldsStream =
-          d.openInput(fieldsStreamFN, context.withHints(FileTypeHint.DATA, DataAccessHint.RANDOM));
+          d.openInput(fieldsStreamFN, context.withHints(FileTypeHint.DATA, DataAccessHint.RANDOM));// 会去读取fdt文件
       version =
           CodecUtil.checkIndexHeader(
               fieldsStream, formatName, VERSION_START, VERSION_CURRENT, si.getId(), segmentSuffix);
@@ -261,7 +261,7 @@ public final class Lucene90CompressingStoredFieldsReader extends StoredFieldsRea
 
   private static void readField(DataInput in, StoredFieldVisitor visitor, FieldInfo info, int bits)
       throws IOException {
-    switch (bits & TYPE_MASK) {
+    switch (bits & TYPE_MASK) {// get source部分
       case BYTE_ARR:
         int length = in.readVInt();
         visitor.binaryField(info, new StoredFieldDataInput(in, length));
@@ -411,22 +411,22 @@ public final class Lucene90CompressingStoredFieldsReader extends StoredFieldsRea
     }
   }
 
-  /** Keeps state about the current block of documents. */
+  /** Keeps state about the current block of documents. */// 存储当前读取chunk的信息
   private class BlockState {
-
-    private int docBase, chunkDocs;
+    // 当前chunk起始位置
+    private int docBase, chunkDocs; // 这个chunk的起始位置，包含的文档数
 
     // whether the block has been sliced, this happens for large documents
     private boolean sliced;
 
-    private long[] offsets = LongsRef.EMPTY_LONGS;
+    private long[] offsets = LongsRef.EMPTY_LONGS;// 这个chunk每个文档在fdt中存储source部分的偏移量（从source部分开始计算的）
     private long[] numStoredFields = LongsRef.EMPTY_LONGS;
 
     // the start pointer at which you can read the compressed documents
-    private long startPointer;
+    private long startPointer;  // 这个docID所在的chunk在fdt中的起始位置
 
-    private final BytesRef spare;
-    private final BytesRef bytes;
+    private final BytesRef spare;// 仅仅在merge期间用，读取每个chunk的内容
+    private final BytesRef bytes; // 读取出来解压后存放的地方
 
     BlockState() {
       if (merging) {
@@ -445,7 +445,7 @@ public final class Lucene90CompressingStoredFieldsReader extends StoredFieldsRea
     void reset(int docID) throws IOException {
       boolean success = false;
       try {
-        doReset(docID);
+        doReset(docID); //读取这个docID所在chunk的所有原始数据
         success = true;
       } finally {
         if (success == false) {
@@ -459,8 +459,8 @@ public final class Lucene90CompressingStoredFieldsReader extends StoredFieldsRea
       }
     }
 
-    private void doReset(int docID) throws IOException {
-      docBase = fieldsStream.readVInt();
+    private void doReset(int docID) throws IOException {//已经跑到这个chunk所在的起始位置
+      docBase = fieldsStream.readVInt();//记录当前chunk在整个segment的起始docId下标。
       final int token = fieldsStream.readVInt();
       chunkDocs = token >>> 2;
       if (contains(docID) == false || docBase + chunkDocs > numDocs) {
@@ -476,27 +476,27 @@ public final class Lucene90CompressingStoredFieldsReader extends StoredFieldsRea
             fieldsStream);
       }
 
-      sliced = (token & 1) != 0;
+      sliced = (token & 1) != 0;// 是否压缩了
 
       offsets = ArrayUtil.growNoCopy(offsets, chunkDocs + 1);
-      numStoredFields = ArrayUtil.growNoCopy(numStoredFields, chunkDocs);
+      numStoredFields = ArrayUtil.growNoCopy(numStoredFields, chunkDocs); // 每个chunk每个文档的storeField个数
 
       if (chunkDocs == 1) {
         numStoredFields[0] = fieldsStream.readVInt();
         offsets[1] = fieldsStream.readVInt();
       } else {
         // Number of stored fields per document
-        StoredFieldsInts.readInts(fieldsStream, chunkDocs, numStoredFields, 0);
+        StoredFieldsInts.readInts(fieldsStream, chunkDocs, numStoredFields, 0); // 读取全量numStoredFields
         // The stream encodes the length of each document and we decode
         // it into a list of monotonically increasing offsets
-        StoredFieldsInts.readInts(fieldsStream, chunkDocs, offsets, 1);
+        StoredFieldsInts.readInts(fieldsStream, chunkDocs, offsets, 1);// 从fdt中呢读取
         for (int i = 0; i < chunkDocs; ++i) {
-          offsets[i + 1] += offsets[i];
+          offsets[i + 1] += offsets[i]; // 这个chunk每个文档在fdt中存储source部分的偏移量（从source部分开始计算的）
         }
 
         // Additional validation: only the empty document has a serialized length of 0
-        for (int i = 0; i < chunkDocs; ++i) {
-          final long len = offsets[i + 1] - offsets[i];
+        for (int i = 0; i < chunkDocs; ++i) {//
+          final long len = offsets[i + 1] - offsets[i];// 每个文档的长度
           final long storedFields = numStoredFields[i];
           if ((len == 0) != (storedFields == 0)) {
             throw new CorruptIndexException(
@@ -504,17 +504,17 @@ public final class Lucene90CompressingStoredFieldsReader extends StoredFieldsRea
           }
         }
       }
-
+       // 开始获取这个docID所在的chcnk在fdt中存储source部分的起始位置
       startPointer = fieldsStream.getFilePointer();
 
-      if (merging) {
-        final int totalLength = Math.toIntExact(offsets[chunkDocs]);
+      if (merging) {// 提前读取这个chunk未压缩的长度，SequentialStoredFieldsLeafReader。 merge的优化时：reset时就解压开整个chunk的内容，然后多次doc内容时都直接使用同一个bytes.bytes
+        final int totalLength = Math.toIntExact(offsets[chunkDocs]);// 这个chunk的总长度
         // decompress eagerly
         if (sliced) {
-          bytes.offset = bytes.length = 0;
-          for (int decompressed = 0; decompressed < totalLength; ) {
-            final int toDecompress = Math.min(totalLength - decompressed, chunkSize);
-            decompressor.decompress(fieldsStream, toDecompress, 0, toDecompress, spare);
+          bytes.offset = bytes.length = 0;//开头全部为0
+          for (int decompressed = 0; decompressed < totalLength; ) {    //  从头读取这个chunk：从第一个slice的开头读取，跨越多个slice直到读完这个文档所在偏移量
+            final int toDecompress = Math.min(totalLength - decompressed, chunkSize);// 读取未压缩前的长度
+            decompressor.decompress(fieldsStream, toDecompress, 0, toDecompress, spare);// 里面会置位spare的offset
             bytes.bytes = ArrayUtil.grow(bytes.bytes, bytes.length + spare.length);
             System.arraycopy(spare.bytes, spare.offset, bytes.bytes, bytes.length, spare.length);
             bytes.length += spare.length;
@@ -534,16 +534,16 @@ public final class Lucene90CompressingStoredFieldsReader extends StoredFieldsRea
     /**
      * Get the serialized representation of the given docID. This docID has to be contained in the
      * current block.
-     */
+     */// 首先加载这个doc所在chunk的原始值，然后第二步骤再去读取原始值
     SerializedDocument document(int docID) throws IOException {
-      if (contains(docID) == false) {
+      if (contains(docID) == false) {// 若发现docId不在当前block内
         throw new IllegalArgumentException();
       }
-
+// 读取这个docId的原始数据
       final int index = docID - docBase;
-      final int offset = Math.toIntExact(offsets[index]);
-      final int length = Math.toIntExact(offsets[index + 1]) - offset;
-      final int totalLength = Math.toIntExact(offsets[chunkDocs]);
+      final int offset = Math.toIntExact(offsets[index]);//文档在未压缩字节流的起始位置
+      final int length = Math.toIntExact(offsets[index + 1]) - offset;//文档在未压缩字节流的长度
+      final int totalLength = Math.toIntExact(offsets[chunkDocs]);//未压缩时，这个chunk的总长度
       final int numStoredFields = Math.toIntExact(this.numStoredFields[index]);
 
       final BytesRef bytes;
@@ -557,17 +557,17 @@ public final class Lucene90CompressingStoredFieldsReader extends StoredFieldsRea
       if (length == 0) {
         // empty
         documentInput = new ByteArrayDataInput();
-      } else if (merging) {
-        // already decompressed
+      } else if (merging) {// 如果时mergeing的话，在前面已经解压好了。es也做优化了，若连续doc的话，就使用这里的优化，
+        // already decompressed 在fetchPhase时，若检测文档连续，则使用SequentialStoredFieldsLeafReader，假装merge。merge的优化时：reset时就解压开整个chunk的内容，然后多次doc都直接使用同一个bytes.bytes
         documentInput = new ByteArrayDataInput(bytes.bytes, bytes.offset + offset, length);
       } else if (sliced) {
-        fieldsStream.seek(startPointer);
-        decompressor.decompress(
+        fieldsStream.seek(startPointer);// 定位到文档对应chunk所在fdt的起始位置
+        decompressor.decompress(// 先解析一个chunk的slice
             fieldsStream, chunkSize, offset, Math.min(length, chunkSize - offset), bytes);
         documentInput =
             new DataInput() {
 
-              int decompressed = bytes.length;
+              int decompressed = bytes.length;// 存放的是解压后的数据长度
 
               void fillBuffer() throws IOException {
                 assert decompressed <= length;
@@ -590,7 +590,7 @@ public final class Lucene90CompressingStoredFieldsReader extends StoredFieldsRea
 
               @Override
               public void readBytes(byte[] b, int offset, int len) throws IOException {
-                while (len > bytes.length) {
+                while (len > bytes.length) {// 若超过可用长度
                   System.arraycopy(bytes.bytes, bytes.offset, b, offset, bytes.length);
                   len -= bytes.length;
                   offset += bytes.length;
@@ -608,17 +608,17 @@ public final class Lucene90CompressingStoredFieldsReader extends StoredFieldsRea
                 }
                 while (numBytes > bytes.length) {
                   numBytes -= bytes.length;
-                  fillBuffer();
+                  fillBuffer();// 不停的解析读取
                 }
                 bytes.offset += numBytes;
                 bytes.length -= numBytes;
               }
             };
       } else {
-        fieldsStream.seek(startPointer);
+        fieldsStream.seek(startPointer);// // 这个docID所在的chunk在fdt中的起始位置。若多个文档在同一个block的话，就直接startPointer了
         decompressor.decompress(fieldsStream, totalLength, offset, length, bytes);
         assert bytes.length == length;
-        documentInput = new ByteArrayDataInput(bytes.bytes, bytes.offset, bytes.length);
+        documentInput = new ByteArrayDataInput(bytes.bytes, bytes.offset, bytes.length);// 对应的二进制码
       }
 
       return new SerializedDocument(documentInput, length, numStoredFields);
@@ -626,7 +626,7 @@ public final class Lucene90CompressingStoredFieldsReader extends StoredFieldsRea
   }
 
   @Override
-  public void prefetch(int docID) throws IOException {
+  public void prefetch(int docID) throws IOException {// 预读取
     final long blockID = indexReader.getBlockID(docID);
 
     for (long prefetchedBlockID : prefetchedBlockIDCache) {
@@ -644,7 +644,7 @@ public final class Lucene90CompressingStoredFieldsReader extends StoredFieldsRea
 
   SerializedDocument serializedDocument(int docID) throws IOException {
     if (state.contains(docID) == false) {
-      fieldsStream.seek(indexReader.getStartPointer(docID));
+      fieldsStream.seek(indexReader.getStartPointer(docID));// 定位fdt跑到这个docId所在chunk的起始位置（是存放的数据）
       state.reset(docID);
     }
     assert state.contains(docID);
@@ -666,9 +666,9 @@ public final class Lucene90CompressingStoredFieldsReader extends StoredFieldsRea
   @Override
   public void document(int docID, StoredFieldVisitor visitor) throws IOException {
 
-    final SerializedDocument doc = serializedDocument(docID);
+    final SerializedDocument doc = serializedDocument(docID); // 获取具体文件内容
 
-    for (int fieldIDX = 0; fieldIDX < doc.numStoredFields; fieldIDX++) {
+    for (int fieldIDX = 0; fieldIDX < doc.numStoredFields; fieldIDX++) {// 读取每一个字段值
       final long infoAndBits = doc.in.readVLong();
       final int fieldNumber = (int) (infoAndBits >>> TYPE_BITS);
       final FieldInfo fieldInfo = fieldInfos.fieldInfo(fieldNumber);
@@ -676,9 +676,9 @@ public final class Lucene90CompressingStoredFieldsReader extends StoredFieldsRea
       final int bits = (int) (infoAndBits & TYPE_MASK);
       assert bits <= NUMERIC_DOUBLE : "bits=" + Integer.toHexString(bits);
 
-      switch (visitor.needsField(fieldInfo)) {
+      switch (visitor.needsField(fieldInfo)) {//读取一个
         case YES:
-          readField(doc.in, visitor, fieldInfo, bits);
+          readField(doc.in, visitor, fieldInfo, bits);// get source部分
           break;
         case NO:
           if (fieldIDX
@@ -694,7 +694,7 @@ public final class Lucene90CompressingStoredFieldsReader extends StoredFieldsRea
   }
 
   @Override
-  public StoredFieldsReader clone() {
+  public StoredFieldsReader clone() {// 每次读取的是否，都是对这个对象的clone
     ensureOpen();
     return new Lucene90CompressingStoredFieldsReader(this, false);
   }
@@ -702,7 +702,7 @@ public final class Lucene90CompressingStoredFieldsReader extends StoredFieldsRea
   @Override
   public StoredFieldsReader getMergeInstance() {
     ensureOpen();
-    return new Lucene90CompressingStoredFieldsReader(this, true);
+    return new Lucene90CompressingStoredFieldsReader(this, true);//
   }
 
   int getVersion() {
@@ -722,7 +722,7 @@ public final class Lucene90CompressingStoredFieldsReader extends StoredFieldsRea
   }
 
   IndexInput getFieldsStream() {
-    return fieldsStream;
+    return fieldsStream; // 读取fdt文件
   }
 
   int getChunkSize() {
@@ -762,8 +762,8 @@ public final class Lucene90CompressingStoredFieldsReader extends StoredFieldsRea
 
   @Override
   public void checkIntegrity() throws IOException {
-    indexReader.checkIntegrity();
-    CodecUtil.checksumEntireFile(fieldsStream);
+    indexReader.checkIntegrity();//FieldsIndexReader,会去校验fdx，挑的是fdx文件，文件大小占比不到0.1%，占比非常小
+    CodecUtil.checksumEntireFile(fieldsStream);// 会去校验fdt,也是逐个读取出来（fdt有多大，就读取多少），效率明显很低。
   }
 
   @Override

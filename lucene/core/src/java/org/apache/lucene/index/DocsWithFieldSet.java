@@ -26,13 +26,13 @@ import org.apache.lucene.util.RamUsageEstimator;
  * Accumulator for documents that have a value for a field. This is optimized for the case that all
  * documents have a value.
  */
-public final class DocsWithFieldSet extends DocIdSet {
+public final class DocsWithFieldSet extends DocIdSet {//用在SortedNumericDocValuesWriter写入时统计文档ID
 
   private static final long BASE_RAM_BYTES_USED =
       RamUsageEstimator.shallowSizeOfInstance(DocsWithFieldSet.class);
 
-  private FixedBitSet set;
-  private int cardinality = 0;
+  private FixedBitSet set; // 存放的是每个目前文档ID
+  private int cardinality = 0;//存储的个数
   private int lastDocId = -1;
 
   /** Creates an empty DocsWithFieldSet. */
@@ -48,10 +48,10 @@ public final class DocsWithFieldSet extends DocIdSet {
       throw new IllegalArgumentException(
           "Out of order doc ids: last=" + lastDocId + ", next=" + docID);
     }
-    if (set != null) {
+    if (set != null) { // 默认不进入
       set = FixedBitSet.ensureCapacity(set, docID);
       set.set(docID);
-    } else if (docID != cardinality) {
+    } else if (docID != cardinality) {// 使用了技巧，说明docId不连续了，需要初始化下
       // migrate to a sparse encoding using a bit set
       set = new FixedBitSet(docID + 1);
       set.set(0, cardinality);
@@ -100,7 +100,7 @@ public final class DocsWithFieldSet extends DocIdSet {
 
   @Override
   public DocIdSetIterator iterator() {
-    return set != null ? new BitSetIterator(set, cardinality) : DocIdSetIterator.all(cardinality);
+    return set != null ? new BitSetIterator(set, cardinality) : DocIdSetIterator.all(cardinality); // 是后面这个
   }
 
   /** Return the number of documents of this set. */

@@ -50,7 +50,7 @@ import org.apache.lucene.internal.hppc.IntCursor;
  * thread-safe. The search method optionally takes a set of "accepted nodes", which can be used to
  * exclude deleted documents.
  */
-public abstract class HnswGraph {
+public abstract class HnswGraph { // 定义了图的访问协议，关键方法
   public static final int UNKNOWN_MAX_CONN = -1;
 
   /** Sole constructor */
@@ -64,7 +64,7 @@ public abstract class HnswGraph {
    * @param target ordinal of a node in the graph, must be &ge; 0 and &lt; {@link
    *     FloatVectorValues#size()}.
    */
-  public abstract void seek(int level, int target) throws IOException;
+  public abstract void seek(int level, int target) throws IOException; // 定位到某层某节点，准备遍历它的邻居
 
   /** Returns the number of nodes in the graph */
   public abstract int size();
@@ -80,16 +80,16 @@ public abstract class HnswGraph {
    *
    * @return a node ordinal in the graph, or NO_MORE_DOCS if the iteration is complete.
    */
-  public abstract int nextNeighbor() throws IOException;
+  public abstract int nextNeighbor() throws IOException; // 迭代返回当前节点在该层的下一个邻居 ordinal，耗尽返回 NO_MORE_DOCS 。
 
   /** Returns the number of levels of the graph */
-  public abstract int numLevels() throws IOException;
+  public abstract int numLevels() throws IOException; // 层数
 
   /** returns M, the maximum number of connections for a node. */
-  public abstract int maxConn();
+  public abstract int maxConn(); // 每节点最大连接数。
 
   /** Returns graph's entry point on the top level * */
-  public abstract int entryNode() throws IOException;
+  public abstract int entryNode() throws IOException; //最高层的唯一入口点。
 
   /**
    * Get all nodes on a given level as node 0th ordinals. The nodes are NOT guaranteed to be

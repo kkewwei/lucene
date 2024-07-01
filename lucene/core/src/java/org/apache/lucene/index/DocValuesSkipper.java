@@ -115,7 +115,7 @@ public abstract class DocValuesSkipper {
    * Advance this skipper so that all levels intersects the range given by {@code minValue} and
    * {@code maxValue}. If there are no intersecting levels, the skipper is exhausted.
    */
-  public final void advance(long minValue, long maxValue) throws IOException {
+  public final void advance(long minValue, long maxValue) throws IOException { // 没太懂呀
     if (minDocID(0) == -1) {
       // #advance has not been called yet
       advance(0);

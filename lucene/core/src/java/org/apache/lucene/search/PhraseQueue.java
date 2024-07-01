@@ -31,10 +31,10 @@ final class PhraseQueue extends PriorityQueue<PhrasePositions> {
       if (pp1.offset == pp2.offset) {
         return pp1.ord < pp2.ord;
       } else {
-        return pp1.offset < pp2.offset;
+        return pp1.offset < pp2.offset;// offset越小的，越在前面
       }
     else {
-      return pp1.position < pp2.position;
+      return pp1.position < pp2.position;// position在顶部
     }
   }
 }

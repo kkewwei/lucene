@@ -71,7 +71,7 @@ public abstract class PostingsReaderBase implements Closeable {
    *
    * @see #postings(FieldInfo, BlockTermState, PostingsEnum, int)
    */
-  public abstract ImpactsEnum impacts(FieldInfo fieldInfo, BlockTermState state, int flags)
+  public abstract ImpactsEnum impacts(FieldInfo fieldInfo, BlockTermState state, int flags)// flags是 PostingsEnum.FREQS
       throws IOException;
 
   /**

@@ -28,14 +28,14 @@ import org.apache.lucene.util.IOSupplier;
 import org.apache.lucene.util.IOUtils;
 
 /** This class handles accounting and applying pending deletes for live segment readers */
-class PendingDeletes {
+class PendingDeletes {//// 对存量segment的新的删除，临时保存live的segment。
   protected final SegmentCommitInfo info;
   // Read-only live docs, null until live docs are initialized or if all docs are alive
-  private Bits liveDocs;
+  private Bits liveDocs; // 最终真正存活的文档（磁盘中live文件-软删除的doc）
   // Writeable live docs, null if this instance is not ready to accept writes, in which
   // case getMutableBits needs to be called
-  private FixedBitSet writeableLiveDocs;
-  protected int pendingDeleteCount;
+  private FixedBitSet writeableLiveDocs; // 记录
+  protected int pendingDeleteCount; // 记录还未刷到磁盘dvd文件上的上的软删除
   boolean liveDocsInitialized;
 
   PendingDeletes(SegmentReader reader, SegmentCommitInfo info) {
@@ -60,20 +60,20 @@ class PendingDeletes {
     this.liveDocsInitialized = liveDocsInitialized;
   }
 
-  protected FixedBitSet getMutableBits() {
+  protected FixedBitSet getMutableBits() {// 节点初始化时候，哪怕没有live文件，也会产生liveDocs文件
     // if we pull mutable bits but we haven't been initialized something is completely off.
     // this means we receive deletes without having the bitset that is on-disk ready to be cloned
     assert liveDocsInitialized : "can't delete if liveDocs are not initialized";
-    if (writeableLiveDocs == null) {
+    if (writeableLiveDocs == null) { // 若不存在
       // Copy on write: this means we've cloned a
       // SegmentReader sharing the current liveDocs
       // instance; must now make a private clone so we can
       // change it:
-      if (liveDocs != null) {
+      if (liveDocs != null) {// 若liveDocs存在，首先copy
         writeableLiveDocs = FixedBitSet.copyOf(liveDocs);
-      } else {
+      } else { // 默认为所有的文档都是存活的
         writeableLiveDocs = new FixedBitSet(info.info.maxDoc());
-        writeableLiveDocs.set(0, info.info.maxDoc());
+        writeableLiveDocs.set(0, info.info.maxDoc());// 从0到maxDoc全部设置为1
       }
       liveDocs = writeableLiveDocs.asReadOnlyBits();
     }
@@ -97,22 +97,22 @@ class PendingDeletes {
             + info.info.name
             + " maxDoc="
             + info.info.maxDoc();
-    final boolean didDelete = mutableBits.getAndClear(docID);
-    if (didDelete) {
-      pendingDeleteCount++;
+    final boolean didDelete = mutableBits.getAndClear(docID);// 这个文档存在的
+    if (didDelete) {// 确实发生了删除文档
+      pendingDeleteCount++;// 统计计数+1
     }
     return didDelete;
   }
 
   /** Returns a snapshot of the current live docs. */
-  Bits getLiveDocs() {
+  Bits getLiveDocs() {// 真正存活的文档（磁盘中live文件-软删除的doc）
     // Prevent modifications to the returned live docs
     writeableLiveDocs = null;
     return liveDocs;
   }
 
   /** Returns a snapshot of the hard live docs. */
-  Bits getHardLiveDocs() {
+  Bits getHardLiveDocs() {// 硬存活，在PendingDeletes中就是.live-软删除的id
     return getLiveDocs();
   }
 
@@ -123,7 +123,7 @@ class PendingDeletes {
 
   /**
    * Called once a new reader is opened for this segment ie. when deletes or updates are applied.
-   */
+   */ // 只要一个新的reader被打开了，那么就调用
   void onNewReader(CodecReader reader, SegmentCommitInfo info) throws IOException {
     if (liveDocsInitialized == false) {
       assert writeableLiveDocs == null;
@@ -188,10 +188,10 @@ class PendingDeletes {
     // until segments file is written:
     boolean success = false;
     try {
-      Codec codec = info.info.getCodec();
+      Codec codec = info.info.getCodec();// Lucene86Codec
       codec
           .liveDocsFormat()
-          .writeLiveDocs(liveDocs, trackingDir, info, pendingDeleteCount, IOContext.DEFAULT);
+          .writeLiveDocs(liveDocs, trackingDir, info, pendingDeleteCount, IOContext.DEFAULT); // 写_n_2.liv文件
       success = true;
     } finally {
       if (!success) {
@@ -210,7 +210,7 @@ class PendingDeletes {
     // then info's delGen remains pointing to the previous
     // (successfully written) del docs:
     info.advanceDelGen();
-    info.setDelCount(info.getDelCount() + pendingDeleteCount);
+    info.setDelCount(info.getDelCount() + pendingDeleteCount); // 更新删除的文件
     dropChanges();
     return true;
   }

@@ -33,7 +33,7 @@ import org.apache.lucene.search.DocIdSetIterator;
  * </ul>
  *
  * @lucene.internal
- */
+ */// 4096一个Block，对应64个long，稀疏矩阵Sparse
 public class SparseFixedBitSet extends BitSet {
 
   private static final long BASE_RAM_BYTES_USED =
@@ -52,8 +52,8 @@ public class SparseFixedBitSet extends BitSet {
 
   final long[] indices;
   final long[][] bits;
-  final int length;
-  int nonZeroLongCount;
+  final int length;//总的文档个数
+  int nonZeroLongCount; // 多少个long不是0
   long ramBytesUsed;
 
   /**
@@ -65,7 +65,7 @@ public class SparseFixedBitSet extends BitSet {
       throw new IllegalArgumentException("length needs to be >= 1");
     }
     this.length = length;
-    final int blockCount = blockCount(length);
+    final int blockCount = blockCount(length);// 多少个block
     indices = new long[blockCount];
     bits = new long[blockCount][];
     ramBytesUsed =
@@ -96,18 +96,18 @@ public class SparseFixedBitSet extends BitSet {
   }
 
   @Override
-  public int cardinality() {
+  public int cardinality() {// 为1的个数
     int cardinality = 0;
     for (long[] bitArray : bits) {
       if (bitArray != null) {
         for (long bits : bitArray) {
-          cardinality += Long.bitCount(bits);
+          cardinality += Long.bitCount(bits); // long
         }
       }
     }
     return cardinality;
   }
-
+  // 大致估算多少个
   @Override
   public int approximateCardinality() {
     // we are assuming that bits are uniformly set and use the linear counting
@@ -125,7 +125,7 @@ public class SparseFixedBitSet extends BitSet {
   @Override
   public boolean get(int i) {
     assert consistent(i);
-    final int i4096 = i >>> 12;
+    final int i4096 = i >>> 12; //属于哪个block
     final long index = indices[i4096];
     final int i64 = i >>> 6;
     final long i64bit = 1L << i64;
@@ -147,7 +147,7 @@ public class SparseFixedBitSet extends BitSet {
     assert consistent(i);
     final int i4096 = i >>> 12;
     final long index = indices[i4096];
-    final int i64 = i >>> 6;
+    final int i64 = i >>> 6;// 标记属于哪个64位子块
     final long i64bit = 1L << i64;
     if ((index & i64bit) != 0) {
       // in that case the sub 64-bits block we are interested in already exists,
@@ -184,20 +184,20 @@ public class SparseFixedBitSet extends BitSet {
   @Override
   public void set(int i) {
     assert consistent(i);
-    final int i4096 = i >>> 12;
+    final int i4096 = i >>> 12; // 计算文档i属于哪个4096位的块（block）
     final long index = indices[i4096];
-    final int i64 = i >>> 6;
+    final int i64 = i >>> 6; // 标记属于哪个64位绝对值子块
     final long i64bit = 1L << i64;
-    if ((index & i64bit) != 0) {
+    if ((index & i64bit) != 0) {// 这个block内，对应64位子块内已经有值了。
       // in that case the sub 64-bits block we are interested in already exists,
       // we just need to set a bit in an existing long: the number of ones on
       // the right of i64 gives us the index of the long we need to update
       bits[i4096][Long.bitCount(index & (i64bit - 1))] |= 1L << i; // shifts are mod 64 in java
-    } else if (index == 0) {
+    } else if (index == 0) {// 这个block还没有写过
       // if the index is 0, it means that we just found a block of 4096 bits
       // that has no bit that is set yet. So let's initialize a new block:
       insertBlock(i4096, i64bit, i);
-    } else {
+    } else {// 这个block内，对应64位子块内没有值，但是有其他值。
       // in that case we found a block of 4096 bits that has some values, but
       // the sub-block of 64 bits that we are interested in has no value yet,
       // so we need to insert a new long

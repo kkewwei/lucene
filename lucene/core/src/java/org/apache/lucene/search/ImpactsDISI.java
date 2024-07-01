@@ -29,7 +29,7 @@ public final class ImpactsDISI extends FilterDocIdSetIterator {
 
   private final MaxScoreCache maxScoreCache;
   private float minCompetitiveScore = 0;
-  private int upTo = DocIdSetIterator.NO_MORE_DOCS;
+  private int upTo = DocIdSetIterator.NO_MORE_DOCS; // 当前level0的最大值
   private float maxScore = Float.MAX_VALUE;
 
   /**
@@ -65,19 +65,19 @@ public final class ImpactsDISI extends FilterDocIdSetIterator {
   }
 
   private int advanceTarget(int target) throws IOException {
-    if (target <= upTo) {
+    if (target <= upTo) {// 当前访问的上限
       // we are still in the current block, which is considered competitive
       // according to impacts, no skipping
       return target;
     }
 
-    upTo = maxScoreCache.advanceShallow(target);
-    maxScore = maxScoreCache.getMaxScoreForLevelZero();
+    upTo = maxScoreCache.advanceShallow(target);// 这个level0的最大值
+    maxScore = maxScoreCache.getMaxScoreForLevelZero();// 这个levl0最大的得分（出现频率最大）
 
     while (true) {
       assert upTo >= target;
 
-      if (maxScore >= minCompetitiveScore) {
+      if (maxScore >= minCompetitiveScore) {//满足了最小得分，说明这个block后面还是有效的，就不能跳过
         return target;
       }
 
@@ -108,7 +108,7 @@ public final class ImpactsDISI extends FilterDocIdSetIterator {
   }
 
   @Override
-  public int advance(int target) throws IOException {
+  public int advance(int target) throws IOException {// target是文档号
     return in.advance(advanceTarget(target));
   }
 

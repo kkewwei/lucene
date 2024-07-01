@@ -20,7 +20,7 @@ package org.apache.lucene.util;
  * Stable radix sorter for variable-length strings.
  *
  * @lucene.internal
- */
+ */ // 稳定排序保证「键相等的元素，排序后相对顺序与排序前一致」。若原始doc有序，排序后，相同value的docId也是有序的
 public abstract class StableMSBRadixSorter extends MSBRadixSorter {
 
   private final int[] fixedStartOffsets;

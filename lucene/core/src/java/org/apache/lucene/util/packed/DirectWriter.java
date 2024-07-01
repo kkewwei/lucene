@@ -45,17 +45,17 @@ import org.apache.lucene.util.BitUtil;
 public final class DirectWriter {
   final int bitsPerValue;
   final long numValues;
-  final DataOutput output;
+  final DataOutput output; // 可能是dvd文件，也可能是ByteBuffer类型的存储
 
   long count;
   boolean finished;
 
   // for now, just use the existing writer under the hood
   int off;
-  final byte[] nextBlocks;
-  final long[] nextValues;
+  final byte[] nextBlocks; // 真正存放压缩
+  final long[] nextValues;// 一次只能存放128个value
 
-  DirectWriter(DataOutput output, long numValues, int bitsPerValue) {
+  DirectWriter(DataOutput output, long numValues, int bitsPerValue) {// 就是普通的长度压缩，找最大数字使用的那个长度
     this.output = output;
     this.numValues = numValues;
     this.bitsPerValue = bitsPerValue;
@@ -68,7 +68,7 @@ public final class DirectWriter {
     bufferSize = Math.toIntExact(bufferSize + 63) & 0xFFFFFFC0;
     nextValues = new long[bufferSize];
     // add 7 bytes in the end so that any value could be written as a long
-    nextBlocks = new byte[bufferSize * bitsPerValue / Byte.SIZE + Long.BYTES - 1];
+    nextBlocks = new byte[bufferSize * bitsPerValue / Byte.SIZE + Long.BYTES - 1];//都是使用byte来存放数据
   }
 
   /** Adds a value to this writer */
@@ -80,7 +80,7 @@ public final class DirectWriter {
     }
     nextValues[off++] = l;
     if (off == nextValues.length) {
-      flush();
+      flush(); // 已经是一个block了
     }
     count++;
   }
@@ -90,16 +90,16 @@ public final class DirectWriter {
       return;
     }
     // Avoid writing bits from values that are outside of the range we need to encode
-    Arrays.fill(nextValues, off, nextValues.length, 0L);
-    encode(nextValues, off, nextBlocks, bitsPerValue);
+    Arrays.fill(nextValues, off, nextValues.length, 0L); // 清空
+    encode(nextValues, off, nextBlocks, bitsPerValue);//// 开始编码，比较傻瓜。可以理解直接按照类似BitMap编码
     final int blockCount =
         (int) PackedInts.Format.PACKED.byteCount(PackedInts.VERSION_CURRENT, off, bitsPerValue);
-    output.writeBytes(nextBlocks, blockCount);
+    output.writeBytes(nextBlocks, blockCount);// 每个文档的termId压缩存储起来了  dvd。在merge阶段就是限速写入的
     off = 0;
   }
-
+   // 开始编码，比较傻瓜。可以理解直接按照类似 BitMap编码
   private static void encode(long[] nextValues, int upTo, byte[] nextBlocks, int bitsPerValue) {
-    if ((bitsPerValue & 7) == 0) {
+    if ((bitsPerValue & 7) == 0) {//至少8的整数倍
       // bitsPerValue is a multiple of 8: 8, 16, 24, 32, 30, 48, 56, 64
       final int bytesPerValue = bitsPerValue / Byte.SIZE;
       for (int i = 0, o = 0; i < upTo; ++i, o += bytesPerValue) {
@@ -109,7 +109,7 @@ public final class DirectWriter {
         } else if (bitsPerValue > Short.SIZE) {
           BitUtil.VH_LE_INT.set(nextBlocks, o, (int) l);
         } else if (bitsPerValue > Byte.SIZE) {
-          BitUtil.VH_LE_SHORT.set(nextBlocks, o, (short) l);
+          BitUtil.VH_LE_SHORT.set(nextBlocks, o, (short) l);//按照shard编码之际存储
         } else {
           nextBlocks[o] = (byte) l;
         }
@@ -124,7 +124,7 @@ public final class DirectWriter {
         }
         BitUtil.VH_LE_LONG.set(nextBlocks, o, v);
       }
-    } else {
+    } else {// 若大于8，不是7的倍数
       // bitsPerValue is 12, 20 or 28
       // Write values 2 by 2
       final int numBytesFor2Values = bitsPerValue * 2 / Byte.SIZE;
@@ -132,10 +132,10 @@ public final class DirectWriter {
         final long l1 = nextValues[i];
         final long l2 = nextValues[i + 1];
         final long merged = l1 | (l2 << bitsPerValue);
-        if (bitsPerValue <= Integer.SIZE / 2) {
-          BitUtil.VH_LE_INT.set(nextBlocks, o, (int) merged);
+        if (bitsPerValue <= Integer.SIZE / 2) {// 若每位都是小于int/2
+          BitUtil.VH_LE_INT.set(nextBlocks, o, (int) merged);// 合成一个int存储
         } else {
-          BitUtil.VH_LE_LONG.set(nextBlocks, o, merged);
+          BitUtil.VH_LE_LONG.set(nextBlocks, o, merged);// 若合起来大于int,以long存储
         }
       }
     }
@@ -148,7 +148,7 @@ public final class DirectWriter {
           "Wrong number of values added, expected: " + numValues + ", got: " + count);
     }
     assert !finished;
-    flush();
+    flush();// 将每个文档的termId存储到dvd文件中
 
     // add padding bytes for fast io
     final int paddingBytesNeeded = paddingBytesNeeded(bitsPerValue);
@@ -200,7 +200,7 @@ public final class DirectWriter {
    *     writer
    */
   private static int roundBits(int bitsRequired) {
-    int index = Arrays.binarySearch(SUPPORTED_BITS_PER_VALUE, bitsRequired);
+    int index = Arrays.binarySearch(SUPPORTED_BITS_PER_VALUE, bitsRequired); // 支持的没有10， 则只能选择每个12
     if (index < 0) {
       return SUPPORTED_BITS_PER_VALUE[-index - 1];
     } else {

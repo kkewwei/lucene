@@ -91,7 +91,7 @@ public class TopFieldCollectorManager implements CollectorManager<TopFieldCollec
           "numHits must be > 0; please use TotalHitCountCollector if you just need the total hit count");
     }
 
-    if (sort.getSort().length == 0) {
+    if (sort.getSort().length == 0) {// 默认返回10个，针对字段聚合
       throw new IllegalArgumentException("Sort must contain at least one field");
     }
 
@@ -114,7 +114,7 @@ public class TopFieldCollectorManager implements CollectorManager<TopFieldCollec
     this.numHits = numHits;
     this.after = after;
     this.totalHitsThreshold = totalHitsThreshold;
-    this.minScoreAcc = totalHitsThreshold != Integer.MAX_VALUE ? new MaxScoreAccumulator() : null;
+    this.minScoreAcc = totalHitsThreshold != Integer.MAX_VALUE ? new MaxScoreAccumulator() : null;// 不是要全部value，就会打分
     this.collectors = new ArrayList<>();
   }
 
@@ -168,7 +168,7 @@ public class TopFieldCollectorManager implements CollectorManager<TopFieldCollec
                 + sort.getSort().length);
       }
       collector =
-          new TopFieldCollector.PagingFieldCollector(
+          new TopFieldCollector.PagingFieldCollector(// 原来是为了search_after使用的
               sort, queue, after, numHits, totalHitsThreshold, minScoreAcc);
     }
 

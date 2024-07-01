@@ -44,10 +44,10 @@ import org.apache.lucene.util.packed.PackedLongValues;
 public class MergeState {
 
   /** Maps document IDs from old segments to document IDs in the new segment */
-  public final DocMap[] docMaps;
+  public final DocMap[] docMaps;//docId的映射
 
   /** {@link SegmentInfo} of the newly merged segment. */
-  public final SegmentInfo segmentInfo;
+  public final SegmentInfo segmentInfo; // merge合并产生的新Segment相关信息
 
   /** {@link FieldInfos} of the newly merged segment. */
   public FieldInfos mergeFieldInfos;
@@ -65,7 +65,7 @@ public class MergeState {
   public final DocValuesProducer[] docValuesProducers;
 
   /** FieldInfos being merged */
-  public final FieldInfos[] fieldInfos;
+  public final FieldInfos[] fieldInfos; 
 
   /** Live docs for each reader */
   public final Bits[] liveDocs;
@@ -80,7 +80,7 @@ public class MergeState {
   public final KnnVectorsReader[] knnVectorsReaders;
 
   /** Max docs per reader */
-  public final int[] maxDocs;
+  public final int[] maxDocs; //已经存放每个segment里面的文档数
 
   /** InfoStream for debugging messages. */
   public final InfoStream infoStream;
@@ -98,7 +98,7 @@ public class MergeState {
    * @lucene.internal
    */
   public final MergePolicy.OneMerge oneMerge;
-
+  // originalReaders包含的SegmentReader
   /** Sole constructor. */
   MergeState(
       List<CodecReader> readers,
@@ -126,7 +126,7 @@ public class MergeState {
 
     int numDocs = 0;
     for (int i = 0; i < numReaders; i++) {
-      final CodecReader reader = readers.get(i);
+      final CodecReader reader = readers.get(i);// SegmentReader
 
       maxDocs[i] = reader.maxDoc();
       liveDocs[i] = reader.getLiveDocs();
@@ -137,27 +137,27 @@ public class MergeState {
         normsProducers[i] = normsProducers[i].getMergeInstance();
       }
 
-      docValuesProducers[i] = reader.getDocValuesReader();
+      docValuesProducers[i] = reader.getDocValuesReader();// PerFieldDocValuesFormat$FieldsReader
       if (docValuesProducers[i] != null) {
-        docValuesProducers[i] = docValuesProducers[i].getMergeInstance();
+        docValuesProducers[i] = docValuesProducers[i].getMergeInstance(); // 重新构造了一个PerFieldDocValuesFormat$FieldsReader
       }
 
-      storedFieldsReaders[i] = reader.getFieldsReader();
+      storedFieldsReaders[i] = reader.getFieldsReader();// CompressingStoredFieldsReader
       if (storedFieldsReaders[i] != null) {
         storedFieldsReaders[i] = storedFieldsReaders[i].getMergeInstance();
       }
 
-      termVectorsReaders[i] = reader.getTermVectorsReader();
+      termVectorsReaders[i] = reader.getTermVectorsReader();// TermVectorsReader
       if (termVectorsReaders[i] != null) {
         termVectorsReaders[i] = termVectorsReaders[i].getMergeInstance();
       }
 
-      fieldsProducers[i] = reader.getPostingsReader();
+      fieldsProducers[i] = reader.getPostingsReader();// PerFieldPostingsFormat$FieldsReader
       if (fieldsProducers[i] != null) {
         fieldsProducers[i] = fieldsProducers[i].getMergeInstance();
       }
 
-      pointsReaders[i] = reader.getPointsReader();
+      pointsReaders[i] = reader.getPointsReader(); // Lucene60PointsReader
       if (pointsReaders[i] != null) {
         pointsReaders[i] = pointsReaders[i].getMergeInstance();
       }
@@ -183,11 +183,11 @@ public class MergeState {
     int numReaders = readers.size();
     DocMap[] docMaps = new DocMap[numReaders];
 
-    for (int i = 0; i < numReaders; i++) {
+    for (int i = 0; i < numReaders; i++) { // 每个semgnet
       LeafReader reader = readers.get(i);
-      Bits liveDocs = reader.getLiveDocs();
+      Bits liveDocs = reader.getLiveDocs();// 应该是包含软软删除的doc
 
-      final PackedLongValues delDocMap;
+      final PackedLongValues delDocMap; // 计算新的docId映射（有删除的空洞）
       if (liveDocs != null) {
         delDocMap = removeDeletes(reader.maxDoc(), liveDocs);
       } else {
@@ -200,8 +200,8 @@ public class MergeState {
             if (liveDocs == null) {
               return docBase + docID;
             } else if (liveDocs.get(docID)) {
-              return docBase + (int) delDocMap.get(docID);
-            } else {
+              return docBase + (int) delDocMap.get(docID);//按照segment顺序，然后ID顺序累加
+            } else { // 说明删除了
               return -1;
             }
           };
@@ -279,7 +279,7 @@ public class MergeState {
         PackedLongValues.monotonicBuilder(PackedInts.COMPACT);
     int del = 0;
     for (int i = 0; i < maxDoc; ++i) {
-      docMapBuilder.add(i - del);
+      docMapBuilder.add(i - del);// 相同删除的也会再放一次
       if (liveDocs.get(i) == false) {
         ++del;
       }

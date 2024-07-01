@@ -24,9 +24,9 @@ import org.apache.lucene.util.Accountable;
 import org.apache.lucene.util.ArrayUtil;
 import org.apache.lucene.util.LongValues;
 import org.apache.lucene.util.RamUsageEstimator;
-
+// 压缩原理非常简单，看最大值需要多少位，则选择什么装，比如最大8位，使用byte装，若16位，使用short装，若24位，使用3个byte装，若48，则使用3个short装
 /** Utility class to compress integers into a {@link LongValues} instance. */
-public class PackedLongValues extends LongValues implements Accountable {
+public class PackedLongValues extends LongValues implements Accountable {// 若最大值为负数，退化为64位long装数
 
   private static final long BASE_RAM_BYTES_USED =
       RamUsageEstimator.shallowSizeOfInstance(PackedLongValues.class);
@@ -35,7 +35,7 @@ public class PackedLongValues extends LongValues implements Accountable {
   static final int MIN_PAGE_SIZE = 64;
   // More than 1M doesn't really makes sense with these appending buffers
   // since their goal is to try to have small numbers of bits per value
-  static final int MAX_PAGE_SIZE = 1 << 20;
+  static final int MAX_PAGE_SIZE = 1 << 20;//1m
 
   /** Return a new {@link Builder} that will compress efficiently positive integers. */
   public static PackedLongValues.Builder packedBuilder(
@@ -82,8 +82,8 @@ public class PackedLongValues extends LongValues implements Accountable {
     return monotonicBuilder(DEFAULT_PAGE_SIZE, acceptableOverheadRatio);
   }
 
-  final PackedInts.Reader[] values;
-  final int pageShift, pageMask;
+  final PackedInts.Reader[] values; //
+  final int pageShift, pageMask; // pageShift=1024
   private final long size;
   private final long ramBytesUsed;
 
@@ -102,8 +102,8 @@ public class PackedLongValues extends LongValues implements Accountable {
   }
 
   int decodeBlock(int block, long[] dest) {
-    final PackedInts.Reader vals = values[block];
-    final int size = vals.size();
+    final PackedInts.Reader vals = values[block]; // 解压其中一个value
+    final int size = vals.size();// 获取压缩的个数
     for (int k = 0; k < size; ) {
       k += vals.get(k, dest, k, size - k);
     }
@@ -135,7 +135,7 @@ public class PackedLongValues extends LongValues implements Accountable {
   /** An iterator over long values. */
   public final class Iterator {
 
-    final long[] currentValues;
+    final long[] currentValues;//  从values中解压缩出来的一个数据, 放入这里。边读取， 边解压边读取
     int vOff, pOff;
     int currentCount; // number of entries of the current page
 
@@ -149,7 +149,7 @@ public class PackedLongValues extends LongValues implements Accountable {
       if (vOff == values.length) {
         currentCount = 0;
       } else {
-        currentCount = decodeBlock(vOff, currentValues);
+        currentCount = decodeBlock(vOff, currentValues); // 解压block
         assert currentCount > 0;
       }
     }
@@ -166,12 +166,12 @@ public class PackedLongValues extends LongValues implements Accountable {
       if (pOff == currentCount) {
         vOff += 1;
         pOff = 0;
-        fillBlock();
+        fillBlock(); // 若没有了，就会解压下一个value
       }
       return result;
     }
   }
-
+  // 辅助产生每个Builder
   /** A Builder for a {@link PackedLongValues} instance. */
   public static class Builder implements Accountable {
 
@@ -179,18 +179,18 @@ public class PackedLongValues extends LongValues implements Accountable {
     private static final long BASE_RAM_BYTES_USED =
         RamUsageEstimator.shallowSizeOfInstance(Builder.class);
 
-    final int pageShift, pageMask;
+    final int pageShift, pageMask; // pageShift默认1024
     final float acceptableOverheadRatio;
-    long[] pending;
-    long size;
+    long[] pending; // 暂存的是每个termId，相同的算俩 / 文档Id
+    long size; // 暂存的文档个数
 
-    PackedInts.Reader[] values;
+    PackedInts.Reader[] values; //  存放的是这里[]Direct64, 里面有数数组直接填写。初始长度为16,装满了还能继续装
     long ramBytesUsed;
-    int valuesOff;
-    int pendingOff;
+    int valuesOff;// value里面当前起始位置
+    int pendingOff; //目前已经存进来了几个term
 
     Builder(int pageSize, float acceptableOverheadRatio) {
-      pageShift = checkBlockSize(pageSize, MIN_PAGE_SIZE, MAX_PAGE_SIZE);
+      pageShift = checkBlockSize(pageSize, MIN_PAGE_SIZE, MAX_PAGE_SIZE); // page长度，多少个二进制
       pageMask = pageSize - 1;
       this.acceptableOverheadRatio = acceptableOverheadRatio;
       values = new PackedInts.Reader[INITIAL_PAGE_COUNT];
@@ -209,7 +209,7 @@ public class PackedLongValues extends LongValues implements Accountable {
      * builder. This operation is destructive.
      */
     public PackedLongValues build() {
-      finish();
+      finish(); // 把termId压缩存放
       pending = null;
       final PackedInts.Reader[] values = ArrayUtil.copyOfSubArray(this.values, 0, valuesOff);
       final long ramBytesUsed =
@@ -279,8 +279,8 @@ public class PackedLongValues extends LongValues implements Accountable {
     }
 
     private void packIfFull() {
-      if (pendingOff == pending.length) {
-        if (values.length == valuesOff) {
+      if (pendingOff == pending.length) {// 目前256个，若存满了则扩容一次
+        if (values.length == valuesOff) {// 是否需要库容
           final int newLength = ArrayUtil.oversize(valuesOff + 1, 8);
           grow(newLength);
         }
@@ -289,11 +289,11 @@ public class PackedLongValues extends LongValues implements Accountable {
     }
 
     final void finish() {
-      if (pendingOff > 0) {
+      if (pendingOff > 0) { // 还有点的话，就再次压缩
         if (values.length == valuesOff) {
           grow(valuesOff + 1);
         }
-        pack();
+        pack(); // 给压缩了
       }
     }
 
@@ -304,28 +304,28 @@ public class PackedLongValues extends LongValues implements Accountable {
       // reset pending buffer
       pendingOff = 0;
     }
-
+    //第一个参数为准备打包的数组, 第二个是要打包的数字的个数，，第三个是打包后生成的Mutable是第几个（和咱要说的没有任何关系），第四个的是压缩时能够使用多少内存
     void pack(long[] values, int numValues, int block, float acceptableOverheadRatio) {
       assert numValues > 0;
       // compute max delta
       long minValue = values[0];
       long maxValue = values[0];
-      for (int i = 1; i < numValues; ++i) {
+      for (int i = 1; i < numValues; ++i) { // 找到最大的和最小的那个数
         minValue = Math.min(minValue, values[i]);
         maxValue = Math.max(maxValue, values[i]);
       }
 
       // build a new packed reader
       if (minValue == 0 && maxValue == 0) {
-        this.values[block] = PackedInts.NullReader.forCount(numValues);
+        this.values[block] = PackedInts.NullReader.forCount(numValues);//如果所有的值都是0，则单独生成一个NullReader，标识所有的值都是0.
       } else {
-        final int bitsRequired = minValue < 0 ? 64 : PackedInts.bitsRequired(maxValue);
+        final int bitsRequired = minValue < 0 ? 64 : PackedInts.bitsRequired(maxValue);//最大的数字需要多少位，最小数如果是负数，则需要64位，否则为（64-他的开始的0的数量）
         final PackedInts.Mutable mutable =
-            PackedInts.getMutable(numValues, bitsRequired, acceptableOverheadRatio);
-        for (int i = 0; i < numValues; ) {
-          i += mutable.set(i, values, i, numValues - i);
+            PackedInts.getMutable(numValues, bitsRequired, acceptableOverheadRatio);//这个方法便是生成一个可以装数的包， Packed64
+        for (int i = 0; i < numValues; ) {// 装每个数
+          i += mutable.set(i, values, i, numValues - i); // 跑到Packed64.set()
         }
-        this.values[block] = mutable;
+        this.values[block] = mutable; // 每次打包都能产生一个value
       }
     }
 

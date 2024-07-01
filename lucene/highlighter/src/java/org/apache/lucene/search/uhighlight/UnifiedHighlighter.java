@@ -668,8 +668,8 @@ public class UnifiedHighlighter {
   /** Source of term offsets; essential for highlighting. */
   public enum OffsetSource {
     POSTINGS,
-    TERM_VECTORS,
-    ANALYSIS,
+    TERM_VECTORS,// 通过term_vectors获取terms offsets
+    ANALYSIS,// 通过分析source获取
     POSTINGS_WITH_TERM_VECTORS,
     NONE_NEEDED
   }
@@ -1107,7 +1107,7 @@ public class UnifiedHighlighter {
         .highlightFieldForDoc(null, -1, content);
   }
 
-  protected FieldHighlighter getFieldHighlighter(
+  protected FieldHighlighter getFieldHighlighter(// allTerms分的词，query：在highlight指定的，原始查询的query，
       String field, Query query, Set<Term> allTerms, int maxPassages) {
     Set<String> maskedFields = getMaskedFields(field);
     FieldOffsetStrategy fieldOffsetStrategy;

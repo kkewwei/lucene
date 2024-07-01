@@ -96,7 +96,7 @@ public class Lucene90NormsFormat extends NormsFormat {
     return new Lucene90NormsProducer(
         state, DATA_CODEC, DATA_EXTENSION, METADATA_CODEC, METADATA_EXTENSION);
   }
-
+  // 可以参考：https://www.amazingkoala.com.cn/Lucene/suoyinwenjian/2019/0305/39.html介绍
   private static final String DATA_CODEC = "Lucene90NormsData";
   private static final String DATA_EXTENSION = "nvd";
   private static final String METADATA_CODEC = "Lucene90NormsMetadata";

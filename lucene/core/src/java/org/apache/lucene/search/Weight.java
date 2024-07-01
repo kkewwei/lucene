@@ -40,7 +40,7 @@ import org.apache.lucene.util.Bits;
  * between the searcher's top-level {@link IndexReaderContext} and the context used to create a
  * {@link Scorer}.
  *
- * <p>A <code>Weight</code> is used in the following way:
+ * <p>A <code>Weight</code> is used in the following way: weight以下面的方式被使用
  *
  * <ol>
  *   <li>A <code>Weight</code> is constructed by a top-level query, given a <code>IndexSearcher
@@ -50,10 +50,10 @@ import org.apache.lucene.util.Bits;
  * </ol>
  *
  * @since 2.9
- */
+ */ // 由Weight构建Scorer
 public abstract class Weight implements SegmentCacheable {
-
-  protected final Query parentQuery;
+ // 每个Weight都是又一个query产生的
+  protected final Query parentQuery; // 可以是BooleanQuery，LongPoint$1或者LatLonDocValuesBoxQuery
 
   /**
    * Sole constructor, typically invoked by sub-classes.
@@ -106,7 +106,7 @@ public abstract class Weight implements SegmentCacheable {
 
   /** The query that this concerns. */
   public final Query getQuery() {
-    return parentQuery;
+    return parentQuery; // 可以是IndexOrDocValuesQuery
   }
 
   /**
@@ -127,12 +127,12 @@ public abstract class Weight implements SegmentCacheable {
    * @throws IOException if there is a low-level I/O error
    */
   public final Scorer scorer(LeafReaderContext context) throws IOException {
-    ScorerSupplier scorerSupplier = scorerSupplier(context);
+    ScorerSupplier scorerSupplier = scorerSupplier(context);// Scorer是Lucene在搜索流程用于计算Query与文档相似度计算的外围组件，它实际上并不负责文档得分的计算，这部分工作委托给了Similarity。Similarity才是真正的评分器，而Scorer只是负责评分外围的工作
     if (scorerSupplier == null) {
       return null;
     }
     return scorerSupplier.get(Long.MAX_VALUE);
-  }
+  }// 也被指定为final
 
   /**
    * Get a {@link ScorerSupplier}, which allows knowing the cost of the {@link Scorer} before
@@ -167,16 +167,16 @@ public abstract class Weight implements SegmentCacheable {
    * A bulk scorer for the same {@link LeafReaderContext} instance may be requested multiple times
    * as part of a single search call.
    */
-  public final BulkScorer bulkScorer(LeafReaderContext context) throws IOException {
-    ScorerSupplier scorerSupplier = scorerSupplier(context);
+  public final BulkScorer bulkScorer(LeafReaderContext context) throws IOException {// 会有BKD树中查找匹配的docId
+    ScorerSupplier scorerSupplier = scorerSupplier(context);// 可以返回ConstantScoreScorer。 // 可能跑到TermQuery$TermWeight.scorer(), 在一个segment上搜索
     if (scorerSupplier == null) {
       // No docs match
       return null;
     }
 
     scorerSupplier.setTopLevelScoringClause();
-    return scorerSupplier.bulkScorer();
-  }
+    return scorerSupplier.bulkScorer();// 可能跑到 BooleanScorerSupplier.bulkScorer
+  }// 也被指定为final
 
   /**
    * Counts the number of live documents that match a given {@link Weight#parentQuery} in a leaf.
@@ -228,15 +228,15 @@ public abstract class Weight implements SegmentCacheable {
    * @lucene.internal
    */
   protected static class DefaultBulkScorer extends BulkScorer {
-    private final Scorer scorer;
-    private final DocIdSetIterator iterator;
+    private final Scorer scorer; // 可以是ConstantScoreScorer
+    private final DocIdSetIterator iterator;// BitSetIterator
     private final TwoPhaseIterator twoPhase;
 
     /** Sole constructor. */
     public DefaultBulkScorer(Scorer scorer) {
       this.scorer = Objects.requireNonNull(scorer);
       this.twoPhase = scorer.twoPhaseIterator();
-      if (twoPhase == null) {
+      if (twoPhase == null) {/// 主要是提供iterator
         this.iterator = scorer.iterator();
       } else {
         this.iterator = twoPhase.approximation();
@@ -251,8 +251,8 @@ public abstract class Weight implements SegmentCacheable {
     @Override
     public int score(LeafCollector collector, Bits acceptDocs, int min, int max)
         throws IOException {
-      collector.setScorer(scorer);
-      DocIdSetIterator competitiveIterator = collector.competitiveIterator();
+      collector.setScorer(scorer); // 要在collect前调用下, 针对TopScoreDocCollector，会有updateCompetitiveIterator更新符合要求doc的动作
+      DocIdSetIterator competitiveIterator = collector.competitiveIterator();// 获取更具竞争力的docId列表
 
       if (competitiveIterator != null) {
         if (competitiveIterator.docID() > min) {
@@ -263,10 +263,10 @@ public abstract class Weight implements SegmentCacheable {
       }
 
       if (iterator.docID() < min) {
-        if (iterator.docID() == min - 1) {
-          iterator.nextDoc();
+        if (iterator.docID() == min - 1) {// 刚好是min小一个
+          iterator.nextDoc();// 下一个doc
         } else {
-          iterator.advance(min);
+          iterator.advance(min);//直接定位到某个doc
         }
       }
 
@@ -275,12 +275,12 @@ public abstract class Weight implements SegmentCacheable {
       // collect() because only a subset of collectors produce a competitive iterator, and the set
       // of implementing classes for two-phase approximations is smaller than the set of doc id set
       // iterator implementations.
-      if (twoPhase == null && competitiveIterator == null) {
+      if (twoPhase == null && competitiveIterator == null) {// 没有更具有竞争性的文档id列表
         // Optimize simple iterators with collectors that can't skip
         scoreIterator(collector, acceptDocs, iterator, max);
       } else if (competitiveIterator == null) {
         scoreTwoPhaseIterator(collector, acceptDocs, iterator, twoPhase, max);
-      } else if (twoPhase == null) {
+      } else if (twoPhase == null) {// 两阶段为null，但是有更竞争的competitiveIterator
         scoreCompetitiveIterator(collector, acceptDocs, iterator, competitiveIterator, max);
       } else {
         scoreTwoPhaseOrCompetitiveIterator(
@@ -326,8 +326,8 @@ public abstract class Weight implements SegmentCacheable {
         if (competitiveIterator.docID() < doc) {
           int competitiveNext = competitiveIterator.advance(doc);
           if (competitiveNext != doc) {
-            doc = iterator.advance(competitiveNext);
-            continue;
+            doc = iterator.advance(competitiveNext);// 和competitiveIterator不一样，再继续找
+            continue;// 再继续找
           }
         }
 
@@ -357,8 +357,8 @@ public abstract class Weight implements SegmentCacheable {
           }
         }
 
-        if ((acceptDocs == null || acceptDocs.get(doc)) && twoPhase.matches()) {
-          collector.collect(doc);
+        if ((acceptDocs == null || acceptDocs.get(doc)) && twoPhase.matches()) {// AutomatonQueryOnBinaryDv是否匹配
+          collector.collect(doc);// 会跑大SimpleTopScoreDocCollector.collect()，进行打分，将保存打分最小的几个
         }
 
         doc = iterator.nextDoc();

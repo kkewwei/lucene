@@ -21,13 +21,13 @@ import org.apache.lucene.util.ArrayUtil;
 import org.apache.lucene.util.BytesRef;
 
 /**
- * Enumerates all input (BytesRef) + output pairs in an FST.
+ * Enumerates all input (BytesRef) + output pairs in an FST. // 枚举fst结构中的所有输入输出
  *
  * @lucene.experimental
  */
 public final class BytesRefFSTEnum<T> extends FSTEnum<T> {
   private final BytesRef current = new BytesRef(10);
-  private final InputOutput<T> result = new InputOutput<>();
+  private final InputOutput<T> result = new InputOutput<>(); // 需要看下里面的变化
   private BytesRef target;
 
   /** Holds a single input (BytesRef) + output pair. */

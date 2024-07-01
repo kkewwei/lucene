@@ -74,15 +74,15 @@ public abstract class MergePolicy {
    * Progress and state for an executing merge. This class encapsulates the logic to pause and
    * resume the merge thread or to abort the merge entirely.
    *
-   * @lucene.experimental
+   * @lucene.experimental // 每次找到一个新的merge，在OneMerge构建时初始化，就会产生一个新的OneMergeProgress。
    */
   public static class OneMergeProgress {
     /** Reason for pausing the merge thread. */
     public enum PauseReason {
       /** Stopped (because of throughput rate set to 0, typically). */
-      STOPPED,
+      STOPPED,  // 直接限制为0mb
       /** Temporarily paused because of exceeded throughput rate. */
-      PAUSED,
+      PAUSED, // 临时性的暂停，由于流量超速
       /** Other reason. */
       OTHER
     }
@@ -91,7 +91,7 @@ public abstract class MergePolicy {
     private final Condition pausing = pauseLock.newCondition();
 
     /** Pause times (in nanoseconds) for each {@link PauseReason}. */
-    private final EnumMap<PauseReason, AtomicLong> pauseTimesNS;
+    private final EnumMap<PauseReason, AtomicLong> pauseTimesNS; // STOPPED 还是PAUSED
 
     private volatile boolean aborted;
 
@@ -135,15 +135,15 @@ public abstract class MergePolicy {
      *     method is needed. Other threads can wake up any sleeping thread by calling {@link
      *     #wakeup}, but it'd fall to sleep for the remainder of the requested time if this
      *     condition
-     */
+     */// pauseNanos最多暂停250ms，外边写死了
     public void pauseNanos(long pauseNanos, PauseReason reason, BooleanSupplier condition)
         throws InterruptedException {
       long start = System.nanoTime();
-      AtomicLong timeUpdate = pauseTimesNS.get(reason);
+      AtomicLong timeUpdate = pauseTimesNS.get(reason); // 哪种方式开始计数
       pauseLock.lock();
       try {
-        while (pauseNanos > 0 && !aborted && condition.getAsBoolean()) {
-          pauseNanos = pausing.awaitNanos(pauseNanos);
+        while (pauseNanos > 0 && !aborted && condition.getAsBoolean()) { // 除非限速值发生了改变，否则别人唤醒后再继续睡眠（每次setMBPerSec都会唤醒一次）
+          pauseNanos = pausing.awaitNanos(pauseNanos); // 那么就在这里睡眠多长时间，允许别人唤醒
         }
       } finally {
         pauseLock.unlock();
@@ -155,7 +155,7 @@ public abstract class MergePolicy {
     public void wakeup() {
       pauseLock.lock();
       try {
-        pausing.signalAll();
+        pausing.signalAll(); //允许别人唤醒
       } finally {
         pauseLock.unlock();
       }
@@ -191,9 +191,9 @@ public abstract class MergePolicy {
 
     /** Estimated size in bytes of the merged segment. */
     public volatile long estimatedMergeBytes; // used by IndexWriter
-
+   //  根据merge前的前10个segment，包含delete部分之后的sum(size)
     // Sum of sizeInBytes of all SegmentInfos; set by IW.mergeInit
-    volatile long totalMergeBytes;
+    volatile long totalMergeBytes; // 包含了需要被删除的byte, 在IndexWriter.registerMerge()中会统计，文件长度之和相加
 
     private List<MergeReader> mergeReaders; // used by IndexWriter
 
@@ -602,7 +602,7 @@ public abstract class MergePolicy {
 
   /** Creates a new merge policy instance. */
   protected MergePolicy() {
-    this(DEFAULT_NO_CFS_RATIO, DEFAULT_MAX_CFS_SEGMENT_SIZE);
+    this(DEFAULT_NO_CFS_RATIO, DEFAULT_MAX_CFS_SEGMENT_SIZE);// es默认使用该函数
   }
 
   /**
@@ -622,11 +622,11 @@ public abstract class MergePolicy {
    * @param mergeTrigger the event that triggered the merge
    * @param segmentInfos the total set of segments in the index
    * @param mergeContext the IndexWriter to find the merges on
-   */
+   */// 第一次跳到MergeSpecification.findMerges()，第二次跳到TieredMergePolicy.findMerges()
   public abstract MergeSpecification findMerges(
       MergeTrigger mergeTrigger, SegmentInfos segmentInfos, MergeContext mergeContext)
       throws IOException;
-
+  // es中首先进入FilterMergePolicy.findMerges(),第二次进入OneMergeWrappingMergePolicy.findMerges(实际是)
   /**
    * Define the set of merge operations to perform on provided codec readers in {@link
    * IndexWriter#addIndexes(CodecReader...)}.
@@ -710,7 +710,7 @@ public abstract class MergePolicy {
       return null;
     }
     MergeSpecification newMergeSpec = null;
-    for (OneMerge oneMerge : mergeSpec.merges) {
+    for (OneMerge oneMerge : mergeSpec.merges) {//只合并包含2mb的小segment的OneMerge，别的一律不再merge
       boolean belowMaxFullFlushSize = true;
       for (SegmentCommitInfo sci : oneMerge.segments) {
         if (size(sci, mergeContext) >= maxFullFlushMergeSize()) {
@@ -732,15 +732,15 @@ public abstract class MergePolicy {
    * Returns true if a new segment (regardless of its origin) should use the compound file format.
    * The default implementation returns <code>true</code> iff the size of the given mergedInfo is
    * less or equal to {@link #getMaxCFSSegmentSizeMB()} and the size is less or equal to the
-   * TotalIndexSize * {@link #getNoCFSRatio()} otherwise <code>false</code>.
-   */
+   * TotalIndexSize * {@link #getNoCFSRatio()} otherwise <code>false</code>.// 从IndexWriter.mergeMiddle()中跑过来，
+   */// 合并产生的段是否需要复合文件,merge之后的文件比较大，不用compound了？。而flush产生的段是否需要复合文件，是在LiveIndexWriterConfig.useCompoundFile控制的
   public boolean useCompoundFile(
       SegmentInfos infos, SegmentCommitInfo mergedInfo, MergeContext mergeContext)
       throws IOException {
-    if (getNoCFSRatio() == 0.0) {
+    if (getNoCFSRatio() == 0.0) {// infos是这个IndexWriter维护的所有段，就是一个shard包含的所有段
       return false;
     }
-    long mergedInfoSize = size(mergedInfo, mergeContext);
+    long mergedInfoSize = size(mergedInfo, mergeContext);// 去除了待删除文件
     if (mergedInfoSize > maxCFSSegmentSize) {
       return false;
     }
@@ -750,7 +750,7 @@ public abstract class MergePolicy {
     long totalSize = 0;
     for (SegmentCommitInfo info : infos) {
       totalSize += size(info, mergeContext);
-    }
+    } // 合并后是合并前的10%大小，才使用。
     return mergedInfoSize <= getNoCFSRatio() * totalSize;
   }
 
@@ -759,8 +759,8 @@ public abstract class MergePolicy {
    * non-deleted documents is set.
    */
   protected long size(SegmentCommitInfo info, MergeContext mergeContext) throws IOException {
-    long byteSize = info.sizeInBytes();
-    int delCount = mergeContext.numDeletesToMerge(info);
+    long byteSize = info.sizeInBytes(); // 总共大小
+    int delCount = mergeContext.numDeletesToMerge(info); // 这个段真正需要删除的文档，在retentionLease列表的文档，也认为不需要删除。
     assert assertDelCount(delCount, info);
     double delRatio =
         info.info.maxDoc() <= 0 ? 0d : (double) delCount / (double) info.info.maxDoc();

@@ -60,12 +60,12 @@ import org.apache.lucene.util.InfoStream;
  * The DWPT also doesn't apply its current documents delete term until it has updated its delete
  * slice which ensures the consistency of the update. If the update fails before the DeleteSlice
  * could have been updated the deleteTerm will also not be added to its private deletes neither to
- * the global deletes.
- */
+ * the global deletes. // 删除操作可参考：https://www.jianshu.com/p/26ba09055175
+ */  // 一个DocuentsWriter会私下维持一个DocumentsWriterFlushQueue。每次full flush 都会产生一个新的
 final class DocumentsWriterDeleteQueue implements Accountable, Closeable {
-
+  // 主要用于在flush时记录每个DWPT的刷新操作，这里记录的刷新操作主要是刷新之后形成的FlushedSegment以及全局删除操作，FlushedSegment是此次刷新之后的最终段内存视图。其中各种更新操作已经进行过具体处理，Term删除也进行了处理，但是Query删除还依然保持未处理，所以FlushedSegment中还保存了Query删除操作，但是没有Term删除操作。
   // the current end (latest delete operation) in the delete queue:
-  private volatile Node<?> tail;
+  private volatile Node<?> tail; // 只要有一个改了，那么全局都改了。代表最新的的delete
 
   private volatile boolean closed = false;
 
@@ -74,34 +74,34 @@ final class DocumentsWriterDeleteQueue implements Accountable, Closeable {
    * segment flushes, we bundle up this set of deletes and insert into the buffered updates stream
    * before the newly flushed segment(s).
    */
-  private final DeleteSlice globalSlice;
+  private final DeleteSlice globalSlice; // 在刷新前，所有delete已经放入globalBufferedUpdates了
 
-  private final BufferedUpdates globalBufferedUpdates;
-
+  private final BufferedUpdates globalBufferedUpdates; // 它描述了所有的删除信息，该删除信息会被保存在全局BufferedUpdates。会作用剩余存量的全局的segments的
+// globalSlice 和 globalBufferedUpdates 变更读取，都依靠globalBufferLock
   // only acquired to update the global deletes, pkg-private for access by tests:
   final ReentrantLock globalBufferLock = new ReentrantLock();
 
-  final long generation;
+  final long generation; // 每刷新时产生一个新的DocumentsWriterDeleteQueue，那么generation+1
 
   /**
    * Generates the sequence number that IW returns to callers changing the index, showing the
    * effective serialization of all operations.
    */
-  private final AtomicLong nextSeqNo;
+  private final AtomicLong nextSeqNo;// 全局惟一的，任何add delete, update都会调用该函数
 
   private final InfoStream infoStream;
 
-  private volatile long maxSeqNo = Long.MAX_VALUE;
+  private volatile long maxSeqNo = Long.MAX_VALUE; /// 启动的时候为0,当前已经使用的最大的
 
-  private final long startSeqNo;
+  private final long startSeqNo; //三个
   private final LongSupplier previousMaxSeqId;
-  private boolean advanced;
+  private boolean advanced;// 这个queue是否已经被替换了
 
   DocumentsWriterDeleteQueue(InfoStream infoStream) {
     // seqNo must start at 1 because some APIs negate this to also return a boolean
     this(infoStream, 0, 1, () -> 0);
   }
-
+  // 每次flush时产生新的
   private DocumentsWriterDeleteQueue(
       InfoStream infoStream, long generation, long startSeqNo, LongSupplier previousMaxSeqId) {
     this.infoStream = infoStream;
@@ -116,19 +116,19 @@ final class DocumentsWriterDeleteQueue implements Accountable, Closeable {
      * we use a sentinel instance as our initial tail. No slice will ever try to
      * apply this tail since the head is always omitted.
      */
-    tail = new Node<>(null); // sentinel
-    globalSlice = new DeleteSlice(tail);
+    tail = new Node<>(null); // sentinel   哨兵
+    globalSlice = new DeleteSlice(tail); // //globalSlice默认指向globalQueue的尾部
   }
 
   long addDelete(Query... queries) {
-    long seqNo = add(new QueryArrayNode(queries));
+    long seqNo = add(new QueryArrayNode(queries)); //这里是QueryArrayNode，split时就会进来，传递query
     tryApplyGlobalSlice();
     return seqNo;
   }
 
   long addDelete(Term... terms) {
-    long seqNo = add(new TermArrayNode(terms));
-    tryApplyGlobalSlice();
+    long seqNo = add(new TermArrayNode(terms)); //向全局的 tail 指向的链表尾部插入，tail始终指向尾部
+    tryApplyGlobalSlice(); //将globalSlice中截取的删除分片放入globalBufferedUpdates中
     return seqNo;
   }
 
@@ -147,12 +147,12 @@ final class DocumentsWriterDeleteQueue implements Accountable, Closeable {
   }
 
   static Node<DocValuesUpdate[]> newNode(DocValuesUpdate... updates) {
-    return new DocValuesUpdatesNode(updates);
+    return new DocValuesUpdatesNode(updates);// 一般是 NumericDocValuesUpdate
   }
 
   /** invariant for document update */
   long add(Node<?> deleteNode, DeleteSlice slice) {
-    long seqNo = add(deleteNode);
+    long seqNo = add(deleteNode);// 先让全局tail向前移动。tail代表最新未应用的删除
     /*
      * this is an update request where the term is the updated documents
      * delTerm. in that case we need to guarantee that this insert is atomic
@@ -163,17 +163,17 @@ final class DocumentsWriterDeleteQueue implements Accountable, Closeable {
      * will apply this delete next time we update our slice and one of the two
      * competing updates wins!
      */
-    slice.sliceTail = deleteNode;
+    slice.sliceTail = deleteNode;// 再移动PerThread.slice的sliceTail
     assert slice.sliceHead != slice.sliceTail : "slice head and tail must differ after add";
-    tryApplyGlobalSlice(); // TODO doing this each time is not necessary maybe
+    tryApplyGlobalSlice(); // TODO doing this each time is not necessary maybe 再运用全局的
     // we can do it just every n times or so?
 
     return seqNo;
   }
-
+  // 尾插法，tail始终指向尾部
   synchronized long add(Node<?> newNode) {
     ensureOpen();
-    tail.next = newNode;
+    tail.next = newNode; // tail = TermArrayNode 先接上去再说
     this.tail = newNode;
     return getNextSequenceNumber();
   }
@@ -194,9 +194,9 @@ final class DocumentsWriterDeleteQueue implements Accountable, Closeable {
       globalBufferLock.unlock();
     }
   }
-
+  //首先globalSlice截取tail的放入sliceTail，然后再将globalSlice的sliceHead->sliceTail里面的DelteTerm放入globalBufferedUpdates中
   void tryApplyGlobalSlice() {
-    if (globalBufferLock.tryLock()) {
+    if (globalBufferLock.tryLock()) {// 只是尝试获取，获取不到就不会去更新
       try {
         ensureOpen();
         /*
@@ -205,16 +205,16 @@ final class DocumentsWriterDeleteQueue implements Accountable, Closeable {
          * deletes that have been added after the current in-flight global slices
          * tail the next time we can get the lock!
          */
-        if (updateSliceNoSeqNo(globalSlice)) {
-          globalSlice.apply(globalBufferedUpdates, BufferedUpdates.MAX_INT);
-        }
+        if (updateSliceNoSeqNo(globalSlice)) {// 若globalSlice的sliceTail不是最新的，那么将globalSlice的sliceTail指向最新
+          globalSlice.apply(globalBufferedUpdates, BufferedUpdates.MAX_INT);// 这里的docIDUpto=max。后面会修改过来
+        }// 将globalSlice中更新的逐个放入globalBufferedUpdates中
       } finally {
         globalBufferLock.unlock();
       }
     }
   }
-
-  FrozenBufferedUpdates freezeGlobalBuffer(DeleteSlice callerSlice) {
+  // callerSlice：每个DWPT都会调用freezeGlobalBuffer。只有一个地方调用这个函数:DocumentsWriterPerThread.prepareFlush()
+  FrozenBufferedUpdates freezeGlobalBuffer(DeleteSlice callerSlice) {// 每个DWPT都能感知到删除动作
     globalBufferLock.lock();
     try {
       ensureOpen();
@@ -222,13 +222,13 @@ final class DocumentsWriterDeleteQueue implements Accountable, Closeable {
        * Here we freeze the global buffer so we need to lock it, apply all
        * deletes in the queue and reset the global slice to let the GC prune the
        * queue.
-       */
+       */// 每个
       final Node<?> currentTail = tail; // take the current tail make this local any
       // Changes after this call are applied later
       // and not relevant here
-      if (callerSlice != null) {
+      if (callerSlice != null) {// 在Flush时，每个DocumentsWriterPerThread都会进来获取下缺少的
         // Update the callers slices so we are on the same page
-        callerSlice.sliceTail = currentTail;
+        callerSlice.sliceTail = currentTail; // 先给每个WDPT最新的全局tail(以免漏掉)
       }
       return freezeGlobalBufferInternal(currentTail);
     } finally {
@@ -258,36 +258,36 @@ final class DocumentsWriterDeleteQueue implements Accountable, Closeable {
       globalBufferLock.unlock();
     }
   }
-
+  // 两处调用，传递进来的都是全局tail
   private FrozenBufferedUpdates freezeGlobalBufferInternal(final Node<?> currentTail) {
     assert globalBufferLock.isHeldByCurrentThread();
-    if (globalSlice.sliceTail != currentTail) {
+    if (globalSlice.sliceTail != currentTail) { // 最新的是不是我们传递进来的
       globalSlice.sliceTail = currentTail;
-      globalSlice.apply(globalBufferedUpdates, BufferedUpdates.MAX_INT);
+      globalSlice.apply(globalBufferedUpdates, BufferedUpdates.MAX_INT); // 若globalSlice还有未取完的，先取完放入
     }
 
-    if (globalBufferedUpdates.any()) {
+    if (globalBufferedUpdates.any()) {// 全局的，第一个触发了之后，后面的就不用再放入DocumentsWriterPerThread。
       final FrozenBufferedUpdates packet =
-          new FrozenBufferedUpdates(infoStream, globalBufferedUpdates, null);
-      globalBufferedUpdates.clear();
+          new FrozenBufferedUpdates(infoStream, globalBufferedUpdates, null);// 作用全局，所以privateSegment=null
+      globalBufferedUpdates.clear(); // global内容此时已经放入packet了。这个冻结的全局globalBufferedUpdates只用于已经存在的segment，只要一个segment来appled就行了。
       return packet;
     } else {
-      return null;
+      return null; // 后面的DocumentsWriterPerThread触发将返回null
     }
   }
-
+  // 每个DocumentsWriterPerThread都拥有一个
   DeleteSlice newSlice() {
-    return new DeleteSlice(tail);
+    return new DeleteSlice(tail); // 若tail修改了，这里可以立马感知到
   }
-
+  // 多线程共享的
   /** Negative result means there were new deletes since we last applied */
-  synchronized long updateSlice(DeleteSlice slice) {
+  synchronized long updateSlice(DeleteSlice slice) {// 每个DocumentsWriterPerThread.finishDocuments()写完一个文档，会更新这里。
     ensureOpen();
     long seqNo = getNextSequenceNumber();
-    if (slice.sliceTail != tail) {
+    if (slice.sliceTail != tail) { // 映射了这个DWPT工作期间，全局tail的删除情况(并没有冻结DWDQ的)
       // new deletes arrived since we last checked
       slice.sliceTail = tail;
-      seqNo = -seqNo;
+      seqNo = -seqNo; // 有删除了
     }
     return seqNo;
   }
@@ -329,11 +329,11 @@ final class DocumentsWriterDeleteQueue implements Accountable, Closeable {
       globalBufferLock.unlock();
     }
   }
-
+  // 一个DocumentsWriterPerThread会产生一个DeleteSlice，而每个DeleteSlice都会作为DocumentsWriterDeleteQueue中一个节点存放起来
   static class DeleteSlice {
     // No need to be volatile, slices are thread captive (only accessed by one thread)!
-    Node<?> sliceHead; // we don't apply this one
-    Node<?> sliceTail;
+    Node<?> sliceHead; // we don't apply this one 这个是过期的那个头，开区间
+    Node<?> sliceTail; // 用来存globalQueue上截取自上次flush之后自己需要记录的删除操作。一般都是sliceTail记录最新的那部分
 
     DeleteSlice(Node<?> currentTail) {
       assert currentTail != null;
@@ -356,14 +356,14 @@ final class DocumentsWriterDeleteQueue implements Accountable, Closeable {
        * tail in this slice are not equal then there will be at least one more
        * non-null node in the slice!
        */
-      Node<?> current = sliceHead;
+      Node<?> current = sliceHead; // 从head（过期的头，里面数据直接丢弃）
       do {
         current = current.next;
         assert current != null
             : "slice property violated between the head on the tail must not be a null node";
-        current.apply(del, docIDUpto);
+        current.apply(del, docIDUpto); // 默认会跑到DocumentsWriterDeleteQueue$TermArrayNode，或者QueryArrayNode。将NumericDocValuesUpdate逐个放入del中
       } while (current != sliceTail);
-      reset();
+      reset(); //将DeleteSlice中sliceHead=sliceTail，清位
     }
 
     void reset() {
@@ -413,7 +413,7 @@ final class DocumentsWriterDeleteQueue implements Accountable, Closeable {
     final T item;
 
     Node(T item) {
-      this.item = item;
+      this.item = item; // 可以是Term，也可以是Query[1], 可以是DocValuesUpdate[]
     }
 
     void apply(BufferedUpdates bufferedDeletes, int docIDUpto) {
@@ -430,7 +430,7 @@ final class DocumentsWriterDeleteQueue implements Accountable, Closeable {
     TermNode(Term term) {
       super(term);
     }
-
+    //这里要重点关注下apply函数，从下面函数实现可以知道其主要工作就是将删除操作放到BufferedUpdates中
     @Override
     void apply(BufferedUpdates bufferedDeletes, int docIDUpto) {
       bufferedDeletes.addTerm(item, docIDUpto);
@@ -493,7 +493,7 @@ final class DocumentsWriterDeleteQueue implements Accountable, Closeable {
   private static final class DocValuesUpdatesNode extends Node<DocValuesUpdate[]> {
 
     DocValuesUpdatesNode(DocValuesUpdate... updates) {
-      super(updates);
+      super(updates); //   每个DocValuesUpdate都是一条删除记录
     }
 
     @Override
@@ -561,8 +561,8 @@ final class DocumentsWriterDeleteQueue implements Accountable, Closeable {
   public String toString() {
     return "DWDQ: [ generation: " + generation + " ]";
   }
-
-  public long getNextSequenceNumber() {
+  // 1.在每个DocumentsWriterPerThread.finishDocuments()调用这个函数，一批文档一个seqNo;2.在deleteTerms时会调用一次。
+  public long getNextSequenceNumber() { // 任何add delete, updateSlice都会调用该函数
     long seqNo = nextSeqNo.getAndIncrement();
     assert seqNo <= maxSeqNo : "seqNo=" + seqNo + " vs maxSeqNo=" + maxSeqNo;
     return seqNo;
@@ -610,13 +610,13 @@ final class DocumentsWriterDeleteQueue implements Accountable, Closeable {
    *     current queue at the moment when this queue is advanced since each these DWPTs can
    *     increment the seqId after we advanced it.
    * @return a new queue as a successor of this queue.
-   */
+   */ // 当flush时，产生一个新的queue
   synchronized DocumentsWriterDeleteQueue advanceQueue(int maxNumPendingOps) {
     if (advanced) {
       throw new IllegalStateException("queue was already advanced");
     }
     advanced = true;
-    long seqNo = getLastSequenceNumber() + maxNumPendingOps + 1;
+    long seqNo = getLastSequenceNumber() + maxNumPendingOps + 1;// nextSeq+正在使用的+1
     maxSeqNo = seqNo;
     return new DocumentsWriterDeleteQueue(
         infoStream,

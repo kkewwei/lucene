@@ -32,7 +32,7 @@ import org.apache.lucene.util.RamUsageEstimator;
  *
  * @lucene.internal
  */
-public class NeighborArray {
+public class NeighborArray { // 存储某节点在某层的邻居列表， 按 score（相似度）排序 ，并支持 addAndEnsureDiversity （带多样性裁剪的插入）
   private static final long BASE_RAM_BYTES_USED =
       RamUsageEstimator.shallowSizeOfInstance(NeighborArray.class);
 

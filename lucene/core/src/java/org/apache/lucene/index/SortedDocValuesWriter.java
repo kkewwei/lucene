@@ -35,14 +35,14 @@ import org.apache.lucene.util.Counter;
 import org.apache.lucene.util.FixedBitSet;
 import org.apache.lucene.util.packed.PackedInts;
 import org.apache.lucene.util.packed.PackedLongValues;
-
+// 每个docId只能拥有一个value
 /**
  * Buffers up pending byte[] per doc, deref and sorting via int ord, then flushes when segment
  * flushes.
  */
-class SortedDocValuesWriter extends DocValuesWriter<SortedDocValues> {
-  final BytesRefHash hash;
-  private final PackedLongValues.Builder pending;
+class SortedDocValuesWriter extends DocValuesWriter<SortedDocValues> {// DocValuesWriter仅能否针对不分词的字段设置
+  final BytesRefHash hash;// 存储的是真正每个field的值
+  private final PackedLongValues.Builder pending;// 是写入顺序
   private final DocsWithFieldSet docsWithField;
   private final Counter iwBytesUsed;
   private long bytesUsed; // this currently only tracks differences in 'pending'
@@ -50,9 +50,9 @@ class SortedDocValuesWriter extends DocValuesWriter<SortedDocValues> {
   private int lastDocID = -1;
   private final SharedIndexingScratch scratch;
 
-  private PackedLongValues finalOrds;
-  private int[] finalSortedValues;
-  private int[] finalOrdMap;
+  private PackedLongValues finalOrds; // // 第7个写入的词的termId=2
+  private int[] finalSortedValues;// 对所有的terms内容进行了排序，。 value[1]=10 ,词大小排序order=1的，是term10
+  private int[] finalOrdMap;// finalSortedValues和finalOrdMap含义想法。 finalOrdMap[5]=2, termId=5,大小排序是2
 
   public SortedDocValuesWriter(
       FieldInfo fieldInfo, Counter iwBytesUsed, ByteBlockPool pool, SharedIndexingScratch scratch) {
@@ -71,7 +71,7 @@ class SortedDocValuesWriter extends DocValuesWriter<SortedDocValues> {
   }
 
   public void addValue(int docID, BytesRef value) {
-    if (docID <= lastDocID) {
+    if (docID <= lastDocID) {// 每个docId只能拥有一个value
       throw new IllegalArgumentException(
           "DocValuesField \""
               + fieldInfo.name
@@ -96,15 +96,15 @@ class SortedDocValuesWriter extends DocValuesWriter<SortedDocValues> {
   }
 
   private void addOneValue(BytesRef value) {
-    int termID = hash.add(value);
-    if (termID < 0) {
+    int termID = hash.add(value);// 写入顺序id, 针对整个value，存起来
+    if (termID < 0) { // 该value已经存在
       termID = -termID - 1;
-    } else {
+    } else {// 该value不存在
       // reserve additional space for each unique value:
       // 1. when indexing, when hash is 50% full, rehash() suddenly needs 2*size ints.
       //    TODO: can this same OOM happen in THPF?
       // 2. when flushing, we need 1 int per value (slot in the ordMap).
-      iwBytesUsed.addAndGet(2 * Integer.BYTES);
+      iwBytesUsed.addAndGet(2 * Integer.BYTES); // 为每个单独的value保留2个空间
     }
 
     pending.add(termID);
@@ -217,8 +217,8 @@ class SortedDocValuesWriter extends DocValuesWriter<SortedDocValues> {
       int valueCount = hash.size();
       updateBytesUsed();
       assert finalOrdMap == null && finalOrds == null;
-      finalSortedValues = hash.sort();
-      finalOrds = pending.build();
+      finalSortedValues = hash.sort();// 对所有的terms内容进行了排序，。 value[1]=10 ,词order=1的，是term10
+      finalOrds = pending.build();// finalOrds[7]=2, 第7个写入的词的termId=2
       finalOrdMap = new int[valueCount];
       for (int ord = 0; ord < valueCount; ord++) {
         finalOrdMap[finalSortedValues[ord]] = ord;
@@ -259,10 +259,10 @@ class SortedDocValuesWriter extends DocValuesWriter<SortedDocValues> {
   static DocValuesProducer getDocValuesProducer(
       FieldInfo writerFieldInfo,
       BytesRefHash hash,
-      PackedLongValues ords,
-      int[] sortedValues,
-      int[] ordMap,
-      DocsWithFieldSet docsWithField,
+      PackedLongValues ords,//
+      int[] sortedValues,//sortedValues[3]=2: 大小排第3的termId=2
+      int[] ordMap, // // 和sortedValues含义相反。ordMap[2]=3, termId=2的词，大小排第3
+      DocsWithFieldSet docsWithField,// docsWithField[2]=5, 第2个写入的是文档id为5。因为写入的docId不一定是连续的
       Sorter.DocMap sortMap)
       throws IOException {
     final int[] sorted;
@@ -284,7 +284,7 @@ class SortedDocValuesWriter extends DocValuesWriter<SortedDocValues> {
         }
         final SortedDocValues buf =
             new BufferedSortedDocValues(hash, ords, sortedValues, ordMap, docsWithField.iterator());
-        if (sorted == null) {
+        if (sorted == null) {// 没有对field排排序
           return buf;
         }
         return new SortingSortedDocValues(buf, sorted);
@@ -292,23 +292,23 @@ class SortedDocValuesWriter extends DocValuesWriter<SortedDocValues> {
     };
   }
 
-  static class BufferedSortedDocValues extends SortedDocValues {
+  static class BufferedSortedDocValues extends SortedDocValues {// 说明每个doc只有一个value
     final BytesRefHash hash;
     final BytesRef scratch = new BytesRef();
-    final int[] sortedValues;
-    final int[] ordMap;
+    final int[] sortedValues;// 对所有的terms内容进行了排序，记录词的orderId->词的写入termsId
+    final int[] ordMap;// // sortedValues和ordMap含义相反 finalOrdMap[5]=2,// ordMap[5]=2, termId=5,，大小排序是2
     private int ord;
-    final PackedLongValues.Iterator iter;
-    final DocIdSetIterator docsWithField;
+    final PackedLongValues.Iterator iter;// 按写入docId循序，给每个写入词一个编码，没遇到的，order编号+1。顺着docId顺序，获取对应的docId的termId
+    final DocIdSetIterator docsWithField; // 写入的docId不一定是连续的
 
-    public BufferedSortedDocValues(
+    public BufferedSortedDocValues(// 说明每个doc只有一个value
         BytesRefHash hash,
         PackedLongValues docToOrd,
-        int[] sortedValues,
-        int[] ordMap,
+        int[] sortedValues,// sortedValues[1]=10 ,词大小排序order=1的，是term10
+        int[] ordMap,//和sortedValues含义相反
         DocIdSetIterator docsWithField) {
       this.hash = hash;
-      this.sortedValues = sortedValues;
+      this.sortedValues = sortedValues;// 对所有的terms内容进行了排序
       this.iter = docToOrd.iterator();
       this.ordMap = ordMap;
       this.docsWithField = docsWithField;
@@ -320,11 +320,11 @@ class SortedDocValuesWriter extends DocValuesWriter<SortedDocValues> {
     }
 
     @Override
-    public int nextDoc() throws IOException {
+    public int nextDoc() throws IOException {// 先获取nextDoc，在获取具体的ord
       int docID = docsWithField.nextDoc();
       if (docID != NO_MORE_DOCS) {
-        ord = Math.toIntExact(iter.next());
-        ord = ordMap[ord];
+        ord = Math.toIntExact(iter.next());//iter.next()返回的是词的termid，
+        ord = ordMap[ord];// 然后再映射，获取的大小排序的order
       }
       return docID;
     }
@@ -356,11 +356,11 @@ class SortedDocValuesWriter extends DocValuesWriter<SortedDocValues> {
 
     @Override
     public int ordValue() {
-      return ord;
+      return ord; // 返回词的排序order
     }
 
     @Override
-    public BytesRef lookupOrd(int ord) {
+    public BytesRef lookupOrd(int ord) { //order获取具体的值
       assert ord >= 0 && ord < sortedValues.length;
       assert sortedValues[ord] >= 0 && sortedValues[ord] < sortedValues.length;
       hash.get(sortedValues[ord], scratch);

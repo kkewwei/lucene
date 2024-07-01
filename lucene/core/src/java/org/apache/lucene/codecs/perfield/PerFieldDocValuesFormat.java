@@ -62,11 +62,11 @@ public abstract class PerFieldDocValuesFormat extends DocValuesFormat {
 
   /** {@link FieldInfo} attribute name used to store the format name for each field. */
   public static final String PER_FIELD_FORMAT_KEY =
-      PerFieldDocValuesFormat.class.getSimpleName() + ".format";
+      PerFieldDocValuesFormat.class.getSimpleName() + ".format"; // PerFieldDocValuesFormat.format
 
   /** {@link FieldInfo} attribute name used to store the segment suffix name for each field. */
   public static final String PER_FIELD_SUFFIX_KEY =
-      PerFieldDocValuesFormat.class.getSimpleName() + ".suffix";
+      PerFieldDocValuesFormat.class.getSimpleName() + ".suffix"; // PerFieldDocValuesFormat.suffix
 
   /** Sole constructor. */
   protected PerFieldDocValuesFormat() {
@@ -99,7 +99,7 @@ public abstract class PerFieldDocValuesFormat extends DocValuesFormat {
     @Override
     public void addNumericField(FieldInfo field, DocValuesProducer valuesProducer)
         throws IOException {
-      getInstance(field).addNumericField(field, valuesProducer);
+      getInstance(field).addNumericField(field, valuesProducer);// 将跑到Lucene90DocValuesConsumer
     }
 
     @Override
@@ -113,7 +113,7 @@ public abstract class PerFieldDocValuesFormat extends DocValuesFormat {
         throws IOException {
       getInstance(field).addSortedField(field, valuesProducer);
     }
-
+   // flush产生segment时会跑到这里
     @Override
     public void addSortedNumericField(FieldInfo field, DocValuesProducer valuesProducer)
         throws IOException {
@@ -176,19 +176,19 @@ public abstract class PerFieldDocValuesFormat extends DocValuesFormat {
           format = DocValuesFormat.forName(formatName);
         }
       }
-      if (format == null) {
-        format = getDocValuesFormatForField(field.name);
+      if (format == null) { // 为null
+        format = getDocValuesFormatForField(field.name); // 就是Lucene80DocValuesFormat
       }
-      if (format == null) {
+      if (format == null) { // DocValuesFormat(name=Lucene80)
         throw new IllegalStateException(
             "invalid null DocValuesFormat for field=\"" + field.name + "\"");
       }
-      final String formatName = format.getName();
+      final String formatName = format.getName(); // Lucene80
 
       field.putAttribute(PER_FIELD_FORMAT_KEY, formatName);
       Integer suffix = null;
 
-      ConsumerAndSuffix consumer = formats.get(format);
+      ConsumerAndSuffix consumer = formats.get(format); // 同一批刷新，docValue不同域的将使用同一个writer。不同域将刷到同一个文档中
       if (consumer == null) {
         // First time we are seeing this format; create a new instance
 
@@ -205,23 +205,23 @@ public abstract class PerFieldDocValuesFormat extends DocValuesFormat {
           }
         }
 
-        if (suffix == null) {
+        if (suffix == null) { // 跑这里
           // bump the suffix
           suffix = suffixes.get(formatName);
           if (suffix == null) {
-            suffix = 0;
+            suffix = 0; // 为0, Lucene80只是其中一种文档
           } else {
             suffix = suffix + 1;
           }
         }
-        suffixes.put(formatName, suffix);
-
+        suffixes.put(formatName, suffix); // Lucene80 ->0
+// Lucene80_0
         final String segmentSuffix =
             getFullSegmentSuffix(
                 segmentWriteState.segmentSuffix, getSuffix(formatName, Integer.toString(suffix)));
         consumer =
             new ConsumerAndSuffix(
-                format.fieldsConsumer(new SegmentWriteState(segmentWriteState, segmentSuffix)),
+                format.fieldsConsumer(new SegmentWriteState(segmentWriteState, segmentSuffix)),// Lucene80DocValuesConsumer
                 suffix);
         formats.put(format, consumer);
       } else {
@@ -229,11 +229,11 @@ public abstract class PerFieldDocValuesFormat extends DocValuesFormat {
         assert suffixes.containsKey(formatName);
         suffix = consumer.suffix;
       }
-
+      // PerFieldDocValuesFormat.suffix -> 0
       field.putAttribute(PER_FIELD_SUFFIX_KEY, Integer.toString(suffix));
       // TODO: we should only provide the "slice" of FIS
       // that this DVF actually sees ...
-      return consumer.consumer;
+      return consumer.consumer; // Lucene80DocValuesConsumer
     }
 
     @Override
@@ -256,7 +256,7 @@ public abstract class PerFieldDocValuesFormat extends DocValuesFormat {
   }
 
   private static class FieldsReader extends DocValuesProducer {
-
+    // 很神奇，fields的value都是同一个对象：Lucene80DocValuesProducer
     private final IntObjectHashMap<DocValuesProducer> fields = new IntObjectHashMap<>();
     private final Map<String, DocValuesProducer> formats = new HashMap<>();
 
@@ -332,7 +332,7 @@ public abstract class PerFieldDocValuesFormat extends DocValuesFormat {
       DocValuesProducer producer = fields.get(field.number);
       return producer == null ? null : producer.getSorted(field);
     }
-
+    // 每个long，都有docValue
     @Override
     public SortedNumericDocValues getSortedNumeric(FieldInfo field) throws IOException {
       DocValuesProducer producer = fields.get(field.number);
@@ -341,8 +341,8 @@ public abstract class PerFieldDocValuesFormat extends DocValuesFormat {
 
     @Override
     public SortedSetDocValues getSortedSet(FieldInfo field) throws IOException {
-      DocValuesProducer producer = fields.get(field.number);
-      return producer == null ? null : producer.getSortedSet(field);
+      DocValuesProducer producer = fields.get(field.number);// Lucene80DocValueProducer
+      return producer == null ? null : producer.getSortedSet(field);// 将进入Lucene80DocValuesProducer.getSortedSet()
     }
 
     @Override

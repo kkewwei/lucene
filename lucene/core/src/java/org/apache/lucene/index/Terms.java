@@ -26,7 +26,7 @@ import org.apache.lucene.util.automaton.CompiledAutomaton;
  *
  * @lucene.experimental
  */
-public abstract class Terms {
+public abstract class Terms {// 访问某个字段的值
 
   /** Sole constructor. (For invocation by subclass constructors, typically implicit.) */
   protected Terms() {}
@@ -38,7 +38,7 @@ public abstract class Terms {
    * @throws IOException if an I/O error occurs.
    */
   public static Terms getTerms(LeafReader reader, String field) throws IOException {
-    Terms terms = reader.terms(field);
+    Terms terms = reader.terms(field); // 将跑到 CodecReader.terms
     if (terms == null) {
       return EMPTY;
     }
@@ -100,25 +100,25 @@ public abstract class Terms {
    * Note that, just like other term measures, this measure does not take deleted documents into
    * account.
    */
-  public abstract long size() throws IOException;
+  public abstract long size() throws IOException;// 词典词的个数
 
   /**
    * Returns the sum of {@link TermsEnum#totalTermFreq} for all terms in this field. Note that, just
    * like other term measures, this measure does not take deleted documents into account.
    */
-  public abstract long getSumTotalTermFreq() throws IOException;
+  public abstract long getSumTotalTermFreq() throws IOException; //  //这个semgent这个字段所有词的count（重复词算多个）
 
   /**
    * Returns the sum of {@link TermsEnum#docFreq()} for all terms in this field. Note that, just
    * like other term measures, this measure does not take deleted documents into account.
    */
-  public abstract long getSumDocFreq() throws IOException;
+  public abstract long getSumDocFreq() throws IOException;// 每个词在多少个文档中出现过，出现的文档次数相加。 sumDocFreq<sumTotalTermFreq: 假如一个docID存在俩相同term，sumDocFreq只会统计一次，而sumTotalTermFreq就要统计两次了
 
   /**
    * Returns the number of documents that have at least one term for this field. Note that, just
    * like other term measures, this measure does not take deleted documents into account.
    */
-  public abstract int getDocCount() throws IOException;
+  public abstract int getDocCount() throws IOException;// 至少包含一个，不考虑deletes
 
   /**
    * Returns true if documents in this field store per-document term frequency ({@link

@@ -55,7 +55,7 @@ public abstract class NumericComparator<T extends Number> extends FieldComparato
   protected final boolean reverse;
   private final int bytesCount; // how many bytes are used to encode this number
 
-  protected boolean topValueSet;
+  protected boolean topValueSet; //  search_after时候会设置
   protected boolean singleSort; // singleSort is true, if sort is based on a single sort field.
   protected boolean hitsThresholdReached;
   protected boolean queueFull;
@@ -95,7 +95,7 @@ public abstract class NumericComparator<T extends Number> extends FieldComparato
   protected abstract long sortableBytesToLong(byte[] bytes);
 
   /** Leaf comparator for {@link NumericComparator} that provides skipping functionality */
-  public abstract class NumericLeafComparator implements LeafFieldComparator {
+  public abstract class NumericLeafComparator implements LeafFieldComparator {// segment粒度的独享
     private final LeafReaderContext context;
     protected final NumericDocValues docValues;
     private final CompetitiveDISIBuilder competitiveDISIBuilder;
@@ -112,7 +112,7 @@ public abstract class NumericComparator<T extends Number> extends FieldComparato
       }
       LeafReader reader = context.reader();
       PointValues pointValues = reader.getPointValues(field);
-      if (pointValues != null) {
+      if (pointValues != null) {// 第一个字段，先尝试使用bkd
         return new PointsCompetitiveDISIBuilder(pointValues, this);
       }
       DocValuesSkipper skipper = reader.getDocValuesSkipper(field);
@@ -163,7 +163,7 @@ public abstract class NumericComparator<T extends Number> extends FieldComparato
 
     @Override
     public void setHitsThresholdReached() throws IOException {
-      hitsThresholdReached = true;
+      hitsThresholdReached = true;// 达到了阈值
       if (competitiveDISIBuilder != null) {
         competitiveDISIBuilder.updateCompetitiveIterator();
       }
@@ -191,7 +191,7 @@ public abstract class NumericComparator<T extends Number> extends FieldComparato
     /** According to {@link FieldComparator#setTopValue}, topValueSet is final in leafComparator */
     final boolean leafTopSet = topValueSet;
 
-    private final UpdateableDocIdSetIterator competitiveIterator = new UpdateableDocIdSetIterator();
+    private final UpdateableDocIdSetIterator competitiveIterator = new UpdateableDocIdSetIterator();// 换了之后，这个segment后面的可以立马使用这个新过滤器
 
     /** The current minimum value encoded as a long */
     protected long minValueAsLong = Long.MIN_VALUE;
@@ -199,7 +199,7 @@ public abstract class NumericComparator<T extends Number> extends FieldComparato
     /** The current maximum value encoded as a long */
     protected long maxValueAsLong = Long.MAX_VALUE;
 
-    int maxDocVisited = -1;
+    int maxDocVisited = -1;// 时刻记录我们访问的最大值
     int updateCounter = 0;
     int currentSkipInterval = MIN_SKIP_INTERVAL;
 
@@ -230,8 +230,8 @@ public abstract class NumericComparator<T extends Number> extends FieldComparato
 
     void setScorer(Scorable scorer) throws IOException {}
 
-    final void updateCompetitiveIterator() throws IOException {
-      if (hitsThresholdReached == false) {
+    final void updateCompetitiveIterator() throws IOException {// 去更新那个visit列表
+      if (hitsThresholdReached == false) {// 只有达到最大阈值，才可以开始优化
         return;
       }
       if (leafTopSet == false && queueFull == false) {
@@ -245,13 +245,13 @@ public abstract class NumericComparator<T extends Number> extends FieldComparato
 
       updateCounter++;
       // Start sampling if we get called too much
-      if (updateCounter > 256
+      if (updateCounter > 256// 如果超过了256次，那么就采样获取，每12个doc计算一次
           && (updateCounter & (currentSkipInterval - 1)) != currentSkipInterval - 1) {
         return;
       }
 
       if (queueFull) {
-        encodeBottom();
+        encodeBottom();// 更新地步的最大值小值
       }
 
       doUpdateCompetitiveIterator();
@@ -389,10 +389,10 @@ public abstract class NumericComparator<T extends Number> extends FieldComparato
 
     @Override
     protected void doUpdateCompetitiveIterator() throws IOException {
-      DocIdSetBuilder result = new DocIdSetBuilder(maxDoc);
+      DocIdSetBuilder result = new DocIdSetBuilder(maxDoc);// 里面就有一个adder
       PointValues.IntersectVisitor visitor =
           new PointValues.IntersectVisitor() {
-            DocIdSetBuilder.BulkAdder adder;
+            DocIdSetBuilder.BulkAdder adder;//匹配的文档列表
 
             @Override
             public void grow(int count) {
@@ -432,7 +432,7 @@ public abstract class NumericComparator<T extends Number> extends FieldComparato
             }
 
             @Override
-            public PointValues.Relation compare(byte[] minPackedValue, byte[] maxPackedValue) {
+            public PointValues.Relation compare(byte[] minPackedValue, byte[] maxPackedValue) {// 这个bkd树point的最大最小值
               long min = sortableBytesToLong(minPackedValue);
               long max = sortableBytesToLong(maxPackedValue);
 
@@ -451,25 +451,25 @@ public abstract class NumericComparator<T extends Number> extends FieldComparato
             }
           };
 
-      final long threshold = iteratorCost >>> 3;
+      final long threshold = iteratorCost >>> 3;// 小于8倍关系
 
-      if (PointValues.isEstimatedPointCountGreaterThanOrEqualTo(
-          visitor, getPointTree(), threshold)) {
+      if (PointValues.isEstimatedPointCountGreaterThanOrEqualTo(// 说明这个排序字段作用不大，通过排序字段来匹配的文档太多了
+          visitor, getPointTree(), threshold)) {// 以当前字段进行排序，查看这个字段所有值和收集的值最小值左对比，看是否超过了1/8
         // the new range is not selective enough to be worth materializing, it doesn't reduce number
-        // of docs at least 8x
+        // of docs at least 8x 无法减少到1/8，那么就不用这个point裁剪
         updateSkipInterval(false);
-        if (pointValues.getDocCount() < iteratorCost) {
+        if (pointValues.getDocCount() < iteratorCost) {// 但是这个字段对应的doc少于将要遍历的文档
           // Use the set of doc with values to help drive iteration
           updateCompetitiveIterator(
-              leafComparator.getNumericDocValues(leafComparator.context, field));
+              leafComparator.getNumericDocValues(leafComparator.context, field));// 以这个字段作为过滤条件
           iteratorCost = pointValues.getDocCount();
         }
         return;
-      }
-      pointValues.intersect(visitor);
-      DocIdSetIterator newIterator = result.build().iterator();
+      }//说明这个排序字段作用很大，可以帮我们进一步过滤掉很多字段
+      pointValues.intersect(visitor);// 进行匹配
+      DocIdSetIterator newIterator = result.build().iterator();// 获取匹配的文档列表.// segment粒度的独享
       updateCompetitiveIterator(newIterator);
-      iteratorCost = newIterator.cost();
+      iteratorCost = newIterator.cost();// 更新下可竞争的文档列表
       updateSkipInterval(true);
     }
 

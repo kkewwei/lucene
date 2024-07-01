@@ -43,16 +43,16 @@ import java.util.concurrent.atomic.AtomicInteger;
  *
  * @lucene.internal
  */
-public class CloseableThreadLocal<T> implements Closeable {
+public class CloseableThreadLocal<T> implements Closeable {// 这个函数与ThreadLocal比唯一的好处时，周期性检查已经消亡的线程，释放强引用hardRefs的值
 
-  private ThreadLocal<WeakReference<T>> t = new ThreadLocal<>();
+  private ThreadLocal<WeakReference<T>> t = new ThreadLocal<>();//若引用，若内存不足时不会阻塞T的回收
 
   // Use a WeakHashMap so that if a Thread exits and is
-  // GC'able, its entry may be removed:
-  private Map<Thread, T> hardRefs = new WeakHashMap<>();
+  // GC'able, its entry may be removed:// 绑定线程，只要线程存活，就不会释放
+  private Map<Thread,T> hardRefs = new WeakHashMap<>();//  当线程消亡时，就会自动从hardRefs中将value删除。（ WeakHashMap 用法：若key仅有WeakHashMap中被引用，那么下次gc时，弱key就会被回收，也会从map中删除key-value）
 
   // Increase this to decrease frequency of purging in get:
-  private static final int PURGE_MULTIPLIER = 20;
+  private static final int PURGE_MULTIPLIER = 20;// purge_multiplier
 
   // On each get or set we decrement this; when it hits 0 we
   // purge.  After purge, we set this to
@@ -66,10 +66,10 @@ public class CloseableThreadLocal<T> implements Closeable {
 
   public T get() {
     WeakReference<T> weakRef = t.get();
-    if (weakRef == null) {
-      T iv = initialValue();
+    if (weakRef == null) {// 看是否已经回收了
+      T iv = initialValue();// 拿最新的值
       if (iv != null) {
-        set(iv);
+        set(iv);// 放入ThreadLocal中，，会替换掉原来的值
         return iv;
       } else {
         return null;
@@ -98,8 +98,8 @@ public class CloseableThreadLocal<T> implements Closeable {
 
   // Purge dead threads
   private void purge() {
-    synchronized (hardRefs) {
-      int stillAliveCount = 0;
+    synchronized (hardRefs) {// 只要线程消费，就会真正释放
+      int stillAliveCount = 0;// 检查活着的线程
       for (Iterator<Thread> it = hardRefs.keySet().iterator(); it.hasNext(); ) {
         final Thread t = it.next();
         if (!t.isAlive()) {
@@ -108,7 +108,7 @@ public class CloseableThreadLocal<T> implements Closeable {
           stillAliveCount++;
         }
       }
-      int nextCount = (1 + stillAliveCount) * PURGE_MULTIPLIER;
+      int nextCount = (1 + stillAliveCount) * PURGE_MULTIPLIER;// 每个活着的线程，增加20次调用，减少pruge的频率
       if (nextCount <= 0) {
         // defensive: int overflow!
         nextCount = 1000000;

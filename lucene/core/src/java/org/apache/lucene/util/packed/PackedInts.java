@@ -30,7 +30,7 @@ import org.apache.lucene.util.RamUsageEstimator;
  * fixed number of bits.
  *
  * @lucene.internal
- */
+ */  // 数组long压缩成int
 public class PackedInts {
 
   /** At most 700% memory overhead, always select a direct implementation. */
@@ -43,15 +43,15 @@ public class PackedInts {
   public static final float DEFAULT = 0.25f;
 
   /** No memory overhead at all, but the returned implementation may be slow. */
-  public static final float COMPACT = 0f;
+  public static final float COMPACT = 0f;//压缩时，一点内存都不占用
 
   /** Default amount of memory to use for bulk operations. */
   public static final int DEFAULT_BUFFER_SIZE = 1024; // 1K
 
   public static final String CODEC_NAME = "PackedInts";
-  public static final int VERSION_MONOTONIC_WITHOUT_ZIGZAG = 2;
-  public static final int VERSION_START = VERSION_MONOTONIC_WITHOUT_ZIGZAG;
-  public static final int VERSION_CURRENT = VERSION_MONOTONIC_WITHOUT_ZIGZAG;
+  public static final int VERSION_MONOTONIC_WITHOUT_ZIGZAG = 2;// version_monotonic_without_zigzag
+  public static final int VERSION_START = VERSION_MONOTONIC_WITHOUT_ZIGZAG;// version_start
+  public static final int VERSION_CURRENT = VERSION_MONOTONIC_WITHOUT_ZIGZAG;// version_current
 
   /** Check the validity of a version number. */
   public static void checkVersion(int version) {
@@ -75,7 +75,7 @@ public class PackedInts {
 
       @Override
       public long byteCount(int packedIntsVersion, int valueCount, int bitsPerValue) {
-        return (long) Math.ceil((double) valueCount * bitsPerValue / 8);
+        return (long) Math.ceil((double) valueCount * bitsPerValue / 8);// 使用byte需要的个数
       }
     },
 
@@ -102,11 +102,11 @@ public class PackedInts {
       }
 
       @Override
-      public float overheadPerValue(int bitsPerValue) {
+      public float overheadPerValue(int bitsPerValue) { // 10位
         assert isSupported(bitsPerValue);
-        final int valuesPerBlock = 64 / bitsPerValue;
-        final int overhead = 64 % bitsPerValue;
-        return (float) overhead / valuesPerBlock;
+        final int valuesPerBlock = 64 / bitsPerValue;  // 因为Format.PACKED_SINGLE_BLOCK的存储格式是使用一个long存储多个数字，这个valuesPerBlock就是表示一个long可以包含多少个数字
+        final int overhead = 64 % bitsPerValue; // 这个表示余数，即在存储了上面的valuesPerBlock个数字后，64位还剩余多少个，也就是额外消耗的空间
+        return (float) overhead / valuesPerBlock; // 用额外消耗的空间除以真正起作用的空间，即额外的消耗率。
       }
     };
 
@@ -143,11 +143,11 @@ public class PackedInts {
 
     /**
      * Computes how many long blocks are needed to store <code>values</code> values of size <code>
-     * bitsPerValue</code>.
+     * bitsPerValue</code>.// 需要几个long存储这些count
      */
     public int longCount(int packedIntsVersion, int valueCount, int bitsPerValue) {
       assert bitsPerValue >= 0 && bitsPerValue <= 64 : bitsPerValue;
-      final long byteCount = byteCount(packedIntsVersion, valueCount, bitsPerValue);
+      final long byteCount = byteCount(packedIntsVersion, valueCount, bitsPerValue); // 使用byte可以存储几个人(会跑到子类定义中)
       assert byteCount < 8L * Integer.MAX_VALUE;
       return (int) ((byteCount + 7) >>> 3);
     }
@@ -182,7 +182,7 @@ public class PackedInts {
    * should probably use {@link PackedInts#COMPACT}.
    *
    * <p>If you don't know how many values you are going to write, use <code>valueCount = -1</code>.
-   */
+   */// 默认acceptableOverheadRatio：0
   public static FormatAndBits fastestFormatAndBits(
       int valueCount, int bitsPerValue, float acceptableOverheadRatio) {
     if (valueCount == -1) {
@@ -190,12 +190,12 @@ public class PackedInts {
     }
 
     acceptableOverheadRatio = Math.max(COMPACT, acceptableOverheadRatio);
-    acceptableOverheadRatio = Math.min(FASTEST, acceptableOverheadRatio);
+    acceptableOverheadRatio = Math.min(FASTEST, acceptableOverheadRatio);  // 压缩式可用的内存空间
     float acceptableOverheadPerValue = acceptableOverheadRatio * bitsPerValue; // in bits
-
+    // //一个数字可以占用的最大位数。
     int maxBitsPerValue = bitsPerValue + (int) acceptableOverheadPerValue;
 
-    int actualBitsPerValue = -1;
+    int actualBitsPerValue = -1;  //真正使用的bitPerValue
 
     // rounded number of bits per value are usually the fastest
     if (bitsPerValue <= 8 && maxBitsPerValue >= 8) {
@@ -226,11 +226,11 @@ public class PackedInts {
 
     /**
      * The minimum number of byte blocks to encode in a single iteration, when using byte encoding.
-     */
+     */// 一个block需要几个byte来存储
     int byteBlockCount();
 
     /** The number of values that can be stored in {@link #byteBlockCount()} byte blocks. */
-    int byteValueCount();
+    int byteValueCount(); //使用byte存储，一个block可以存储的bitsPerValue的个数
 
     /**
      * Read <code>iterations * blockCount()</code> blocks from <code>blocks</code>, decode them and
@@ -290,12 +290,12 @@ public class PackedInts {
     int longBlockCount();
 
     /** The number of values that can be stored in {@link #longBlockCount()} long blocks. */
-    int longValueCount();
+    int longValueCount();//若用long来存储数据，一个block可以存储多少个bitsPerValue长度的数据
 
     /**
      * The minimum number of byte blocks to encode in a single iteration, when using byte encoding.
      */
-    int byteBlockCount();
+    int byteBlockCount();// 一个block需要几个byte来存放
 
     /** The number of values that can be stored in {@link #byteBlockCount()} byte blocks. */
     int byteValueCount();
@@ -601,15 +601,15 @@ public class PackedInts {
    */
   public abstract static class Writer {
     protected final DataOutput out;
-    protected final int valueCount;
-    protected final int bitsPerValue;
+    protected final int valueCount; // 一次写入的个数
+    protected final int bitsPerValue; // 每个数据所占的byte
 
     protected Writer(DataOutput out, int valueCount, int bitsPerValue) {
       assert bitsPerValue <= 64;
       assert valueCount >= 0 || valueCount == -1;
-      this.out = out;
+      this.out = out; // 可以使tvd
       this.valueCount = valueCount;
-      this.bitsPerValue = bitsPerValue;
+      this.bitsPerValue = bitsPerValue; // 每个value需要的长度
     }
 
     /** The format used to serialize values. */
@@ -701,8 +701,8 @@ public class PackedInts {
   public static Mutable getMutable(
       int valueCount, int bitsPerValue, float acceptableOverheadRatio) {
     final FormatAndBits formatAndBits =
-        fastestFormatAndBits(valueCount, bitsPerValue, acceptableOverheadRatio);
-    return getMutable(valueCount, formatAndBits.bitsPerValue, formatAndBits.format);
+        fastestFormatAndBits(valueCount, bitsPerValue, acceptableOverheadRatio);//或者最终每个long要占用的空间
+    return getMutable(valueCount, formatAndBits.bitsPerValue, formatAndBits.format);//根据格式和bitPerValue获得最后的Mutable
   }
 
   /**
@@ -789,7 +789,7 @@ public class PackedInts {
    * @lucene.internal
    */
   public static int unsignedBitsRequired(long bits) {
-    return Math.max(1, 64 - Long.numberOfLeadingZeros(bits));
+    return Math.max(1, 64 - Long.numberOfLeadingZeros(bits)); // 二进制的话，需要多少位
   }
 
   /**
@@ -826,7 +826,7 @@ public class PackedInts {
    * @return the maximum value for the given bits.
    * @lucene.internal
    */
-  public static long maxValue(int bitsPerValue) {
+  public static long maxValue(int bitsPerValue) { // 高位不是富豪符号
     return bitsPerValue == 64 ? Long.MAX_VALUE : ~(~0L << bitsPerValue);
   }
 

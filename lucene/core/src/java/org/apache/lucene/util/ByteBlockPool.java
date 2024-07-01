@@ -27,9 +27,9 @@ import java.util.Arrays;
  * reading from the buffers (e.g. {@link #readBytes(long, byte[], int, int)}, which handle
  * read/write operations across buffer boundaries.
  *
- * @lucene.internal
- */
-public final class ByteBlockPool implements Accountable {
+ * @lucene.internal// 维护多个字节数组，可自动扩容，来对外提供基本的字节类型数据存储的功能，类似于jdk ArrayList数据的实现，调用者可以把ByteBlockPool当成是一个无限扩容的数组使用
+ */ //是Lucene实现 高效的可变长的基本类型数组 ，但实际上数组一旦初始化之后长度是固定的，因为数组申请的内存必须是连续分配的，以致能够提供快速随机访问的能力。那么ByteBlockPool是如何实现的
+public final class ByteBlockPool implements Accountable {// https://www.cnblogs.com/forfuture1978/archive/2010/02/02/1661441.html https://blog.csdn.net/asdfsadfasdfsa/article/details/88723443      https://blog.csdn.net/dang414238645/article/details/89517851
   private static final long BASE_RAM_BYTES =
       RamUsageEstimator.shallowSizeOfInstance(ByteBlockPool.class);
 
@@ -43,7 +43,7 @@ public final class ByteBlockPool implements Accountable {
   public static final int BYTE_BLOCK_SHIFT = 15;
 
   /** The size of each buffer in the pool. */
-  public static final int BYTE_BLOCK_SIZE = 1 << BYTE_BLOCK_SHIFT;
+  public static final int BYTE_BLOCK_SIZE = 1 << BYTE_BLOCK_SHIFT;// 块大小32K, 单个词的词块这里做了限制。一个block最大32KB
 
   /**
    * Use this to find the position of a global offset in a particular buffer.
@@ -58,7 +58,7 @@ public final class ByteBlockPool implements Accountable {
   public abstract static class Allocator {
     // TODO: ByteBlockPool assume the blockSize is always {@link BYTE_BLOCK_SIZE}, but this class
     // allow arbitrary value of blockSize. We should make them consistent.
-    protected final int blockSize;
+    protected final int blockSize;// 32k
 
     protected Allocator(int blockSize) {
       this.blockSize = blockSize;
@@ -84,7 +84,7 @@ public final class ByteBlockPool implements Accountable {
 
   /** A simple {@link Allocator} that never recycles, but tracks how much total RAM is in use. */
   public static class DirectTrackingAllocator extends Allocator {
-    private final Counter bytesUsed;
+    private final Counter bytesUsed; // 统计当前byte使用了多少内存，是从DocumentsWriterPerThread初始化中传递过来的
 
     public DirectTrackingAllocator(Counter bytesUsed) {
       super(BYTE_BLOCK_SIZE);
@@ -92,7 +92,7 @@ public final class ByteBlockPool implements Accountable {
     }
 
     @Override
-    public byte[] getByteBlock() {
+    public byte[] getByteBlock() {  //得到一个新的block
       bytesUsed.addAndGet(blockSize);
       return new byte[blockSize];
     }
@@ -107,28 +107,28 @@ public final class ByteBlockPool implements Accountable {
   }
 
   /** Array of buffers currently used in the pool. Buffers are allocated if needed. */
-  private byte[][] buffers = new byte[10][];
+  private byte[][] buffers = new byte[10][];// 10还是可以扩容的，扩容后，最多也只有10 level
 
   /** index into the buffers array pointing to the current buffer used as the head */
-  private int bufferUpto = -1; // Which buffer we are upto
+  private int bufferUpto = -1; // Which buffer we are upto 二元数据的第一元指针，当前使用的哪里了  当前块的第几个byte[]
 
   /** Where we are in the head buffer. */
-  public int byteUpto = BYTE_BLOCK_SIZE;
+  public int byteUpto = BYTE_BLOCK_SIZE; //byte[]内的偏移量，当前buffer内可分配的起始位置。初始化时假定已经用完一个byte[]。接着还要使用的话，就重新创建byte[]
 
   /** Current head buffer. */
-  public byte[] buffer;
+  public byte[] buffer; //当前块
 
   /**
    * Offset from the start of the first buffer to the start of the current buffer, which is
    * bufferUpto * BYTE_BLOCK_SIZE. The buffer pool maintains this offset because it is the first to
    * overflow if there are too many allocated blocks.
-   */
-  public int byteOffset = -BYTE_BLOCK_SIZE;
+   */// 为-BYTE_BLOCK_SIZE是为了增加一个byte[]时比较方面
+  public int byteOffset = -BYTE_BLOCK_SIZE;// 当前buffer在所有buffers的位置（当前buffer在全局的偏移量）， (bufferUpto -1)*BYTE_BLOCK_SIZE
 
-  private final Allocator allocator;
+  private final Allocator allocator; // 默认使用DirectTrackingAllocator
 
   public ByteBlockPool(Allocator allocator) {
-    this.allocator = allocator;
+    this.allocator = allocator;  //DirectTrackingAllocator
   }
 
   /**
@@ -161,7 +161,7 @@ public final class ByteBlockPool implements Accountable {
         final int offset = reuseFirst ? 1 : 0;
         // Recycle all but the first buffer
         allocator.recycleByteBlocks(buffers, offset, 1 + bufferUpto);
-        Arrays.fill(buffers, offset, 1 + bufferUpto, null);
+        Arrays.fill(buffers, offset, 1 + bufferUpto, null); // 还回去
       }
       if (reuseFirst) {
         // Re-use the first buffer
@@ -184,37 +184,37 @@ public final class ByteBlockPool implements Accountable {
    * ByteBlockPool#reset(boolean, boolean)} call will advance the pool to its first buffer
    * immediately.
    */
-  public void nextBuffer() {
+  public void nextBuffer() {//buffers写入位置bufferUpto 达到buffers的最大长度时 对buffers拷贝 扩容
     if (1 + bufferUpto == buffers.length) {
       // The buffer array is full - expand it
       byte[][] newBuffers =
-          new byte[ArrayUtil.oversize(buffers.length + 1, NUM_BYTES_OBJECT_REF)][];
-      System.arraycopy(buffers, 0, newBuffers, 0, buffers.length);
+          new byte[ArrayUtil.oversize(buffers.length + 1, NUM_BYTES_OBJECT_REF)][];//根据当前机器64/32位和对象引用占用字节数获得最新长度
+      System.arraycopy(buffers, 0, newBuffers, 0, buffers.length);// 只是拷贝了数组引用，并没有copy数组。这里体现了ByteBlockPool的优势
       buffers = newBuffers;
     }
     // Allocate new buffer and advance the pool to it
-    buffer = buffers[1 + bufferUpto] = allocator.getByteBlock();
-    bufferUpto++;
-    byteUpto = 0;
-    byteOffset = Math.addExact(byteOffset, BYTE_BLOCK_SIZE);
+    buffer = buffers[1 + bufferUpto] = allocator.getByteBlock();//allocator分配器负责初始化buffers中每个数组的大小, 一次申请32kb
+    bufferUpto++;//buffers写入位置+1
+    byteUpto = 0;//buffer写入位置
+    byteOffset = Math.addExact(byteOffset, BYTE_BLOCK_SIZE);//指针位置初始化
   }
-
+  //索引构建过程需要为每个Term分配一块相对独立的空间来存储Posting信息
   /**
    * Fill the provided {@link BytesRef} with the bytes at the specified offset and length. This will
    * avoid copying the bytes if the slice fits into a single block; otherwise, it uses the provided
    * {@link BytesRefBuilder} to copy bytes over.
-   */
-  void setBytesRef(BytesRefBuilder builder, BytesRef result, long offset, int length) {
+   *///从本ByteBlockPool中的textStart读取一个字符，放入term中
+  void setBytesRef(BytesRefBuilder builder, BytesRef result, long offset, int length) {//通过指定位置开始读取一个BytesRes，textStart就是这个单词实际存储位置
     result.length = length;
 
     int bufferIndex = Math.toIntExact(offset >> BYTE_BLOCK_SHIFT);
     byte[] buffer = buffers[bufferIndex];
     int pos = (int) (offset & BYTE_BLOCK_MASK);
-    if (pos + length <= BYTE_BLOCK_SIZE) {
+    if (pos + length <= BYTE_BLOCK_SIZE) {//小于128 一个字节 表示长度
       // Common case: The slice lives in a single block. Reference the buffer directly.
       result.bytes = buffer;
       result.offset = pos;
-    } else {
+    } else {// 大于128两个字节表示长度
       // Uncommon case: The slice spans at least 2 blocks, so we must copy the bytes.
       builder.growNoCopy(length);
       result.bytes = builder.get().bytes;
@@ -288,12 +288,12 @@ public final class ByteBlockPool implements Accountable {
     int bytesLeft = length;
     while (bytesLeft > 0) {
       int bufferLeft = BYTE_BLOCK_SIZE - byteUpto;
-      if (bytesLeft < bufferLeft) {
+      if (bytesLeft < bufferLeft) { // 剩下的还够装
         // fits within current buffer
         System.arraycopy(bytes, offset, buffer, byteUpto, bytesLeft);
         byteUpto += bytesLeft;
         break;
-      } else {
+      } else { // 不够装的话，新建一个BytePool
         // fill up this buffer and move to next one
         if (bufferLeft > 0) {
           System.arraycopy(bytes, offset, buffer, byteUpto, bufferLeft);
@@ -313,9 +313,9 @@ public final class ByteBlockPool implements Accountable {
    */
   public void readBytes(final long offset, final byte[] bytes, int bytesOffset, int bytesLength) {
     int bytesLeft = bytesLength;
-    int bufferIndex = Math.toIntExact(offset >> BYTE_BLOCK_SHIFT);
-    int pos = (int) (offset & BYTE_BLOCK_MASK);
-    while (bytesLeft > 0) {
+    int bufferIndex = Math.toIntExact(offset >> BYTE_BLOCK_SHIFT);//offset 得到buffers中的其实位置
+    int pos = (int) (offset & BYTE_BLOCK_MASK);//得到buffer中的位置
+    while (bytesLeft > 0) {//处理数据属于两个buffer的情况
       byte[] buffer = buffers[bufferIndex++];
       assert buffer != null;
       int chunk = Math.min(bytesLeft, BYTE_BLOCK_SIZE - pos);

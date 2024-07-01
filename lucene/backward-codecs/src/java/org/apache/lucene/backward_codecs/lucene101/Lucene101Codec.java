@@ -177,7 +177,7 @@ public class Lucene101Codec extends Codec {
    * future version of Lucene are only guaranteed to be able to read the default implementation,
    */
   public PostingsFormat getPostingsFormatForField(String field) {
-    return defaultPostingsFormat;
+    return defaultPostingsFormat; // Lucene101PostingsFormat
   }
 
   /**

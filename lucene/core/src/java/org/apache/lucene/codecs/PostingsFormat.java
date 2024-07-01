@@ -88,7 +88,7 @@ public abstract class PostingsFormat implements NamedSPILoader.NamedSPI {
   public final String getName() {
     return name;
   }
-
+// 跑到PerFieldPostingsFormat.fieldsConsumer
   /** Writes a new segment */
   public abstract FieldsConsumer fieldsConsumer(SegmentWriteState state) throws IOException;
 
@@ -98,7 +98,7 @@ public abstract class PostingsFormat implements NamedSPILoader.NamedSPI {
    * the execution of this call before there is a chance to open them. Under these circumstances an
    * IOException should be thrown by the implementation. IOExceptions are expected and will
    * automatically cause a retry of the segment opening logic with the newly revised segments.
-   */
+   */// 进入的是PerFieldPostingsFormat.fieldsProducer(),返回FieldsReader
   public abstract FieldsProducer fieldsProducer(SegmentReadState state) throws IOException;
 
   @Override
@@ -108,7 +108,7 @@ public abstract class PostingsFormat implements NamedSPILoader.NamedSPI {
 
   /** looks up a format by name */
   public static PostingsFormat forName(String name) {
-    return Holder.getLoader().lookup(name);
+    return Holder.getLoader().lookup(name); // 使用了SPI技术
   }
 
   /** returns a list of all available format names */

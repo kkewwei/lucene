@@ -52,7 +52,7 @@ import org.apache.lucene.util.SparseLiveDocs;
 public final class Lucene90LiveDocsFormat extends LiveDocsFormat {
 
   /** extension of live docs */
-  private static final String EXTENSION = "liv";
+  private static final String EXTENSION = "liv"; // liv文件也是有版本的，不会包含segment版本号 _n_1.liv
 
   /** codec of live docs */
   private static final String CODEC_NAME = "Lucene90LiveDocs";
@@ -70,7 +70,7 @@ public final class Lucene90LiveDocsFormat extends LiveDocsFormat {
 
   /** Sole constructor. */
   public Lucene90LiveDocsFormat() {}
-
+  // 读取live的docId
   @Override
   public Bits readLiveDocs(Directory dir, SegmentCommitInfo info, IOContext context)
       throws IOException {
@@ -80,7 +80,7 @@ public final class Lucene90LiveDocsFormat extends LiveDocsFormat {
     final int delCount = info.getDelCount();
     final double deletionRate = (double) delCount / maxDoc;
 
-    try (ChecksumIndexInput input = dir.openChecksumInput(name)) {
+    try (ChecksumIndexInput input = dir.openChecksumInput(name)) {// 会跑到mmap函数那里映射文件
       Throwable priorE = null;
       try {
         CodecUtil.checkIndexHeader(
@@ -110,7 +110,7 @@ public final class Lucene90LiveDocsFormat extends LiveDocsFormat {
     Bits liveDocs;
     int actualDelCount;
 
-    if (deletionRate <= SPARSE_DENSE_THRESHOLD) {
+    if (deletionRate <= SPARSE_DENSE_THRESHOLD) {// 删除率小于等于1%，使用稀疏表示
       SparseFixedBitSet sparse = readSparseFixedBitSet(input, maxDoc);
       actualDelCount = sparse.cardinality();
       liveDocs = SparseLiveDocs.builder(sparse, maxDoc).withDeletedCount(actualDelCount).build();
@@ -144,7 +144,7 @@ public final class Lucene90LiveDocsFormat extends LiveDocsFormat {
       // Semantic inversion: disk format stores LIVE docs (bit=1 means live, bit=0 means deleted)
       // but SparseLiveDocs stores DELETED docs (bit=1 means deleted).
       // Skip words with all bits set (all docs live in disk format = no deletions to convert)
-      if (word == -1L) {
+      if (word == -1L) { // 所有位都为1，说明所有文档都是live的，没有删除的文档
         continue;
       }
       int baseDocId = wordIndex << 6;
@@ -153,7 +153,7 @@ public final class Lucene90LiveDocsFormat extends LiveDocsFormat {
         int bitIndex = docId & 63;
         // If bit is 0 in disk format (deleted doc), set it in sparse representation (bit=1 means
         // deleted)
-        if ((word & (1L << bitIndex)) == 0) {
+        if ((word & (1L << bitIndex)) == 0) {// 0代表删除。存储时做了转化，在sparse记录删除的文档0
           sparse.set(docId);
         }
       }
@@ -165,9 +165,9 @@ public final class Lucene90LiveDocsFormat extends LiveDocsFormat {
   public void writeLiveDocs(
       Bits bits, Directory dir, SegmentCommitInfo info, int newDelCount, IOContext context)
       throws IOException {
-    long gen = info.getNextDelGen();
-    String name = IndexFileNames.fileNameFromGeneration(info.info.name, EXTENSION, gen);
-    int delCount;
+    long gen = info.getNextDelGen();// 明显是增加文件
+    String name = IndexFileNames.fileNameFromGeneration(info.info.name, EXTENSION, gen);// 产生_n_2.liv文件
+    int delCount; // 为了再次核对
     try (IndexOutput output = dir.createOutput(name, context)) {
 
       CodecUtil.writeIndexHeader(
@@ -177,11 +177,11 @@ public final class Lucene90LiveDocsFormat extends LiveDocsFormat {
           info.info.getId(),
           Long.toString(gen, Character.MAX_RADIX));
 
-      delCount = writeBits(output, bits);
+      delCount = writeBits(output, bits); // 多少个live的文档（写入时文档是按照顺序写入的）
 
       CodecUtil.writeFooter(output);
     }
-    if (delCount != info.getDelCount() + newDelCount) {
+    if (delCount != info.getDelCount() + newDelCount) {//主要是再次核对一次
       throw new CorruptIndexException(
           "bits.deleted="
               + delCount
@@ -207,8 +207,8 @@ public final class Lucene90LiveDocsFormat extends LiveDocsFormat {
       }
       bits.applyMask(copy, offset);
       delCount -= copy.cardinality();
-      int longCount = FixedBitSet.bits2words(numBitsToCopy);
-      for (int i = 0; i < longCount; ++i) {
+      int longCount = FixedBitSet.bits2words(numBitsToCopy); // 多少个live的文档（写入时文档是按照顺序写入的，）
+      for (int i = 0; i < longCount; ++i) {// 按照用了多少个long遍历。遍历的目的是为了再次核对下
         output.writeLong(copy.getBits()[i]);
       }
     }
@@ -217,7 +217,7 @@ public final class Lucene90LiveDocsFormat extends LiveDocsFormat {
 
   @Override
   public void files(SegmentCommitInfo info, Collection<String> files) throws IOException {
-    if (info.hasDeletions()) {
+    if (info.hasDeletions()) {// 如果段有删除，那么添加generation_n.liv
       files.add(IndexFileNames.fileNameFromGeneration(info.info.name, EXTENSION, info.getDelGen()));
     }
   }

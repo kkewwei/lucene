@@ -38,7 +38,7 @@ import org.apache.lucene.util.IOSupplier;
  */
 public class TermQuery extends Query {
 
-  private final Term term;
+  private final Term term; //实际就是key:value
   private final TermStates perReaderTermState;
 
   final class TermWeight extends Weight {
@@ -58,10 +58,10 @@ public class TermQuery extends Query {
       this.termStates = termStates;
       this.similarity = searcher.getSimilarity();
 
-      final CollectionStatistics collectionStats;
-      final TermStatistics termStats;
-      if (scoreMode.needsScores()) {
-        collectionStats = searcher.collectionStatistics(term.field());
+      final CollectionStatistics collectionStats;// 是全量的词频
+      final TermStatistics termStats;// 是某个term的统计词频
+      if (scoreMode.needsScores()) { //
+        collectionStats = searcher.collectionStatistics(term.field());// 收集这个field所有segment的词频等统计信息
         termStats =
             termStates.docFreq() > 0
                 ? searcher.termStatistics(term, termStates.docFreq(), termStates.totalTermFreq())
@@ -93,7 +93,7 @@ public class TermQuery extends Query {
         }
       }
     }
-
+    // 提取terms
     @Override
     public Matches matches(LeafReaderContext context, int doc) throws IOException {
       TermsEnum te = getTermsEnum(context);
@@ -156,7 +156,7 @@ public class TermQuery extends Query {
             norms = context.reader().getNormValues(term.field());
           }
 
-          if (scoreMode == ScoreMode.TOP_SCORES) {
+          if (scoreMode == ScoreMode.TOP_SCORES) {// 打分的话时，进来的
             return new TermScorer(
                 termsEnum.impacts(PostingsEnum.FREQS), simScorer, norms, topLevelScoringClause);
           } else {
@@ -167,7 +167,7 @@ public class TermQuery extends Query {
 
         @Override
         public BulkScorer bulkScorer() throws IOException {
-          if (scoreMode.needsScores() == false) {
+          if (scoreMode.needsScores() == false) {   // 不需要打分
             DocIdSetIterator iterator = get(Long.MAX_VALUE).iterator();
             int maxDoc = context.reader().maxDoc();
             return ConstantScoreScorerSupplier.fromIterator(iterator, 0f, scoreMode, maxDoc)
@@ -214,8 +214,8 @@ public class TermQuery extends Query {
             : "no termstate found but term exists in reader term=" + term;
         return null;
       }
-      final TermsEnum termsEnum = context.reader().terms(term.field()).iterator();
-      termsEnum.seekExact(term.bytes(), state);
+      final TermsEnum termsEnum = context.reader().terms(term.field()).iterator(); //SegmentTermsEnum
+      termsEnum.seekExact(term.bytes(), state); //继续下沉
       return termsEnum;
     }
 
@@ -293,14 +293,14 @@ public class TermQuery extends Query {
   public Term getTerm() {
     return term;
   }
-
+  // 若从bool里面的filter和must_not过来，那么就不需要打分
   @Override
   public Weight createWeight(IndexSearcher searcher, ScoreMode scoreMode, float boost)
       throws IOException {
-    final IndexReaderContext context = searcher.getTopReaderContext();
+    final IndexReaderContext context = searcher.getTopReaderContext();// CompositeReaderContext
     final TermStates termState;
-    if (perReaderTermState == null || perReaderTermState.wasBuiltFor(context) == false) {
-      termState = TermStates.build(searcher, term, scoreMode.needsScores());
+    if (perReaderTermState == null || perReaderTermState.wasBuiltFor(context) == false) {// 无论打分与否，都会进来
+      termState = TermStates.build(searcher, term, scoreMode.needsScores());// scoreMode.needsScores() 若需要打分的话，就开始对每隔 segment的FST加载遍历了
     } else {
       // PRTS was pre-build for this IS
       termState = this.perReaderTermState;

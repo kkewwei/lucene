@@ -188,7 +188,7 @@ public class MMapDirectory extends FSDirectory {
 
   private Function<String, Optional<String>> groupingFunction = GROUP_BY_SEGMENT;
 
-  final int chunkSizePower;
+  final int chunkSizePower;// 30，也就是每1G文件大小，算一个chunk
 
   /**
    * Create a new MMapDirectory for the named location. The directory is created at the named
@@ -254,7 +254,7 @@ public class MMapDirectory extends FSDirectory {
     }
     this.chunkSizePower = Long.SIZE - 1 - Long.numberOfLeadingZeros(maxChunkSize);
     assert (1L << chunkSizePower) <= maxChunkSize;
-    assert (1L << chunkSizePower) > (maxChunkSize / 2);
+    assert (1L << chunkSizePower) > (maxChunkSize / 2);// 最大映射1G
   }
 
   /**
@@ -309,7 +309,7 @@ public class MMapDirectory extends FSDirectory {
   }
 
   /** Creates an IndexInput for the file with the given name. */
-  @Override
+  @Override // 这里会去映射文件
   public IndexInput openInput(String name, IOContext context) throws IOException {
     ensureOpen();
     ensureCanRead(name);

@@ -178,7 +178,7 @@ public abstract class Directory implements Closeable {
       throws IOException {
     boolean success = false;
     try (IndexInput is = from.openInput(src, IOContext.READONCE);
-        IndexOutput os = createOutput(dest, context)) {
+        IndexOutput os = createOutput(dest, context)) {// os产生的是RateLimitedIndexOutput
       os.copyBytes(is, is.length());
       success = true;
     } finally {

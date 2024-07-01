@@ -31,7 +31,7 @@ import org.apache.lucene.util.RamUsageEstimator;
  * An {@link HnswGraph} where all nodes and connections are held in memory. This class is used to
  * construct the HNSW graph before it's written to the index.
  */
-public final class OnHeapHnswGraph extends HnswGraph implements Accountable {
+public final class OnHeapHnswGraph extends HnswGraph implements Accountable {// 构建期驻留在堆内存的可变图；搜索/落盘后会有 off-heap 的只读版本（codec 提供）。
 
   // shallow estimate of the statically used on-heap memory.
   private static final long RAM_BYTES_USED =
@@ -44,7 +44,7 @@ public final class OnHeapHnswGraph extends HnswGraph implements Accountable {
   // the internal graph representation where the first dimension is node id and second dimension is
   // level
   // e.g. graph[1][2] is all the neighbours of node 1 at level 2
-  private NeighborArray[][] graph;
+  private NeighborArray[][] graph; //  graph[1][2] node1 在level2的所有邻居
   // essentially another 2d map which the first dimension is level and second dimension is node id,
   // this is only
   // generated on demand when there's someone calling getNodeOnLevel on a non-zero level
@@ -222,7 +222,7 @@ public final class OnHeapHnswGraph extends HnswGraph implements Accountable {
    */
   public boolean trySetNewEntryNode(int node, int level) {
     EntryNode current = entryNode.get();
-    if (current.node == -1) {
+    if (current.node == -1) {//如果图当前还没有 entry node，就把它设成 entry node
       return entryNode.compareAndSet(current, new EntryNode(node, level));
     }
     return false;

@@ -264,10 +264,10 @@ public class SortedNumericSortField extends SortField {
     final FieldComparator<?> fieldComparator;
     // we can use sort optimization with points if selector is MIN or MAX,
     // because we can still build successful iterator over points in this case.
-    boolean isMinOrMax =
+    boolean isMinOrMax = // 若设置了，
         selector == SortedNumericSelector.Type.MAX || selector == SortedNumericSelector.Type.MIN;
     switch (type) {
-      case INT:
+      case INT: // 若是int
         fieldComparator =
             new IntComparator(
                 numHits,

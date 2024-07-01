@@ -48,7 +48,7 @@ import org.apache.lucene.search.DocIdSetIterator;
  */
 public final class SparseLiveDocs implements LiveDocs {
 
-  private final SparseFixedBitSet deletedDocs;
+  private final SparseFixedBitSet deletedDocs;// 放的是delete的文档
   private final int maxDoc;
   // Cached at construction for performance. Safe because this class is immutable.
   // Eliminates repeated O(n) cardinality() calls.

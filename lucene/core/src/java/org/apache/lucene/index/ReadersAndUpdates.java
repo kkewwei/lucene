@@ -47,7 +47,7 @@ import org.apache.lucene.util.InfoStream;
 // Used by IndexWriter to hold open SegmentReaders (for
 // searching or merging), plus pending deletes and updates,
 // for a given segment
-final class ReadersAndUpdates {
+final class ReadersAndUpdates { // 为了更新某个segment，而专门产生的一个Segment
   // Not final because we replace (clone) when we need to
   // change it and it's been shared:
   final SegmentCommitInfo info;
@@ -56,11 +56,11 @@ final class ReadersAndUpdates {
   private final AtomicInteger refCount = new AtomicInteger(1);
 
   // Set once (null, and then maybe set, and never set again):
-  private SegmentReader reader;
+  private SegmentReader reader; // 根本不动，别的只是copy该类
 
   // How many further deletions we've done against
   // liveDocs vs when we loaded it or last wrote it:
-  private final PendingDeletes pendingDeletes;
+  private final PendingDeletes pendingDeletes; // 对于存量的segment,需要删除的docId放在这里（termDelete,queryDelete都放这里）
 
   // the major version this index was created with
   private final int indexCreatedVersionMajor;
@@ -74,7 +74,7 @@ final class ReadersAndUpdates {
   private boolean isMerging = false;
 
   // Holds resolved (to docIDs) doc values updates that have not yet been
-  // written to the index
+  // written to the index // 暂存需要更新的docId，这些doc value还没开始写入索引中, key就是__soft_deletes
   private final Map<String, List<DocValuesFieldUpdates>> pendingDVUpdates = new HashMap<>();
 
   // Holds resolved (to docIDs) doc values updates that were resolved while
@@ -92,7 +92,7 @@ final class ReadersAndUpdates {
     this.info = info;
     this.pendingDeletes = pendingDeletes;
     this.indexCreatedVersionMajor = indexCreatedVersionMajor;
-  }
+  } // 没有reader赋值
 
   /**
    * Init from a previously opened SegmentReader.
@@ -143,7 +143,7 @@ final class ReadersAndUpdates {
    * in RAM and write to disk when too much RAM is used or when a merge needs to kick off, or a
    * commit/refresh.
    */
-  public synchronized void addDVUpdate(DocValuesFieldUpdates update) throws IOException {
+  public synchronized void addDVUpdate(DocValuesFieldUpdates update) throws IOException {//会从DocumentsWriterFlushQueue.applyDocValuesUpdates()调过来
     if (update.getFinished() == false) {
       throw new IllegalArgumentException("call finish first");
     }
@@ -172,13 +172,13 @@ final class ReadersAndUpdates {
     }
     return count;
   }
-
+  //产生新的
   /** Returns a {@link SegmentReader}. */
   public synchronized SegmentReader getReader(IOContext context) throws IOException {
-    if (reader == null) {
+    if (reader == null) { //若reader为null的话，就创建一个。新产生的segment的reader就为空
       // We steal returned ref:
-      reader = new SegmentReader(info, indexCreatedVersionMajor, context);
-      pendingDeletes.onNewReader(reader, info);
+      reader = new SegmentReader(info, indexCreatedVersionMajor, context); // 对一个segment的读取。refresh时跑到这里，会实现准实时查询功能。1.会进行mmap映射。2.会去读取硬删除文件
+      pendingDeletes.onNewReader(reader, info);// 软删除时是PendingSoftDeletes.onNewReader。回去读取软删除文件
     }
 
     // Ref for caller
@@ -216,21 +216,21 @@ final class ReadersAndUpdates {
   /**
    * Returns a ref to a clone. NOTE: you should decRef() the reader when you're done (ie do not call
    * close()).
-   */
+   */// 增加一次引用，就是一次Clone
   public synchronized SegmentReader getReadOnlyClone(IOContext context) throws IOException {
-    if (reader == null) {
-      getReader(context).decRef();
+    if (reader == null) { // 首先reader为null的话，就创建SegmentReader， 比较重要，获取读取fst文件头，并映射
+      getReader(context).decRef(); //主要为了产生SegmentReader， decRef是因为里面无论如何都会incRef一次
       assert reader != null;
     }
     // force new liveDocs
-    Bits liveDocs = pendingDeletes.getLiveDocs();
+    Bits liveDocs = pendingDeletes.getLiveDocs();//  最终真正存活的文档（磁盘中live文件-软删除的doc）
     if (liveDocs != null) {
       return new SegmentReader(
-          info, reader, liveDocs, pendingDeletes.getHardLiveDocs(), pendingDeletes.numDocs(), true);
-    } else {
+          info, reader, liveDocs, pendingDeletes.getHardLiveDocs(), pendingDeletes.numDocs(), true); // 产生一个新的
+    } else {// 已经存在了
       // liveDocs == null and reader != null. That can only be if there are no deletes
       assert reader.getLiveDocs() == null;
-      reader.incRef();
+      reader.incRef(); // 增加一次引用
       return reader;
     }
   }
@@ -253,7 +253,7 @@ final class ReadersAndUpdates {
   }
 
   /** Returns a snapshot of the live docs. */
-  public synchronized Bits getLiveDocs() {
+  public synchronized Bits getLiveDocs() {// 这里获取的到的
     return pendingDeletes.getLiveDocs();
   }
 
@@ -278,7 +278,7 @@ final class ReadersAndUpdates {
   // _X_N updates files) to the directory; returns true if it wrote any file
   // and false if there were no new deletes or updates to write:
   public synchronized boolean writeLiveDocs(Directory dir) throws IOException {
-    return pendingDeletes.writeLiveDocs(dir);
+    return pendingDeletes.writeLiveDocs(dir);// 产生新的
   }
 
   private synchronized void handleDVUpdates(
@@ -291,14 +291,14 @@ final class ReadersAndUpdates {
       InfoStream infoStream)
       throws IOException {
     for (Entry<String, List<DocValuesFieldUpdates>> ent : pendingDVUpdates.entrySet()) {
-      final String field = ent.getKey();
-      final List<DocValuesFieldUpdates> updates = ent.getValue();
+      final String field = ent.getKey();// 是__soft_deletes
+      final List<DocValuesFieldUpdates> updates = ent.getValue();// 存储删除的docList
       DocValuesType type = updates.get(0).type;
       assert type == DocValuesType.NUMERIC || type == DocValuesType.BINARY
           : "unsupported type: " + type;
       final List<DocValuesFieldUpdates> updatesToApply = new ArrayList<>();
       long bytes = 0;
-      for (DocValuesFieldUpdates update : updates) {
+      for (DocValuesFieldUpdates update : updates) {// 存储删除的docList
         if (update.delGen <= maxDelGen) {
           // safe to apply this one
           bytes += update.ramBytesUsed();
@@ -321,7 +321,7 @@ final class ReadersAndUpdates {
                 bytes / 1024. / 1024.));
       }
       final long nextDocValuesGen = info.getNextDocValuesGen();
-      final String segmentSuffix = Long.toString(nextDocValuesGen, Character.MAX_RADIX);
+      final String segmentSuffix = Long.toString(nextDocValuesGen, Character.MAX_RADIX);// 计算segment后缀
       final IOContext updatesContext = IOContext.flush(new FlushInfo(info.info.maxDoc(), bytes));
       final FieldInfo fieldInfo = infos.fieldInfo(field);
       assert fieldInfo != null;
@@ -332,7 +332,7 @@ final class ReadersAndUpdates {
       final SegmentWriteState state =
           new SegmentWriteState(
               null, trackingDir, info.info, fieldInfos, null, updatesContext, segmentSuffix);
-      try (final DocValuesConsumer fieldsConsumer = dvFormat.fieldsConsumer(state)) {
+      try (final DocValuesConsumer fieldsConsumer = dvFormat.fieldsConsumer(state)) {// 产生DVConsumer
         Function<FieldInfo, DocValuesFieldUpdates.Iterator> updateSupplier =
             (info) -> {
               if (info != fieldInfo) {
@@ -342,11 +342,11 @@ final class ReadersAndUpdates {
               DocValuesFieldUpdates.Iterator[] subs =
                   new DocValuesFieldUpdates.Iterator[updatesToApply.size()];
               for (int i = 0; i < subs.length; i++) {
-                subs[i] = updatesToApply.get(i).iterator();
+                subs[i] = updatesToApply.get(i).iterator();// 可以从subs的BitSet中获取，获取的是所有软删除的文档Id
               }
-              return DocValuesFieldUpdates.mergedIterator(subs);
+              return DocValuesFieldUpdates.mergedIterator(subs);// 获取的是所有软删除的文档Id
             };
-        pendingDeletes.onDocValuesUpdate(fieldInfo, updateSupplier.apply(fieldInfo));
+        pendingDeletes.onDocValuesUpdate(fieldInfo, updateSupplier.apply(fieldInfo));// 将跑到PendingSoftDeletes.onDocValuesUpdate()
         if (type == DocValuesType.BINARY) {
           fieldsConsumer.addBinaryField(
               fieldInfo,
@@ -401,21 +401,21 @@ final class ReadersAndUpdates {
               });
         } else {
           // write the numeric updates to a new gen'd docvalues file
-          fieldsConsumer.addNumericField(
-              fieldInfo,
+          fieldsConsumer.addNumericField(// 一般跑这里，仅仅是将软删除字段_soft_delete字段的dvd文件落盘
+              fieldInfo,// _soft_delete字段来存储被软删除的doc
               new EmptyDocValuesProducer() {
                 @Override
                 public NumericDocValues getNumeric(FieldInfo fieldInfoIn) throws IOException {
-                  DocValuesFieldUpdates.Iterator iterator = updateSupplier.apply(fieldInfo);
+                  DocValuesFieldUpdates.Iterator iterator = updateSupplier.apply(fieldInfo);// 获取的是所有软删除的文档Id，
                   final MergedDocValues<NumericDocValues> mergedDocValues =
-                      new MergedDocValues<>(
-                          reader.getNumericDocValues(field),
-                          DocValuesFieldUpdates.Iterator.asNumericDocValues(iterator),
+                      new MergedDocValues<>(// 合并这个segment存量的dv+新产生的dv文件
+                          reader.getNumericDocValues(field),// 包含__soft_deletes字段的doc
+                          DocValuesFieldUpdates.Iterator.asNumericDocValues(iterator),// 内存中的软删除的文档Id合并成一个
                           iterator);
                   // Merge sort of the original doc values with updated doc values:
                   return new NumericDocValues() {
                     @Override
-                    public long longValue() throws IOException {
+                    public long longValue() throws IOException {// 遍历每个删除的文档具体__soft_deletes字段的值，实际都是1
                       return mergedDocValues.currentValuesSupplier.longValue();
                     }
 
@@ -469,7 +469,7 @@ final class ReadersAndUpdates {
       extends DocValuesIterator {
     private final DocValuesFieldUpdates.Iterator updateIterator;
     // merged docID
-    private int docIDOut = -1;
+    private int docIDOut = -1;//当前读取的的docId
     // docID from our original doc values
     private int docIDOnDisk = -1;
     // docID from our updates
@@ -478,11 +478,11 @@ final class ReadersAndUpdates {
 
     private final DocValuesInstance onDiskDocValues;
     private final DocValuesInstance updateDocValues;
-    DocValuesInstance currentValuesSupplier;
+    DocValuesInstance currentValuesSupplier;// 当前value提供者，从disk或者update中
 
     protected MergedDocValues(
-        DocValuesInstance onDiskDocValues,
-        DocValuesInstance updateDocValues,
+        DocValuesInstance onDiskDocValues,// 从磁盘文件中读取的docId
+        DocValuesInstance updateDocValues,// 内存新构建的
         DocValuesFieldUpdates.Iterator updateIterator) {
       this.onDiskDocValues = onDiskDocValues;
       this.updateDocValues = updateDocValues;
@@ -513,22 +513,22 @@ final class ReadersAndUpdates {
     public int nextDoc() throws IOException {
       boolean hasValue = false;
       do {
-        if (docIDOnDisk == docIDOut) {
+        if (docIDOnDisk == docIDOut) {// 之前是从磁盘读取
           if (onDiskDocValues == null) {
-            docIDOnDisk = NO_MORE_DOCS;
+            docIDOnDisk = NO_MORE_DOCS;// 磁盘上已经读取完了
           } else {
             docIDOnDisk = onDiskDocValues.nextDoc();
           }
         }
-        if (updateDocID == docIDOut) {
+        if (updateDocID == docIDOut) {// 也是和内存读取一样
           updateDocID = updateDocValues.nextDoc();
         }
-        if (docIDOnDisk < updateDocID) {
+        if (docIDOnDisk < updateDocID) {//若从磁盘中读取的小
           // no update to this doc - we use the on-disk values
           docIDOut = docIDOnDisk;
           currentValuesSupplier = onDiskDocValues;
           hasValue = true;
-        } else {
+        } else {// 若从内存中读取的小
           docIDOut = updateDocID;
           if (docIDOut != NO_MORE_DOCS) {
             currentValuesSupplier = updateDocValues;
@@ -544,7 +544,7 @@ final class ReadersAndUpdates {
     @Override
     public void intoBitSet(int upTo, FixedBitSet bitSet, int offset) throws IOException {
       if (onDiskDocValues == null) {
-        super.intoBitSet(upTo, bitSet, offset);
+        super.intoBitSet(upTo, bitSet, offset);// 磁盘没有存储的话，就一个个doc读取
         return;
       }
 
@@ -556,22 +556,22 @@ final class ReadersAndUpdates {
         scratch = FixedBitSet.ensureCapacityAndClear(scratch, bitSet.length() - 1);
       }
 
-      onDiskDocValues.intoBitSet(upTo, scratch, offset);
+      onDiskDocValues.intoBitSet(upTo, scratch, offset);// 先批量处理磁盘中的
       docIDOnDisk = onDiskDocValues.docID();
 
-      for (int doc = updateDocValues.docID(); doc < upTo; doc = updateDocValues.nextDoc()) {
+      for (int doc = updateDocValues.docID(); doc < upTo; doc = updateDocValues.nextDoc()) {// 遍历新的软删除的doc
         if (updateIterator.hasValue()) {
           scratch.set(doc - offset);
         } else {
           scratch.clear(doc - offset);
         }
       }
-
+      // 全部从临时对象scratch转到bitSet中
       FixedBitSet.orRange(scratch, 0, bitSet, 0, bitSet.length());
-
+      // 找到下一个待处理的的doc
       // Iterate to find out current doc.
       while (true) {
-        while (updateDocValues.docID() < docIDOnDisk && updateIterator.hasValue() == false) {
+        while (updateDocValues.docID() < docIDOnDisk && updateIterator.hasValue() == false) {// 不停的从updateDocValues找下一个待处理的doc
           updateDocValues.nextDoc();
         }
         if (docIDOnDisk != NO_MORE_DOCS
@@ -611,8 +611,8 @@ final class ReadersAndUpdates {
     info.advanceFieldInfosGen();
     return trackingDir.getCreatedFiles();
   }
-
-  public synchronized boolean writeFieldUpdates(
+// 会从IndexWriter.writeReaderPool()->ReaderPool.commit()进来
+  public synchronized boolean writeFieldUpdates(// 遍历所有的软删除以及落盘（将存量软删除dvd文件+内存新增dvd文件合并成一个文件落盘）
       Directory dir, FieldInfos.FieldNumbers fieldNumbers, long maxDelGen, InfoStream infoStream)
       throws IOException {
     long startTimeNS = System.nanoTime();
@@ -657,7 +657,7 @@ final class ReadersAndUpdates {
         // the reader's infos and write them to a new fieldInfos_gen file.
         int maxFieldNumber = -1;
         Map<String, FieldInfo> byName = new HashMap<>();
-        for (FieldInfo fi : reader.getFieldInfos()) {
+        for (FieldInfo fi : reader.getFieldInfos()) {// 先收集了一波存量的字段
           // cannot use builder.add(fi) because it does not preserve
           // the local field number. Field numbers can be different from
           // the global ones if the segment was created externally (and added to
@@ -665,7 +665,7 @@ final class ReadersAndUpdates {
           byName.put(fi.name, cloneFieldInfo(fi, fi.number));
           maxFieldNumber = Math.max(fi.number, maxFieldNumber);
         }
-
+        // 将pendingDVUpdates包含的__soft_deletes也放入byName中
         // create new fields with the right DV type
         for (List<DocValuesFieldUpdates> updates : pendingDVUpdates.values()) {
           DocValuesFieldUpdates update = updates.get(0);
@@ -686,9 +686,9 @@ final class ReadersAndUpdates {
         fieldInfos = new FieldInfos(byName.values().toArray(FieldInfo[]::new));
         final DocValuesFormat docValuesFormat = codec.docValuesFormat();
 
-        handleDVUpdates(
+        handleDVUpdates(// dvm和dvd真正落盘
             fieldInfos, trackingDir, docValuesFormat, reader, newDVFiles, maxDelGen, infoStream);
-
+        //写新的fnm文件，新的dvd文件
         fieldInfosFiles = writeFieldInfosGen(fieldInfos, trackingDir, codec.fieldInfosFormat());
       } finally {
         if (reader != this.reader) {
@@ -715,7 +715,7 @@ final class ReadersAndUpdates {
     long bytesFreed = 0;
     Iterator<Map.Entry<String, List<DocValuesFieldUpdates>>> it =
         pendingDVUpdates.entrySet().iterator();
-    while (it.hasNext()) {
+    while (it.hasNext()) {// 没啥用
       Map.Entry<String, List<DocValuesFieldUpdates>> ent = it.next();
       int upto = 0;
       List<DocValuesFieldUpdates> updates = ent.getValue();
@@ -752,11 +752,11 @@ final class ReadersAndUpdates {
         newDVFiles.put(e.getKey(), e.getValue());
       }
     }
-    info.setDocValuesUpdatesFiles(newDVFiles);
-
+    info.setDocValuesUpdatesFiles(newDVFiles);// 更新软删除文件
+    // 软删除生效
     // if there is a reader open, reopen it to reflect the updates
     if (reader != null) {
-      swapNewReaderWithLatestLiveDocs();
+      swapNewReaderWithLatestLiveDocs();// 更新下最新的Reader
     }
 
     if (infoStream.isEnabled("BD")) {

@@ -22,12 +22,12 @@ import org.apache.lucene.index.LeafReaderContext;
 /**
  * A Weight that has a constant score equal to the boost of the wrapped query. This is typically
  * useful when building queries which do not produce meaningful scores and are mostly useful for
- * filtering.
+ * filtering.// 具有恒定得分的Weight，这对于不产生实际得分的构建
  *
  * @lucene.internal
  */
 public abstract class ConstantScoreWeight extends Weight {
-
+  // 恒定得分
   private final float score;
 
   protected ConstantScoreWeight(Query query, float score) {

@@ -30,12 +30,12 @@ import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.BytesRefBuilder;
 import org.apache.lucene.util.IOBooleanSupplier;
 import org.apache.lucene.util.RamUsageEstimator;
-
+// 方便在此FST中遍历使用
 /** Iterates through terms in this field. */
 final class SegmentTermsEnum extends BaseTermsEnum {
-
-  // Lazy init:
-  IndexInput in;
+    // TermsDict由SegmentTermsEnum或者IntersectTermsEnum表示，分别代表两种查询TermsDict的方式，精确查询和近似查询
+  // Lazy init: TermsDict中的Block部分称之为Frame，Frame的加载过程分为两个步骤：在初始化过程中读取元数据；按需读取索引数据。
+  IndexInput in; // tim
   private SegmentTermsEnumFrame[] stack = new SegmentTermsEnumFrame[0];
   private final SegmentTermsEnumFrame staticFrame;
   SegmentTermsEnumFrame currentFrame;

@@ -45,14 +45,14 @@ import org.apache.lucene.util.InfoStream;
  * <p>Each packet is assigned a generation, and each flushed or merged segment is also assigned a
  * generation, so we can track which BufferedDeletes packets to apply to any given segment.
  */
-final class BufferedUpdatesStream implements Accountable {
+final class BufferedUpdatesStream implements Accountable {// 当全局flush产生segment后，
 
-  private final Set<FrozenBufferedUpdates> updates = new HashSet<>();
+  private final Set<FrozenBufferedUpdates> updates = new HashSet<>();// 包括全局FrozenBufferedUpdates和每个segment对应的FrozenBufferedUpdates
 
   // Starts at 1 so that SegmentInfos that have never had
   // deletes applied (whose bufferedDelGen defaults to 0)
   // will be correct:
-  private long nextGen = 1;
+  private long nextGen = 1; // 专门维护一个更新的计数器
   private final FinishedSegments finishedSegments;
   private final InfoStream infoStream;
   private final AtomicLong bytesUsed = new AtomicLong();
@@ -72,7 +72,7 @@ final class BufferedUpdatesStream implements Accountable {
      * updates. If the pushed packets get our of order would loose documents
      * since deletes are applied to the wrong segments.
      */
-    packet.setDelGen(nextGen++);
+    packet.setDelGen(nextGen++);// 每个FrozenBufferedUpdates设置了delGen
     assert packet.any();
     assert checkDeleteStats();
 
@@ -163,7 +163,7 @@ final class BufferedUpdatesStream implements Accountable {
 
     bytesUsed.addAndGet(-packet.bytesUsed);
 
-    finishedSegment(packet.delGen());
+    finishedSegment(packet.delGen());// 稍后需要了解下
   }
 
   /** All frozen packets up to and including this del gen are guaranteed to be finished. */
@@ -275,7 +275,7 @@ final class BufferedUpdatesStream implements Accountable {
         ReadersAndUpdates rld, IOConsumer<ReadersAndUpdates> onClose, SegmentCommitInfo info)
         throws IOException {
       this.rld = rld;
-      reader = rld.getReader(IOContext.DEFAULT);
+      reader = rld.getReader(IOContext.DEFAULT);// 新产生的segment通过mmap打开以实现准实时查询
       startDelCount = rld.getDelCount();
       delGen = info.getBufferedDeletesGen();
       this.onClose = onClose;
@@ -310,13 +310,13 @@ final class BufferedUpdatesStream implements Accountable {
   private static class FinishedSegments {
 
     /** Largest del gen, inclusive, for which all prior packets have finished applying. */
-    private long completedDelGen;
+    private long completedDelGen;// 递增的，当前已经完成的delegen
 
     /**
      * This lets us track the "holes" in the current frontier of applying del gens; once the holes
      * are filled in we can advance completedDelGen.
      */
-    private final LongHashSet finishedDelGens = new LongHashSet();
+    private final LongHashSet finishedDelGens = new LongHashSet();//完成apply的gen
 
     private final InfoStream infoStream;
 

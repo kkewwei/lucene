@@ -20,22 +20,22 @@ package org.apache.lucene.search;
 public enum ScoreMode {
 
   /** Produced scorers will allow visiting all matches and get their score. */
-  COMPLETE(true, true),
+  COMPLETE(true, true),// complete,  则需要为所有候选文档都进行评分
 
   /** Produced scorers will allow visiting all matches but scores won't be available. */
-  COMPLETE_NO_SCORES(true, false),
+  COMPLETE_NO_SCORES(true, false),//complete_no_scores,  完全遍历但是不打分
 
   /**
    * Produced scorers will optionally allow skipping over non-competitive hits using the {@link
    * Scorer#setMinCompetitiveScore(float)} API.
    */
-  TOP_SCORES(false, true),
+  TOP_SCORES(false, true),//最常用的方式，即按文档得分取查询结果集的TopK
 
   /**
    * ScoreMode for top field collectors that can provide their own iterators, to optionally allow to
    * skip for non-competitive docs
    */
-  TOP_DOCS(false, false),
+  TOP_DOCS(false, false),// 不需要反问全量数据，不需要打分
 
   /**
    * ScoreMode for top field collectors that can provide their own iterators, to optionally allow to

@@ -44,7 +44,7 @@ public class TestAutomaton extends LuceneTestCase {
     int start = a.createState();
     int x = a.createState();
     int y = a.createState();
-    int end = a.createState();
+    int end = a.createState();// 第几个状态
     a.setAccept(end, true);
 
     a.addTransition(start, x, 'a', 'a');
@@ -58,7 +58,7 @@ public class TestAutomaton extends LuceneTestCase {
     Automaton a = new Automaton();
     int start = a.createState();
     int end = a.createState();
-    a.setAccept(end, true);
+    a.setAccept(end, true); //
     // Should collapse to a-b:
     a.addTransition(start, end, 'a', 'a');
     a.addTransition(start, end, 'b', 'b');
@@ -71,7 +71,7 @@ public class TestAutomaton extends LuceneTestCase {
     assertEquals(3, a.getNumTransitions(start));
     Transition scratch = new Transition();
     a.initTransition(start, scratch);
-    a.getNextTransition(scratch);
+    a.getNextTransition(scratch);// 获取的第一个
     assertEquals('a', scratch.min);
     assertEquals('b', scratch.max);
     a.getNextTransition(scratch);

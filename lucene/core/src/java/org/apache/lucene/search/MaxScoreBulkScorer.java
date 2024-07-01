@@ -22,7 +22,7 @@ import java.util.List;
 import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.FixedBitSet;
 import org.apache.lucene.util.MathUtil;
-
+// 全部是可选选择的，仅有打分要求，没有min要求，就选择得分最大的那个
 final class MaxScoreBulkScorer extends BulkScorer {
 
   static final int INNER_WINDOW_SIZE = 1 << 12;

@@ -37,26 +37,26 @@ import org.apache.lucene.util.fst.OffHeapFSTStore;
  *
  * @lucene.internal
  */
-public final class FieldReader extends Terms {
+public final class FieldReader extends Terms {// 某个字段的倒排查询
 
   // private final boolean DEBUG = BlockTreeTermsWriter.DEBUG;
 
-  final long numTerms;
+  final long numTerms; // 词的总个数
   final FieldInfo fieldInfo;
   final long sumTotalTermFreq;
   final long sumDocFreq;
   final int docCount;
   final long rootBlockFP;
   final BytesRef rootCode;
-  final BytesRef minTerm;
+  final BytesRef minTerm; // 最大值和最小值
   final BytesRef maxTerm;
-  final Lucene90BlockTreeTermsReader parent;
+  final Lucene90BlockTreeTermsReader parent; //BlockTreeTermsReader
 
-  final FST<BytesRef> index;
+  final FST<BytesRef> index;//实际跑到这里，比较占用内存空间， fst文件结构
 
   // private boolean DEBUG;
 
-  FieldReader(
+  FieldReader(// tdm文件启动的时候就加载进来了
       Lucene90BlockTreeTermsReader parent,
       FieldInfo fieldInfo,
       long numTerms,
@@ -74,7 +74,7 @@ public final class FieldReader extends Terms {
     this.fieldInfo = fieldInfo;
     // DEBUG = BlockTreeTermsReader.DEBUG && fieldInfo.name.equals("id");
     this.parent = parent;
-    this.numTerms = numTerms;
+    this.numTerms = numTerms;//词典词的个数
     this.sumTotalTermFreq = sumTotalTermFreq;
     this.sumDocFreq = sumDocFreq;
     this.docCount = docCount;
@@ -185,7 +185,7 @@ public final class FieldReader extends Terms {
 
   @Override
   public TermsEnum iterator() throws IOException {
-    return new SegmentTermsEnum(this);
+    return new SegmentTermsEnum(this);// 仅仅读取fst第一条边
   }
 
   @Override

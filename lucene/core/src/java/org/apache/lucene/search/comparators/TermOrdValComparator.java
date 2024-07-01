@@ -190,7 +190,7 @@ public class TermOrdValComparator extends FieldComparator<BytesRef> {
   class TermOrdValLeafComparator implements LeafFieldComparator {
 
     /* Current reader's doc ord/values. */
-    final SortedDocValues termsIndex;
+    final SortedDocValues termsIndex;//访问的是
 
     /* True if current bottom slot matches the current reader. */
     boolean bottomSameReader;
@@ -330,7 +330,7 @@ public class TermOrdValComparator extends FieldComparator<BytesRef> {
 
     @Override
     public void copy(int slot, int doc) throws IOException {
-      int ord = getOrdForDoc(doc);
+      int ord = getOrdForDoc(doc);// 得到segment内的order
       if (ord == -1) {
         ord = missingOrd;
         values[slot] = null;
@@ -339,7 +339,7 @@ public class TermOrdValComparator extends FieldComparator<BytesRef> {
         if (tempBRs[slot] == null) {
           tempBRs[slot] = new BytesRefBuilder();
         }
-        tempBRs[slot].copyBytes(termsIndex.lookupOrd(ord));
+        tempBRs[slot].copyBytes(termsIndex.lookupOrd(ord));// 从词典一级索引中获取
         values[slot] = tempBRs[slot].get();
       }
       ords[slot] = ord;
@@ -406,7 +406,7 @@ public class TermOrdValComparator extends FieldComparator<BytesRef> {
     private void updateCompetitiveIterator() throws IOException {
       if (competitiveState == null || hitsThresholdReached == false || bottomSlot == -1) {
         return;
-      }
+      }// 必须满了才会继续
       // This logic to figure out min and max ords is quite complex and verbose, can it be made
       // simpler?
       final int minOrd;
@@ -578,7 +578,7 @@ public class TermOrdValComparator extends FieldComparator<BytesRef> {
      */
     @Override
     public void update(int minOrd, int maxOrd) throws IOException {
-      final int maxTerms = Math.min(MAX_TERMS, IndexSearcher.getMaxClauseCount());
+      final int maxTerms = Math.min(MAX_TERMS, IndexSearcher.getMaxClauseCount());// 最大term个数
       final int size = Math.max(0, maxOrd - minOrd + 1);
       if (size > maxTerms) {
         if (dense == false && docsWithField == null) {

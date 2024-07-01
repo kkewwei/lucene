@@ -46,20 +46,20 @@ public class UsageTrackingQueryCachingPolicy implements QueryCachingPolicy {
     // This does not measure the cost of iterating over the filter (for this we
     // already have the DocIdSetIterator#cost API) but the cost to build the
     // DocIdSet in the first place
-    return query instanceof MultiTermQuery
+    return query instanceof MultiTermQuery// 前缀查询，正则匹配， wildCard查询等
         || query instanceof MultiTermQueryConstantScoreBlendedWrapper
         || query instanceof MultiTermQueryConstantScoreWrapper
-        || query instanceof TermInSetQuery
-        || isPointQuery(query);
+        || query instanceof TermInSetQuery// terms 查询，多余16个，仍然会是TermInSetQuery
+        || isPointQuery(query);// Point相关的
   }
 
   private static boolean shouldNeverCache(Query query) {
-    if (query instanceof TermQuery) {
+    if (query instanceof TermQuery) {// 竟然不缓存。比如使用terms:[]代替。或者使用
       // We do not bother caching term queries since they are already plenty fast.
       return true;
     }
 
-    if (query instanceof FieldExistsQuery) {
+    if (query instanceof FieldExistsQuery) { //   field是否存在
       // We do not bother caching FieldExistsQuery queries since they are already plenty fast.
       return true;
     }
@@ -90,7 +90,7 @@ public class UsageTrackingQueryCachingPolicy implements QueryCachingPolicy {
     return false;
   }
 
-  private final FrequencyTrackingRingBuffer recentlyUsedFilters;
+  private final FrequencyTrackingRingBuffer recentlyUsedFilters;// 最近
 
   /**
    * Expert: Create a new instance with a configurable history size. Beware of passing too large
@@ -110,7 +110,7 @@ public class UsageTrackingQueryCachingPolicy implements QueryCachingPolicy {
    * cases.
    */
   public UsageTrackingQueryCachingPolicy() {
-    this(256);
+    this(256);// 跟踪记录256个hash值
   }
 
   /**
@@ -120,12 +120,12 @@ public class UsageTrackingQueryCachingPolicy implements QueryCachingPolicy {
    * TermInSetQuery}, and 5 for other filters.
    */
   protected int minFrequencyToCache(Query query) {
-    if (isCostly(query)) {
+    if (isCostly(query)) {// 若是查询耗时大的查询，最近256次查询最少2次，才可以缓存
       return 2;
     } else {
       // default: cache after the filter has been seen 5 times
       int minFrequency = 5;
-      if (query instanceof BooleanQuery || query instanceof DisjunctionMaxQuery) {
+      if (query instanceof BooleanQuery || query instanceof DisjunctionMaxQuery) {// 出现4次就可以cache，而不用出现4次
         // Say you keep reusing a boolean query that looks like "A OR B" and
         // never use the A and B queries out of that context. 5 times after it
         // has been used, we would cache both A, B and A OR B, which is
@@ -142,7 +142,7 @@ public class UsageTrackingQueryCachingPolicy implements QueryCachingPolicy {
     assert query instanceof BoostQuery == false;
     assert query instanceof ConstantScoreQuery == false;
 
-    if (shouldNeverCache(query)) {
+    if (shouldNeverCache(query)) { // 若不该cache（term, DocValuesFieldExistsQuery,MatchAllDocsQuery,MatchNoDocsQuery,DisjunctionMaxQuery等）
       return;
     }
 
@@ -154,11 +154,11 @@ public class UsageTrackingQueryCachingPolicy implements QueryCachingPolicy {
     // large queries; this may cause rare false positives, but at worse
     // this just means we cache a query that was not in fact used enough:
     synchronized (this) {
-      recentlyUsedFilters.add(hashCode);
+      recentlyUsedFilters.add(hashCode);// 仅记录hase，避免过大的query
     }
   }
 
-  int frequency(Query query) {
+  int frequency(Query query) {// 统计某个查询QPS
     assert query instanceof BoostQuery == false;
     assert query instanceof ConstantScoreQuery == false;
 
@@ -170,14 +170,14 @@ public class UsageTrackingQueryCachingPolicy implements QueryCachingPolicy {
       return recentlyUsedFilters.frequency(hashCode);
     }
   }
-
+  // 1.不该cache的不cache(term，mallAll， matchNo),2.（复杂cache只用出现2次，一般的出现4次才cache）。CachingWrapperWeight也有cache，从segment文档数等方面限制
   @Override
   public boolean shouldCache(Query query) throws IOException {
-    if (shouldNeverCache(query)) {
+    if (shouldNeverCache(query)) {//// 若不该cache（term, DocValuesFieldExistsQuery,MatchAllDocsQuery,MatchNoDocsQuery,DisjunctionMaxQuery等）
       return false;
     }
-    final int frequency = frequency(query);
-    final int minFrequency = minFrequencyToCache(query);
-    return frequency >= minFrequency;
+    final int frequency = frequency(query);// 最近的查询频率
+    final int minFrequency = minFrequencyToCache(query);// 一般最少的查询频率
+    return frequency >= minFrequency;// 一般查询都还是可以cache的
   }
 }

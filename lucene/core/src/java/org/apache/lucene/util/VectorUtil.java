@@ -481,7 +481,7 @@ public final class VectorUtil {
    */
   public static int findNextGEQ(int[] buffer, int target, int from, int to) {
     assert IntStream.range(0, to - 1).noneMatch(i -> buffer[i] > buffer[i + 1]);
-    return IMPL.findNextGEQ(buffer, target, from, to);
+    return IMPL.findNextGEQ(buffer, target, from, to);// Greater Than Or Equal 实现可看 PanamaVectorUtilSupport.findNextGEQ
   }
 
   /**

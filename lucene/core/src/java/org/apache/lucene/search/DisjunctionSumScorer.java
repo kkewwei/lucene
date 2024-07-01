@@ -21,7 +21,7 @@ import java.util.List;
 import org.apache.lucene.util.MathUtil;
 
 /** A Scorer for OR like queries, counterpart of <code>ConjunctionScorer</code>. */
-final class DisjunctionSumScorer extends DisjunctionScorer {
+final class DisjunctionSumScorer extends DisjunctionScorer {// 1.Terms查询（小于16个会进来，取全集）2.全或切不加minShouldMatch，不用打分进来
 
   private final List<Scorer> scorers;
 

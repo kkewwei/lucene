@@ -37,7 +37,7 @@ import org.apache.lucene.util.BytesRef;
  *
  * @lucene.internal
  */
-public final class DeflateWithPresetDictCompressionMode extends CompressionMode {
+public final class DeflateWithPresetDictCompressionMode extends CompressionMode { // 最高压缩效率，默认这个压缩算法。最快压缩是这个：LZ4WithPresetDictCompressionMode
 
   // Shoot for 10 sub blocks
   private static final int NUM_SUB_BLOCKS = 10;
@@ -75,16 +75,17 @@ public final class DeflateWithPresetDictCompressionMode extends CompressionMode 
 
     private void doDecompress(DataInput in, Inflater decompressor, BytesRef bytes)
         throws IOException {
-      final int compressedLength = in.readVInt();
+      final int compressedLength = in.readVInt();// 压缩后的长度
       if (compressedLength == 0) {
         return;
       }
       // pad with extra "dummy byte": see javadocs for using Inflater(true)
       // we do it for compliance, but it's unnecessary for years in zlib.
       final int paddedLength = compressedLength + 1;
+      
       compressed = ArrayUtil.growNoCopy(compressed, paddedLength);
-      in.readBytes(compressed, 0, compressedLength);
-      compressed[compressedLength] = 0; // explicitly set dummy byte to 0
+      in.readBytes(compressed, 0, compressedLength); // 读取压缩后的长度
+      compressed[compressedLength] = 0; // explicitly set dummy byte to 0 标志压缩数据结束
 
       // extra "dummy byte"
       decompressor.setInput(compressed, 0, paddedLength);
@@ -112,10 +113,10 @@ public final class DeflateWithPresetDictCompressionMode extends CompressionMode 
         bytes.length = 0;
         return;
       }
-      final int dictLength = in.readVInt();
-      final int blockLength = in.readVInt();
+      final int dictLength = in.readVInt();// 词典压缩前的长度
+      final int blockLength = in.readVInt();// 子chunk压缩前的长度
       bytes.bytes = ArrayUtil.growNoCopy(bytes.bytes, dictLength);
-      bytes.offset = bytes.length = 0;
+      bytes.offset = bytes.length = 0;// 全部标志为空
 
       final Inflater decompressor = new Inflater(true);
       try {
@@ -162,7 +163,7 @@ public final class DeflateWithPresetDictCompressionMode extends CompressionMode 
   private static class DeflateWithPresetDictCompressor extends Compressor {
 
     final Deflater compressor;
-    byte[] compressed;
+    byte[] compressed;//压缩后存放的位置
     boolean closed;
     byte[] buffer;
 
@@ -171,7 +172,7 @@ public final class DeflateWithPresetDictCompressionMode extends CompressionMode 
       compressed = new byte[64];
       buffer = BytesRef.EMPTY_BYTES;
     }
-
+    // off：数据存放的压缩起始位置，压缩的长度：len
     private void doCompress(byte[] bytes, int off, int len, DataOutput out) throws IOException {
       if (len == 0) {
         out.writeVInt(0);
@@ -183,7 +184,7 @@ public final class DeflateWithPresetDictCompressionMode extends CompressionMode 
         throw new IllegalStateException();
       }
 
-      int totalCount = 0;
+      int totalCount = 0;//当前压缩存放的位置
       for (; ; ) {
         final int count =
             compressor.deflate(compressed, totalCount, compressed.length - totalCount);
@@ -196,8 +197,8 @@ public final class DeflateWithPresetDictCompressionMode extends CompressionMode 
         }
       }
 
-      out.writeVInt(totalCount);
-      out.writeBytes(compressed, totalCount);
+      out.writeVInt(totalCount);// 压缩后的总长度
+      out.writeBytes(compressed, totalCount);// 直接向fdt写入压缩后的长度
     }
 
     @Override
@@ -217,7 +218,7 @@ public final class DeflateWithPresetDictCompressionMode extends CompressionMode 
       // And then sub blocks
       for (int start = dictLength; start < len; start += blockLength) {
         compressor.reset();
-        compressor.setDictionary(buffer, 0, dictLength);
+        compressor.setDictionary(buffer, 0, dictLength);// 怎么设置的字典，黑盒，不用管
         int l = Math.min(blockLength, len - start);
         buffersInput.readBytes(buffer, dictLength, l);
         doCompress(buffer, dictLength, l, out);

@@ -36,7 +36,7 @@ public abstract class FieldInfosFormat {
       Directory directory, SegmentInfo segmentInfo, String segmentSuffix, IOContext iocontext)
       throws IOException;
 
-  /** Writes the provided {@link FieldInfos} to the directory. */
+  /** Writes the provided {@link FieldInfos} to the directory. */// Lucene60FieldInfosFormat
   public abstract void write(
       Directory directory,
       SegmentInfo segmentInfo,

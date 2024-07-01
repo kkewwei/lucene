@@ -43,23 +43,23 @@ public class SegmentWriteState {
   public final FieldInfos fieldInfos;
 
   /** Number of deleted documents set while flushing the segment. */
-  public int delCountOnFlush;
+  public int delCountOnFlush; // 在flush到磁盘前，先统计有多少需要删除的文档(比如keyword长度> 3万) + 通过terms(没有没有使用__soft_deletes的term文档删除，包含硬删除的)
 
   /** Number of only soft deleted documents set while flushing the segment. */
-  public int softDelCountOnFlush;
+  public int softDelCountOnFlush;//包含__soft_deletes的文档，比如delete_by_query都将包含进来
 
   /**
    * Deletes and updates to apply while we are flushing the segment. A Term is enrolled in here if
    * it was deleted/updated at one point, and it's mapped to the docIDUpto, meaning any docID &lt;
    * docIDUpto containing this term should be deleted/updated.
    */
-  public final BufferedUpdates segUpdates;
+  public final BufferedUpdates segUpdates; // 取自单个单线DWPT的pendingUpdates
 
   /**
    * {@link FixedBitSet} recording live documents; this is only set if there is one or more deleted
    * documents.
    */
-  public FixedBitSet liveDocs;
+  public FixedBitSet liveDocs; // 有删除再用的
 
   /**
    * Unique suffix for any postings files written for this segment. {@link PerFieldPostingsFormat}
@@ -70,7 +70,7 @@ public class SegmentWriteState {
    * <p>Note: the suffix must be either empty, or be a textual suffix contain exactly two parts
    * (separated by underscore), or be a base36 generation.
    */
-  public final String segmentSuffix;
+  public final String segmentSuffix;// Lucene80_0
 
   /**
    * {@link IOContext} for all writes; you should pass this to {@link

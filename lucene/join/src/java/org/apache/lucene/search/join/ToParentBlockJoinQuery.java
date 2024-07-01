@@ -246,19 +246,19 @@ public class ToParentBlockJoinQuery extends Query {
     }
 
     @Override
-    public int advance(int target) throws IOException {
+    public int advance(int target) throws IOException {//在parent docId中给一个target，找到不小于。
       if (target >= parentBits.length()) {
         return doc = NO_MORE_DOCS;
       }
-      final int firstChildTarget = target == 0 ? 0 : parentBits.prevSetBit(target - 1) + 1;
+      final int firstChildTarget = target == 0 ? 0 : parentBits.prevSetBit(target - 1) + 1;//
       int childDoc = childApproximation.docID();
       if (childDoc < firstChildTarget) {
-        childDoc = childApproximation.advance(firstChildTarget);
+        childDoc = childApproximation.advance(firstChildTarget);// 找到第一个子childDoc
       }
       if (childDoc >= parentBits.length() - 1) {
         return doc = NO_MORE_DOCS;
       }
-      return doc = parentBits.nextSetBit(childDoc + 1);
+      return doc = parentBits.nextSetBit(childDoc + 1);// 只要比当前childDOc+1的就是当前parentDocId
     }
 
     @Override
@@ -518,7 +518,7 @@ public class ToParentBlockJoinQuery extends Query {
     public BlockJoinBulkScorer(BulkScorer childBulkScorer, BitSet parents, ScoreMode scoreMode) {
       this.childBulkScorer = childBulkScorer;
       this.scoreMode = scoreMode;
-      this.parents = parents;
+      this.parents = parents;// 一般是包含__primary_terms的查询
       this.parentsLength = parents.length();
     }
 

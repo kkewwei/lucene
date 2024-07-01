@@ -32,10 +32,10 @@ import org.apache.lucene.util.TernaryLongHeap;
  */
 public class TopScoreDocCollector extends TopDocsCollector<ScoreDoc> {
 
-  private final ScoreDoc after;
+  private final ScoreDoc after;// scroll也会用这里的
   private final TernaryLongHeap heap;
   final int totalHitsThreshold;
-  final MaxScoreAccumulator minScoreAcc;
+  final MaxScoreAccumulator minScoreAcc;// 全局的scorer，只有超过10000个文档后，才需要设置
 
   // prevents instantiation
   TopScoreDocCollector(
@@ -53,7 +53,7 @@ public class TopScoreDocCollector extends TopDocsCollector<ScoreDoc> {
         ? new TopDocs(new TotalHits(totalHits, totalHitsRelation), new ScoreDoc[0])
         : new TopDocs(new TotalHits(totalHits, totalHitsRelation), results);
   }
-
+  // 必须的定义打分类型
   @Override
   public ScoreMode scoreMode() {
     return totalHitsThreshold == Integer.MAX_VALUE ? ScoreMode.COMPLETE : ScoreMode.TOP_SCORES;
@@ -68,12 +68,12 @@ public class TopScoreDocCollector extends TopDocsCollector<ScoreDoc> {
     if (after == null) {
       afterScore = Float.POSITIVE_INFINITY;
       afterDoc = DocIdSetIterator.NO_MORE_DOCS;
-    } else {
+    } else {// scroll会用到这里
       afterScore = after.score;
       afterDoc = after.doc - context.docBase;
     }
 
-    return new LeafCollector() {
+    return new LeafCollector() {// 每个segment都有自己的LeafCollector
 
       private Scorable scorer;
       private long topCode = heap.top();
@@ -86,7 +86,7 @@ public class TopScoreDocCollector extends TopDocsCollector<ScoreDoc> {
         if (minScoreAcc == null) {
           updateMinCompetitiveScore(scorer);
         } else {
-          updateGlobalMinCompetitiveScore(scorer);
+          updateGlobalMinCompetitiveScore(scorer);// 在后面每个segment开始遍历钱，更新下这个LeafCollector的最小score
         }
       }
 
@@ -95,12 +95,12 @@ public class TopScoreDocCollector extends TopDocsCollector<ScoreDoc> {
         float score = scorer.score();
 
         int hitCountSoFar = ++totalHits;
-
+         // 每1024个文档进来一次
         if (minScoreAcc != null && (hitCountSoFar & minScoreAcc.modInterval) == 0) {
           updateGlobalMinCompetitiveScore(scorer);
         }
 
-        if (after != null && (score > afterScore || (score == afterScore && doc <= afterDoc))) {
+        if (after != null && (score > afterScore || (score == afterScore && doc <= afterDoc))) {// 大于上次拉取的地方，才继续
           // hit was collected on a previous page
           if (totalHitsRelation == TotalHits.Relation.EQUAL_TO) {
             // we just reached totalHitsThreshold, we can start setting the min
@@ -110,7 +110,7 @@ public class TopScoreDocCollector extends TopDocsCollector<ScoreDoc> {
           return;
         }
 
-        if (score <= topScore) {
+        if (score <= topScore) {// 没有最低点分数高（达不到最低要求）
           // Note: for queries that match lots of hits, this is the common case: most hits are not
           // competitive.
           if (hitCountSoFar == totalHitsThreshold + 1) {
@@ -122,7 +122,7 @@ public class TopScoreDocCollector extends TopDocsCollector<ScoreDoc> {
           // Since docs are returned in-order (i.e., increasing doc Id), a document
           // with equal score to pqTop.score cannot compete since HitQueue favors
           // documents with lower doc Ids. Therefore reject those docs too.
-        } else {
+        } else {// 有更匹配的文档
           collectCompetitiveHit(doc, score);
         }
       }
@@ -141,9 +141,9 @@ public class TopScoreDocCollector extends TopDocsCollector<ScoreDoc> {
           // since we tie-break on doc id and collect in doc id order we can require
           // the next float if the global minimum score is set on a document id that is
           // smaller than the ids in the current leaf
-          float score = DocScoreEncoder.toScore(maxMinScore);
+          float score = DocScoreEncoder.toScore(maxMinScore);// 获取下这个最小scroe的score
           score = docBase >= DocScoreEncoder.docId(maxMinScore) ? Math.nextUp(score) : score;
-          if (score > minCompetitiveScore) {
+          if (score > minCompetitiveScore) {//更新下这个segment遍历时最小的score
             scorer.setMinCompetitiveScore(score);
             minCompetitiveScore = score;
             totalHitsRelation = TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO;
@@ -157,9 +157,9 @@ public class TopScoreDocCollector extends TopDocsCollector<ScoreDoc> {
           // pqTop is never null since TopScoreDocCollector fills the priority queue with sentinel
           // values if the top element is a sentinel value, its score will be -Infty and the below
           // logic is still valid
-          float localMinScore = Math.nextUp(topScore);
+          float localMinScore = Math.nextUp(topScore);// 最小分数的只要大一点点就好了。若pqTop.score=1，那么localMinScore=1.00000001
           if (localMinScore > minCompetitiveScore) {
-            scorer.setMinCompetitiveScore(localMinScore);
+            scorer.setMinCompetitiveScore(localMinScore);// 这里比较重要，若score超过后，就直接，ConstantScoreScorer.setMinCompetitiveScore=empry了
             totalHitsRelation = TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO;
             minCompetitiveScore = localMinScore;
             if (minScoreAcc != null) {

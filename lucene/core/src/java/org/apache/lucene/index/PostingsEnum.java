@@ -31,31 +31,31 @@ public abstract class PostingsEnum extends DocIdSetIterator {
    * Flag to pass to {@link TermsEnum#postings(PostingsEnum, int)} if you don't require per-document
    * postings in the returned enum.
    */
-  public static final short NONE = 0;
+  public static final short NONE = 0; // 最基本的terms
 
   /**
    * Flag to pass to {@link TermsEnum#postings(PostingsEnum, int)} if you require term frequencies
    * in the returned enum.
    */
-  public static final short FREQS = 1 << 3;
+  public static final short FREQS = 1 << 3;// freqs
 
   /**
    * Flag to pass to {@link TermsEnum#postings(PostingsEnum, int)} if you require term positions in
    * the returned enum.
    */
-  public static final short POSITIONS = FREQS | 1 << 4;
+  public static final short POSITIONS = FREQS | 1 << 4;   // position
 
   /**
    * Flag to pass to {@link TermsEnum#postings(PostingsEnum, int)} if you require offsets in the
    * returned enum.
    */
-  public static final short OFFSETS = POSITIONS | 1 << 5;
+  public static final short OFFSETS = POSITIONS | 1 << 5; //包含 freq、position、offset
 
   /**
    * Flag to pass to {@link TermsEnum#postings(PostingsEnum, int)} if you require payloads in the
    * returned enum.
    */
-  public static final short PAYLOADS = POSITIONS | 1 << 6;
+  public static final short PAYLOADS = POSITIONS | 1 << 6; //包含 freq、position、offset、payloads
 
   /**
    * Flag to pass to {@link TermsEnum#postings(PostingsEnum, int)} to get positions, payloads and

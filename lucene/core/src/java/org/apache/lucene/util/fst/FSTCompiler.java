@@ -105,7 +105,7 @@ public class FSTCompiler<T> {
 
   // private static final boolean DEBUG = true;
 
-  private final IntsRefBuilder lastInput = new IntsRefBuilder();
+  private final IntsRefBuilder lastInput = new IntsRefBuilder();// 上一个相同的前缀
 
   // indicates whether we are not yet to write the padding byte
   private boolean paddingBytePending;
@@ -114,37 +114,37 @@ public class FSTCompiler<T> {
   // in build performance on 9.8M Wikipedia terms; so we
   // left this as an array:
   // current "frontier"
-  private UnCompiledNode<T>[] frontier;
-
+  private UnCompiledNode<T>[] frontier; // 是个UnCompiledNode数组，主要是存公共前缀Node，Node的inputCount是指共享这个Node的term的数量(后文用Node的共享数代替)，根节点被所有的term共享。已知了公共前缀的长度，之后通过freezeTail将上个term的后缀Node全部写入到FST中或者删除掉。
+  // 在FST的构造过程中，它维护整棵FST树，其中里面直接保存的是UnCompiledNode，是当前添加的字符串所形成的状态节点，而前面添加的字符串形成的状态节点通过指针相互引用。
   // Used for the BIT_TARGET_NEXT optimization (whereby
   // instead of storing the address of the target node for
   // a given arc, we mark a single bit noting that the next
   // node in the byte[] is the target node):
-  long lastFrozenNode;
+  long lastFrozenNode;// 最后冷冻的那个节点存储位置
 
   // Reused temporarily while building the FST:
   int[] numBytesPerArc = new int[4];
   int[] numLabelBytesPerArc = new int[numBytesPerArc.length];
   final FixedLengthArcsBuffer fixedLengthArcsBuffer = new FixedLengthArcsBuffer();
 
-  long arcCount;
-  long nodeCount;
+  long arcCount;// 该fst中总共边的个数
+  long nodeCount;// 该fst中节点的个数
   long binarySearchNodeCount;
   long directAddressingNodeCount;
   long continuousNodeCount;
 
-  final boolean allowFixedLengthArcs;
+  final boolean allowFixedLengthArcs;// 默认为true
   final float directAddressingMaxOversizingFactor;
   final int version;
   long directAddressingExpansionCredit;
 
   // the DataOutput to stream the FST bytes to
-  final DataOutput dataOutput;
-
+  final DataOutput dataOutput; //每个arc序列化后，都堆积放这里：放的序列化的fst（节点是从结尾向开头存储的）
+  // 临时变量，两个节点之间的所有边编码放这里
   // buffer to store bytes for the one node we are currently writing
   final GrowableByteArrayDataOutput scratchBytes = new GrowableByteArrayDataOutput();
 
-  private long numBytesWritten;
+  private long numBytesWritten;// fst byte写入的大小
 
   /**
    * Get an on-heap DataOutput that allows the FST to be read immediately after writing, and also
@@ -170,10 +170,10 @@ public class FSTCompiler<T> {
     this.version = version;
     // pad: ensure no node gets address 0 which is reserved to mean
     // the stop state w/ no arcs. the actual byte will be written lazily
-    numBytesWritten++;
+    numBytesWritten++; // 0作为保留stop状态
     paddingBytePending = true;
     this.dataOutput = dataOutput;
-    fst =
+    fst =// inputType=INPUT_TYPE.BYTE1， 也是新创建的
         new FST<>(new FST.FSTMetadata<>(inputType, outputs, null, -1, version, 0), NULL_FST_READER);
     if (suffixRAMLimitMB < 0) {
       throw new IllegalArgumentException("ramLimitMB must be >= 0; got: " + suffixRAMLimitMB);
@@ -375,35 +375,35 @@ public class FSTCompiler<T> {
   public long getArcCount() {
     return arcCount;
   }
-
+  // compileNode可能返回的是一个已经写入 FST的 Node的 ID，这样就达到了共享 Node 的目的。tailLength是可能共享的长度
   private CompiledNode compileNode(UnCompiledNode<T> nodeIn) throws IOException {
     final long node;
-    long bytesPosStart = numBytesWritten;
-    if (dedupHash != null) {
-      if (nodeIn.numArcs == 0) {
-        node = addNode(nodeIn);
-        lastFrozenNode = node;
-      } else {
-        node = dedupHash.add(nodeIn);
+    long bytesPosStart = numBytesWritten;// 当前已经写入的起始位置
+    if (dedupHash != null) {// 一直为null
+      if (nodeIn.numArcs == 0) {// 说明该节点是结尾。
+        node = addNode(nodeIn);// Node的Arc数量为0，fst.addNode 会返回 -1。已经将nodeId的value存放了fst中
+        lastFrozenNode = node;// 每次重新输入一条边，又开始置位-1
+      } else {// root节点也会进来
+        node = dedupHash.add(nodeIn);// 这个就是node，是在fst中的存储位置
       }
     } else {
-      node = addNode(nodeIn);
+      node = addNode(nodeIn);// 把node写入fst中。有几个边就编译几个边
     }
 
     assert node != -2;
 
-    long bytesPosEnd = numBytesWritten;
-    if (bytesPosEnd != bytesPosStart) {
+    long bytesPosEnd = numBytesWritten; // 看看是否有写入
+    if (bytesPosEnd != bytesPosStart) { // fst.bytes中有写入
       // The FST added a new node:
       assert bytesPosEnd > bytesPosStart;
       lastFrozenNode = node;
     }
 
-    nodeIn.clear();
+    nodeIn.clear();// 这里将这个nodeIn给清空了，意味着该边被compile了。后面还会继续复用
 
     final CompiledNode fn = new CompiledNode();
     fn.node = node;
-    return fn;
+    return fn;// 返回一个CompiledNode
   }
 
   // serializes new node by appending its bytes to the end
@@ -411,14 +411,14 @@ public class FSTCompiler<T> {
   long addNode(FSTCompiler.UnCompiledNode<T> nodeIn) throws IOException {
     // System.out.println("FST.addNode pos=" + bytes.getPosition() + " numArcs=" + nodeIn.numArcs);
     if (nodeIn.numArcs == 0) {
-      if (nodeIn.isFinal) {
+      if (nodeIn.isFinal) {// 的确是个final节点
         return FINAL_END_NODE;
       } else {
         return NON_FINAL_END_NODE;
       }
     }
     // reset the scratch writer to prepare for new write
-    scratchBytes.setPosition(0);
+    scratchBytes.setPosition(0);// 重制写入
 
     final boolean doFixedLengthArcs = shouldExpandNodeWithFixedLengthArcs(nodeIn);
     if (doFixedLengthArcs) {
@@ -436,7 +436,7 @@ public class FSTCompiler<T> {
     long lastArcStart = 0;
     int maxBytesPerArc = 0;
     int maxBytesPerArcWithoutLabel = 0;
-    for (int arcIdx = 0; arcIdx < nodeIn.numArcs; arcIdx++) {
+    for (int arcIdx = 0; arcIdx < nodeIn.numArcs; arcIdx++) {//遍历每一条边
       final FSTCompiler.Arc<T> arc = nodeIn.arcs[arcIdx];
       final FSTCompiler.CompiledNode target = (FSTCompiler.CompiledNode) arc.target;
       int flags = 0;
@@ -444,17 +444,17 @@ public class FSTCompiler<T> {
       // target.node);
 
       if (arcIdx == lastArc) {
-        flags += BIT_LAST_ARC;
+        flags += BIT_LAST_ARC;//是否这个节点最后一条边
       }
 
-      if (lastFrozenNode == target.node && !doFixedLengthArcs) {
+      if (lastFrozenNode == target.node && !doFixedLengthArcs) {//
         // TODO: for better perf (but more RAM used) we
         // could avoid this except when arc is "near" the
         // last arc:
         flags += BIT_TARGET_NEXT;
       }
 
-      if (arc.isFinal) {
+      if (arc.isFinal) {//例如:ab,ac,ad。那么b,c,d都是最后一条边
         flags += BIT_FINAL_ARC;
         if (arc.nextFinalOutput != NO_OUTPUT) {
           flags += BIT_ARC_HAS_FINAL_OUTPUT;
@@ -465,7 +465,7 @@ public class FSTCompiler<T> {
 
       boolean targetHasArcs = target.node > 0;
 
-      if (!targetHasArcs) {
+      if (!targetHasArcs) {// 比如本term对应了一批blocks
         flags += BIT_STOP_NODE;
       }
 
@@ -473,17 +473,17 @@ public class FSTCompiler<T> {
         flags += BIT_ARC_HAS_OUTPUT;
       }
 
-      scratchBytes.writeByte((byte) flags);
+      scratchBytes.writeByte((byte) flags);//首先写入标识位
       long labelStart = scratchBytes.getPosition();
-      writeLabel(scratchBytes, arc.label);
-      int numLabelBytes = (int) (scratchBytes.getPosition() - labelStart);
+      writeLabel(scratchBytes, arc.label);// 其次写入label
+      int numLabelBytes = (int) (scratchBytes.getPosition() - labelStart);// label占用空间
 
       // System.out.println("  write arc: label=" + (char) arc.label + " flags=" + flags + "
       // target=" + target.node + " pos=" + bytes.getPosition() + " output=" +
       // outputs.outputToString(arc.output));
 
       if (arc.output != NO_OUTPUT) {
-        fst.outputs.write(arc.output, scratchBytes);
+        fst.outputs.write(arc.output, scratchBytes);//往scratchBytes
         // System.out.println("    write output");
       }
 
@@ -495,7 +495,7 @@ public class FSTCompiler<T> {
       if (targetHasArcs && (flags & BIT_TARGET_NEXT) == 0) {
         assert target.node > 0;
         // System.out.println("    write target");
-        scratchBytes.writeVLong(target.node);
+        scratchBytes.writeVLong(target.node);// 只有最后一个边，才不需要写入target.node
       }
 
       // just write the arcs "like normal" on first pass, but record how many bytes each one took
@@ -553,17 +553,17 @@ public class FSTCompiler<T> {
         binarySearchNodeCount++;
       }
     }
-
-    reverseScratchBytes();
+    // 仅仅
+    reverseScratchBytes();//倒过来后是：target.node:label:flags （实际读取的时候又是倒叙读取，从flags开始读取， 可参考FST.findTargetArc和OffHeapFSTStore）
     // write the padding byte if needed
     if (paddingBytePending) {
       writePaddingByte();
     }
-    scratchBytes.writeTo(dataOutput);
+    scratchBytes.writeTo(dataOutput);// 再转移下结果
     numBytesWritten += scratchBytes.getPosition();
 
     nodeCount++;
-    return numBytesWritten - 1;
+    return numBytesWritten - 1;// 返回的是存放在dataOutput中的endoffset信息
   }
 
   /**
@@ -600,8 +600,8 @@ public class FSTCompiler<T> {
   private boolean shouldExpandNodeWithFixedLengthArcs(FSTCompiler.UnCompiledNode<T> node) {
     return allowFixedLengthArcs
         && ((node.depth <= FIXED_LENGTH_ARC_SHALLOW_DEPTH
-                && node.numArcs >= FIXED_LENGTH_ARC_SHALLOW_NUM_ARCS)
-            || node.numArcs >= FIXED_LENGTH_ARC_DEEP_NUM_ARCS);
+                && node.numArcs >= FIXED_LENGTH_ARC_SHALLOW_NUM_ARCS)// 边大于5过
+            || node.numArcs >= FIXED_LENGTH_ARC_DEEP_NUM_ARCS);// 边大于10
   }
 
   /**
@@ -810,18 +810,18 @@ public class FSTCompiler<T> {
     scratchBytes.writeByte(presenceBits);
   }
 
-  private void freezeTail(int prefixLenPlus1) throws IOException {
+  private void freezeTail(int prefixLenPlus1) throws IOException {// 开始从后面向前面冰冻
 
-    final int downTo = Math.max(1, prefixLenPlus1);
+    final int downTo = Math.max(1, prefixLenPlus1);//这里downTo大于等于1可以保证根节点不会被写入到FST中去，根节点必须要所有节点写完之后才能写到FST
 
-    for (int idx = lastInput.length(); idx >= downTo; idx--) {
+    for (int idx = lastInput.length(); idx >= downTo; idx--) {// 节点idx，从后向前，只压缩存储不同的后缀
 
       final UnCompiledNode<T> node = frontier[idx];
       final int prevIdx = idx - 1;
       final UnCompiledNode<T> parent = frontier[prevIdx];
       // We need use this variable rather than node.output to call replaceLast later, because
       // compileNode(node) will clear node's state.
-      final T nextFinalOutput = node.output;
+      final T nextFinalOutput = node.output;// 后面节点的output
 
       // If this node has no outgoing arcs, it should be final.
       assert node.numArcs != 0 || node.isFinal;
@@ -832,7 +832,7 @@ public class FSTCompiler<T> {
       // this node makes it and we now compile it.  first,
       // compile any targets that were previously
       // undecided:
-      parent.replaceLast(lastInput.intAt(prevIdx), compileNode(node), nextFinalOutput, isFinal);
+      parent.replaceLast(lastInput.intAt(prevIdx), compileNode(node), nextFinalOutput, isFinal);// 最后一条边就是当前工作的边
     }
   }
 
@@ -844,9 +844,9 @@ public class FSTCompiler<T> {
    * output is not. So if your outputs are changeable (eg {@link ByteSequenceOutputs} or {@link
    * IntSequenceOutputs}) then you cannot reuse across calls.
    */
-  public void add(IntsRef input, T output) throws IOException {
+  public void add(IntsRef input, T output) throws IOException { //input：该节点前缀，output该节点存储的数据再tim中的起始位置
     // De-dup NO_OUTPUT since it must be a singleton:
-    if (output.equals(NO_OUTPUT)) {
+    if (output.equals(NO_OUTPUT)) { // input前缀长度
       output = NO_OUTPUT;
     }
 
@@ -855,28 +855,28 @@ public class FSTCompiler<T> {
     assert validOutput(output);
 
     // System.out.println("\nadd: " + input);
-    if (input.length == 0) {
+    if (input.length == 0) {// 当输入term是否为空，一定会发生，主要是Lucene90BlockTreeTermsWriter.writeBlocks(0, pending.size())中，将前缀长度指定为0
       // empty input: only allowed as first input.  we have
       // to special case this because the packed FST
       // format cannot represent the empty input since
       // 'finalness' is stored on the incoming arc, not on
       // the node
-      frontier[0].isFinal = true;
-      setEmptyOutput(output);
+      frontier[0].isFinal = true;// 就确定把这个HEAD0为null，挂靠到跟节点上了
+      setEmptyOutput(output); // 这里output设置为emptyOutput
       return;
     }
 
     // compare shared prefix length
-    int pos1 = 0;
+    int pos1 = 0;// 找到和上一个词的公共长度下标
     int pos2 = input.offset;
     final int pos1Stop = Math.min(lastInput.length(), input.length);
-    while (pos1 < pos1Stop && lastInput.intAt(pos1) == input.ints[pos2]) {
+    while (pos1 < pos1Stop && lastInput.intAt(pos1) == input.ints[pos2]) {// 遍历当前term与上个term的公共前缀的长度
       pos1++;
       pos2++;
     }
-    final int prefixLenPlus1 = pos1 + 1;
+    final int prefixLenPlus1 = pos1 + 1;// 公共长度+1
 
-    if (frontier.length < input.length + 1) {
+    if (frontier.length < input.length + 1) {// 每个字母都会占数组的一个元素，// 扩容
       final UnCompiledNode<T>[] next = ArrayUtil.grow(frontier, input.length + 1);
       for (int idx = frontier.length; idx < next.length; idx++) {
         next[idx] = new UnCompiledNode<>(this, idx);
@@ -886,53 +886,53 @@ public class FSTCompiler<T> {
 
     // minimize/compile states from previous input's
     // orphan'd suffix
-    freezeTail(prefixLenPlus1);
-
+    freezeTail(prefixLenPlus1); // 冰冻不同的psuffix
+   //  当前剩余的字符继续写入, 后面会针对边添加
     // init tail states for current input
     for (int idx = prefixLenPlus1; idx <= input.length; idx++) {
-      frontier[idx - 1].addArc(input.ints[input.offset + idx - 1], frontier[idx]);
+      frontier[idx - 1].addArc(input.ints[input.offset + idx - 1], frontier[idx]); // 增加一个公共边，但是都不是isFinal
     }
-
-    final UnCompiledNode<T> lastNode = frontier[input.length];
-    if (lastInput.length() != input.length || prefixLenPlus1 != input.length + 1) {
+    // 给新增了一个尾部节点，设置isFinal为true
+    final UnCompiledNode<T> lastNode = frontier[input.length]; //
+    if (lastInput.length() != input.length || prefixLenPlus1 != input.length + 1) {// 保证lastInput和input是不一样的
       lastNode.isFinal = true;
       lastNode.output = NO_OUTPUT;
     }
 
     // push conflicting outputs forward, only as far as
     // needed
-    for (int idx = 1; idx < prefixLenPlus1; idx++) {
+    for (int idx = 1; idx < prefixLenPlus1; idx++) {//  怎么共享output，只要两个存在的边和新写入的边有相同部分，就共享
       final UnCompiledNode<T> node = frontier[idx];
       final UnCompiledNode<T> parentNode = frontier[idx - 1];
-
+      // 既然可以共享前缀，那么前缀边和本边是一致的，那么一定是一条直线，没有分叉。
       final T lastOutput = parentNode.getLastOutput(input.ints[input.offset + idx - 1]);
       assert validOutput(lastOutput);
 
       final T commonOutputPrefix;
 
-      if (lastOutput != NO_OUTPUT) {
-        commonOutputPrefix = fst.outputs.common(output, lastOutput);
+      if (lastOutput != NO_OUTPUT) {// 读取上一个的output，若存在，检查是否可以和新的合并
+        commonOutputPrefix = fst.outputs.common(output, lastOutput);// 比字符，
         assert validOutput(commonOutputPrefix);
-        T wordSuffix = fst.outputs.subtract(lastOutput, commonOutputPrefix);
+        T wordSuffix = fst.outputs.subtract(lastOutput, commonOutputPrefix);// lastOutput-commonOutputPrefix=不同的后缀部分
         assert validOutput(wordSuffix);
         parentNode.setLastOutput(input.ints[input.offset + idx - 1], commonOutputPrefix);
-        node.prependOutput(wordSuffix);
+        node.prependOutput(wordSuffix);//将节点不相同的部分向后面的边移动
       } else {
-        commonOutputPrefix = NO_OUTPUT;
+        commonOutputPrefix = NO_OUTPUT;// 那么没有什么好减少的了,遇到了，那么感觉就该退出了
       }
 
-      output = fst.outputs.subtract(output, commonOutputPrefix);
+      output = fst.outputs.subtract(output, commonOutputPrefix);// 循环减去剩余部分
       assert validOutput(output);
     }
-
+     // 本次输入的内容和上次输入的内容一样，则重新分配output
     if (lastInput.length() == input.length && prefixLenPlus1 == 1 + input.length) {
       // same input more than 1 time in a row, mapping to
       // multiple outputs
-      lastNode.output = fst.outputs.merge(lastNode.output, output);
+      lastNode.output = fst.outputs.merge(lastNode.output, output);// 那么看output是否定义了将outpue合并的方法，比如1+1=2，就存储2
     } else {
       // this new arc is private to this new input; set its
       // arc output to the leftover output:
-      frontier[prefixLenPlus1 - 1].setLastOutput(
+      frontier[prefixLenPlus1 - 1].setLastOutput( //再设置这次的终点设置output
           input.ints[input.offset + prefixLenPlus1 - 1], output);
     }
 
@@ -944,11 +944,11 @@ public class FSTCompiler<T> {
     if (fst.metadata.emptyOutput != null) {
       fst.metadata.emptyOutput = fst.outputs.merge(fst.metadata.emptyOutput, v);
     } else {
-      fst.metadata.emptyOutput = v;
+      fst.metadata.emptyOutput = v;// 第一个fst
     }
   }
 
-  void finish(long newStartNode) {
+  void finish(long newStartNode) {// 从结尾到最开始header逐个写入，header存放的fst下表
     assert newStartNode <= numBytesWritten;
     if (fst.metadata.startNode != -1) {
       throw new IllegalStateException("already finished");
@@ -997,7 +997,7 @@ public class FSTCompiler<T> {
     final UnCompiledNode<T> root = frontier[0];
 
     // minimize nodes in the last word's suffix
-    freezeTail(0);
+    freezeTail(0);// 先解决之前的
     if (root.numArcs == 0) {
       if (fst.metadata.emptyOutput == null) {
         // return null for completely empty FST which accepts nothing
@@ -1016,12 +1016,12 @@ public class FSTCompiler<T> {
   }
 
   /** Expert: holds a pending (seen but not yet serialized) arc. */
-  static class Arc<T> {
-    int label; // really an "unsigned" byte
-    Node target;
-    boolean isFinal;
-    T output;
-    T nextFinalOutput;
+  static class Arc<T> {// FST中也有一个Arc
+    int label; // really an "unsigned" byte 该节点对应的那个字符  10进制
+    Node target;// 该边目标节点
+    boolean isFinal; // 其target是-1，例如:ab,ac,ad。那么b,c,d都是最后一条边，这三个边都指向EMPYTY_NODE
+    T output;// 就是add(key, output)，在lucene中，存放的是：用来指向26个term的fp等信息
+    T nextFinalOutput;//
   }
 
   // NOTE: not many instances of Node or CompiledNode are in
@@ -1045,7 +1045,7 @@ public class FSTCompiler<T> {
   }
 
   static final class CompiledNode implements Node {
-    long node;
+    long node; // 下游边在fst中存储的起始offset位置信息。
 
     @Override
     public boolean isCompiled() {
@@ -1056,17 +1056,17 @@ public class FSTCompiler<T> {
   /** Expert: holds a pending (seen but not yet serialized) Node. */
   static final class UnCompiledNode<T> implements Node {
     final FSTCompiler<T> owner;
-    int numArcs;
-    Arc<T>[] arcs;
+    int numArcs; // 该节点的出边条数
+    Arc<T>[] arcs;// 该节点总共的出边
     // TODO: instead of recording isFinal/output on the
     // node, maybe we should use -1 arc to mean "end" (like
     // we do when reading the FST).  Would simplify much
     // code here...
-    T output;
-    boolean isFinal;
+    T output; //实际是在在PendingBlock.compileIndex()中构建的，用来指向26个term的fp等信息
+    boolean isFinal; // 表示从Node出发的Arc数量是0，当Node是Final Node时，output才有值。
 
     /** This node's depth, starting from the automaton root. */
-    final int depth;
+    final int depth; // 从根节点到本节点的深度
 
     /**
      * @param depth The node's depth starting from the automaton root. Needed for LUCENE-2934 (node
@@ -1087,7 +1087,7 @@ public class FSTCompiler<T> {
     }
 
     void clear() {
-      numArcs = 0;
+      numArcs = 0; // 代表清了
       isFinal = false;
       output = owner.NO_OUTPUT;
 
@@ -1100,9 +1100,9 @@ public class FSTCompiler<T> {
       assert arcs[numArcs - 1].label == labelToMatch;
       return arcs[numArcs - 1].output;
     }
-
-    void addArc(int label, Node target) {
-      assert label >= 0;
+    // 该节点添加一个出边,
+    void addArc(int label, Node target) { // targe=UnCompiledNode
+      assert label >= 0; // 该节点对应的字母
       assert numArcs == 0 || label > arcs[numArcs - 1].label
           : "arc[numArcs-1].label="
               + arcs[numArcs - 1].label
@@ -1110,30 +1110,30 @@ public class FSTCompiler<T> {
               + label
               + " numArcs="
               + numArcs;
-      if (numArcs == arcs.length) {
+      if (numArcs == arcs.length) {// 可以伸缩扩展的
         final Arc<T>[] newArcs = ArrayUtil.grow(arcs);
         for (int arcIdx = numArcs; arcIdx < newArcs.length; arcIdx++) {
           newArcs[arcIdx] = new Arc<>();
         }
         arcs = newArcs;
       }
-      final Arc<T> arc = arcs[numArcs++];
+      final Arc<T> arc = arcs[numArcs++];//出边记录+1
       arc.label = label;
       arc.target = target;
-      arc.output = arc.nextFinalOutput = owner.NO_OUTPUT;
+      arc.output = arc.nextFinalOutput = owner.NO_OUTPUT;// 记录output全部为null
       arc.isFinal = false;
     }
-
+    // 将该节点的下游给替换掉已达到共享的目的     target:默认fst存储位置   nextFinalOutput：
     void replaceLast(int labelToMatch, Node target, T nextFinalOutput, boolean isFinal) {
       assert numArcs > 0;
-      final Arc<T> arc = arcs[numArcs - 1];
+      final Arc<T> arc = arcs[numArcs - 1];// 最后一条边就是当前工作的边
       assert arc.label == labelToMatch : "arc.label=" + arc.label + " vs " + labelToMatch;
-      arc.target = target;
+      arc.target = target; // CompiledNode，编译后，此时target存放着该字母fst的存储位置
       // assert target.node != -2;
       arc.nextFinalOutput = nextFinalOutput;
       arc.isFinal = isFinal;
     }
-
+    // 设置最后一条边的output
     void setLastOutput(int labelToMatch, T newOutput) {
       assert owner.validOutput(newOutput);
       assert numArcs > 0;
@@ -1145,13 +1145,13 @@ public class FSTCompiler<T> {
     // pushes an output prefix forward onto all arcs
     void prependOutput(T outputPrefix) {
       assert owner.validOutput(outputPrefix);
-
+// 把新的output向后推， 实际是每个边已经存在的output和新的output合并再写入本边，
       for (int arcIdx = 0; arcIdx < numArcs; arcIdx++) {
-        arcs[arcIdx].output = owner.fst.outputs.add(outputPrefix, arcs[arcIdx].output);
+        arcs[arcIdx].output = owner.fst.outputs.add(outputPrefix, arcs[arcIdx].output); // 把两个BytesRef的byte强制给合并到同一个中
         assert owner.validOutput(arcs[arcIdx].output);
       }
 
-      if (isFinal) {
+      if (isFinal) { // 若是结尾节点， 节点output也得更正
         output = owner.fst.outputs.add(outputPrefix, output);
         assert owner.validOutput(output);
       }

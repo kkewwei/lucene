@@ -184,7 +184,7 @@ public class SimpleQueryParser extends QueryBuilder {
         ++state.index;
       } else if (state.data[state.index] == '"' && (flags & PHRASE_OPERATOR) != 0) {
         // the beginning of a phrase has been found
-        consumePhrase(state);
+        consumePhrase(state); // 产生PhraseQuery
       } else if (state.data[state.index] == '+' && (flags & AND_OPERATOR) != 0) {
         // an and operation has been explicitly set
         // if an operation has already been set this one is ignored
@@ -584,10 +584,10 @@ public class SimpleQueryParser extends QueryBuilder {
   }
 
   /** Factory method to generate a phrase query with slop. */
-  protected Query newPhraseQuery(String text, int slop) {
+  protected Query newPhraseQuery(String text, int slop) { // 解析PhraseQuery
     BooleanQuery.Builder bq = new BooleanQuery.Builder();
     for (Map.Entry<String, Float> entry : weights.entrySet()) {
-      Query q = createPhraseQuery(entry.getKey(), text, slop);
+      Query q = createPhraseQuery(entry.getKey(), text, slop);// 所有的词都是must
       if (q != null) {
         float boost = entry.getValue();
         if (boost != 1f) {

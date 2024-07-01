@@ -31,7 +31,7 @@ abstract class FieldsIndex implements Cloneable, Closeable {
   abstract long getBlockLength(long blockID);
 
   /** Get the start pointer of the block that contains the given docID. */
-  final long getStartPointer(int docID) {
+  final long getStartPointer(int docID) {// 找到这个文档所在chunk在fdt中的起始位置。
     return getBlockStartPointer(getBlockID(docID));
   }
 

@@ -22,19 +22,19 @@ import java.io.IOException;
  * A {@link RateLimiter rate limiting} {@link IndexOutput}
  *
  * @lucene.internal
- */
+ */// 只有在段合并时候才用到了，可以认为就是监控段合并速度。(在fdt, fdm和fdx中都使用了限流)
 public final class RateLimitedIndexOutput extends FilterIndexOutput {
 
   private final RateLimiter rateLimiter;
 
   /** How many bytes we've written since we last called rateLimiter.pause. */
-  private long bytesSinceLastPause;
+  private long bytesSinceLastPause;// 上次调用限速检查接口、到现在的写入字节，还在持续统计写入的字节数
 
   /**
    * Cached here not not always have to call RateLimiter#getMinPauseCheckBytes() which does volatile
    * read.
    */
-  private long currentMinPauseCheckBytes;
+  private long currentMinPauseCheckBytes; // 当写了多少数据后,才check是否写入超速了， 不超过1MB
 
   public RateLimitedIndexOutput(final RateLimiter rateLimiter, final IndexOutput out) {
     super("RateLimitedIndexOutput(" + out + ")", out.getName(), out);
@@ -81,11 +81,11 @@ public final class RateLimitedIndexOutput extends FilterIndexOutput {
     out.writeLong(i);
   }
 
-  private void checkRate() throws IOException {
+  private void checkRate() throws IOException {// 检查是否需要merge中断
     if (bytesSinceLastPause > currentMinPauseCheckBytes) {
-      rateLimiter.pause(bytesSinceLastPause);
+      rateLimiter.pause(bytesSinceLastPause);// 每次写多检查一次，是否需要暂停
       bytesSinceLastPause = 0;
-      currentMinPauseCheckBytes = rateLimiter.getMinPauseCheckBytes();
+      currentMinPauseCheckBytes = rateLimiter.getMinPauseCheckBytes();// 实时算出来的：当前限速下，写入速度*25ms的数据量就检查一次
     }
   }
 }

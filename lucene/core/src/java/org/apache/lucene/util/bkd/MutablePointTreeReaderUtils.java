@@ -54,7 +54,7 @@ public final class MutablePointTreeReaderUtils {
     // No need to tie break on doc IDs if already sorted by doc ID, since we use a stable sort.
     // This should be a common situation as IndexWriter accumulates data in doc ID order when
     // index sorting is not enabled.
-    final int bitsPerDocId = sortedByDocID ? 0 : PackedInts.bitsRequired(maxDoc - 1);
+    final int bitsPerDocId = sortedByDocID ? 0 : PackedInts.bitsRequired(maxDoc - 1);// 若已经按docId排序，就不用再排序了；否则当成高位比较
     new StableMSBRadixSorter(config.packedBytesLength() + (bitsPerDocId + 7) / 8) {
 
       @Override
@@ -76,7 +76,7 @@ public final class MutablePointTreeReaderUtils {
       protected int byteAt(int i, int k) {
         if (k < config.packedBytesLength()) {
           return Byte.toUnsignedInt(reader.getByteAt(i, k));
-        } else {
+        } else {// 超过数据部分长度，开始比较docId
           final int shift = bitsPerDocId - ((k - config.packedBytesLength() + 1) << 3);
           return (reader.getDocID(i) >>> Math.max(0, shift)) & 0xff;
         }
@@ -85,7 +85,7 @@ public final class MutablePointTreeReaderUtils {
   }
 
   /** Sort points on the given dimension. */
-  public static void sortByDim(
+  public static void sortByDim(// 基于快排，对某一维度进行排序
       BKDConfig config,
       int sortedDim,
       int[] commonPrefixLengths,
@@ -96,7 +96,7 @@ public final class MutablePointTreeReaderUtils {
       BytesRef scratch2) {
 
     final ByteArrayComparator comparator = ArrayUtil.getUnsignedComparator(config.bytesPerDim());
-    final int start = sortedDim * config.bytesPerDim();
+    final int start = sortedDim * config.bytesPerDim();// point内偏移量
     // No need for a fancy radix sort here, this is called on the leaves only so
     // there are not many values to sort
     new IntroSorter() {
@@ -116,7 +116,7 @@ public final class MutablePointTreeReaderUtils {
       }
 
       @Override
-      protected int comparePivot(int j) {
+      protected int comparePivot(int j) {// 先比较不同的值，在比较docId
         reader.getValue(j, scratch2);
         int cmp =
             comparator.compare(
@@ -151,18 +151,18 @@ public final class MutablePointTreeReaderUtils {
       MutablePointTree reader,
       int from,
       int to,
-      int mid,
+      int mid, // from和to、middle都是point下标，不是叶子下标
       BytesRef scratch1,
       BytesRef scratch2) {
-    final int dimOffset = splitDim * config.bytesPerDim() + commonPrefixLen;
-    final int dimCmpBytes = config.bytesPerDim() - commonPrefixLen;
+    final int dimOffset = splitDim * config.bytesPerDim() + commonPrefixLen;// 相同纬度的数据，从这个位开始不一致了（该元素内的偏移量）
+    final int dimCmpBytes = config.bytesPerDim() - commonPrefixLen;// 需要比较的位数
     final int dataCmpBytes =
         (config.numDims() - config.numIndexDims()) * config.bytesPerDim() + dimCmpBytes;
-    final int bitsPerDocId = PackedInts.bitsRequired(maxDoc - 1);
-    new RadixSelector(dataCmpBytes + (bitsPerDocId + 7) / 8) {
-
+    final int bitsPerDocId = PackedInts.bitsRequired(maxDoc - 1);// 最大的那个文档id需要多少位
+    new RadixSelector(dataCmpBytes + (bitsPerDocId + 7) / 8) {//  这里位数为两类，可以从byteAt()看出，读取每一类的方式也不一样
+      // 第一类就是普通的dimCmpBytes，读取的是不相同的字符；第二类是 (bitsPerDocId + 7) / 8， 把文档ID分成几份，每一份内的元素该位相同
       @Override
-      protected Selector getFallbackSelector(int k) {
+      protected Selector getFallbackSelector(int k) {// 使用快排进行排序, k:表示第几个字符
         final int dimStart = splitDim * config.bytesPerDim();
         final int dataStart =
             (k < dimCmpBytes)
@@ -188,9 +188,9 @@ public final class MutablePointTreeReaderUtils {
           }
 
           @Override
-          protected int comparePivot(int j) {
+          protected int comparePivot(int j) { // 当范围很小时，或者递归很深时，就进来
             if (k < dimCmpBytes) {
-              reader.getValue(j, scratch2);
+              reader.getValue(j, scratch2);// 优先比较
               int cmp =
                   dimComparator.compare(
                       pivot.bytes, pivot.offset + dimStart,
@@ -214,7 +214,7 @@ public final class MutablePointTreeReaderUtils {
                 return cmp;
               }
             }
-            return pivotDoc - reader.getDocID(j);
+            return pivotDoc - reader.getDocID(j);// 通过文档大小相比较
           }
         };
       }
@@ -223,16 +223,16 @@ public final class MutablePointTreeReaderUtils {
       protected void swap(int i, int j) {
         reader.swap(i, j);
       }
-
+      // 可以从maxLength=dataCmpBytes + (bitsPerDocId + 7) / 8可以看出，属于不同的读法，
       @Override
-      protected int byteAt(int i, int k) {
-        if (k < dimCmpBytes) {
+      protected int byteAt(int i, int k) {// 第i个w文档，k表示不同前缀相对位置
+        if (k < dimCmpBytes) { // 读取的是dataCmpBytes中的数据
           return Byte.toUnsignedInt(reader.getByteAt(i, dimOffset + k));
         } else if (k < dataCmpBytes) {
           return Byte.toUnsignedInt(
               reader.getByteAt(i, config.packedIndexBytesLength() + k - dimCmpBytes));
-        } else {
-          final int shift = bitsPerDocId - ((k - dataCmpBytes + 1) << 3);
+        } else {// 比如bitsPerDocId=21位，将docId按照8位一份，比如分成了4份：比如读取第一份：那么reader.getDocID(i)>>8，读取高3份的值
+          final int shift = bitsPerDocId - ((k - dataCmpBytes + 1) << 3);// 通过(k - dataCmpBytes)去掉原本影响
           return (reader.getDocID(i) >>> Math.max(0, shift)) & 0xff;
         }
       }

@@ -29,7 +29,7 @@ import org.apache.lucene.util.FixedBitSet;
  *
  * @lucene.internal
  */
-public final class DisjunctionDISIApproximation extends AbstractDocIdSetIterator {
+public final class DisjunctionDISIApproximation extends AbstractDocIdSetIterator {// 取或
 
   public static DisjunctionDISIApproximation of(
       Collection<? extends DisiWrapper> subIterators, long leadCost) {
@@ -112,24 +112,24 @@ public final class DisjunctionDISIApproximation extends AbstractDocIdSetIterator
   }
 
   @Override
-  public int nextDoc() throws IOException {
+  public int nextDoc() throws IOException {// 不停的next查找，取或
     if (leadTop.doc < minOtherDoc) {
       int curDoc = leadTop.doc;
       do {
-        leadTop.doc = leadTop.approximation.nextDoc();
-        leadTop = leadIterators.updateTop();
-      } while (leadTop.doc == curDoc);
+        leadTop.doc = leadTop.approximation.nextDoc();// 更换subIterators上栈顶找到的下一个文档
+        leadTop = leadIterators.updateTop();// 对subIterators根据当前查找的文档Id进行排序
+      } while (leadTop.doc == curDoc);// 要是相同的话，一般都是有问题的，那么另外一个条件继续继续更新
       return doc = Math.min(leadTop.doc, minOtherDoc);
     } else {
       return advance(minOtherDoc + 1);
     }
   }
-
+  //找大于等于target的第一个元素
   @Override
   public int advance(int target) throws IOException {
-    while (leadTop.doc < target) {
-      leadTop.doc = leadTop.approximation.advance(target);
-      leadTop = leadIterators.updateTop();
+    while (leadTop.doc < target) {// 找一个doc，使 top.doc < target
+      leadTop.doc = leadTop.approximation.advance(target); // 求取下一个docId
+      leadTop = leadIterators.updateTop();// 再次取出新的
     }
 
     minOtherDoc = Integer.MAX_VALUE;

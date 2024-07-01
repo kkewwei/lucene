@@ -44,8 +44,8 @@ final class LongDistanceFeatureQuery extends Query {
   private static final int MAX_SKIP_INTERVAL = 8192;
 
   private final String field;
-  private final long origin;
-  private final long pivotDistance;
+  private final long origin;// 倒叙的话，则是取最大值
+  private final long pivotDistance; // 最大值-最小值
 
   LongDistanceFeatureQuery(String field, long origin, long pivotDistance) {
     this.field = Objects.requireNonNull(field);
@@ -201,12 +201,12 @@ final class LongDistanceFeatureQuery extends Query {
 
       @Override
       public ScorerSupplier scorerSupplier(LeafReaderContext context) throws IOException {
-        PointValues pointValues = context.reader().getPointValues(field);
+        PointValues pointValues = context.reader().getPointValues(field);// 返回的是BKD数的PointValue
         if (pointValues == null) {
           // No data on this segment
           return null;
         }
-        final SortedNumericDocValues multiDocValues =
+        final SortedNumericDocValues multiDocValues =// 获取bkd的docValue
             DocValues.getSortedNumeric(context.reader(), field);
         final NumericDocValues docValues = selectValues(multiDocValues);
         return new ScorerSupplier() {
@@ -229,7 +229,7 @@ final class LongDistanceFeatureQuery extends Query {
   private class DistanceScorer extends Scorer {
 
     private final int maxDoc;
-    private DocIdSetIterator it;
+    private DocIdSetIterator it;// 这里it代表当前sort的范围，有不断裁剪匹配的文档的作用。当计算出了最低score后，就不断的从bkd树中更新sort匹配的文档列表。加快sort范围。
     private int doc = -1;
     private final long leadCost;
     private final float boost;
@@ -300,7 +300,7 @@ final class LongDistanceFeatureQuery extends Query {
       }
       long v = docValues.longValue();
       // note: distance is unsigned
-      long distance = Math.max(v, origin) - Math.min(v, origin);
+      long distance = Math.max(v, origin) - Math.min(v, origin);// 距离越大，的分越小
       if (distance < 0) {
         // underflow
         // treat distances that are greater than MAX_VALUE as MAX_VALUE
@@ -457,7 +457,7 @@ final class LongDistanceFeatureQuery extends Query {
         return;
       }
       pointValues.intersect(visitor);
-      it = result.build().iterator();
+      it = result.build().iterator();// pointValues.intersect()后，结果全部放入result中了。实时更新匹配的文档列表
       updateSkipInterval(true);
     }
 

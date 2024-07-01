@@ -125,7 +125,7 @@ public class SortField {
 
   private final String field;
   private final Type type; // defaults to determining type dynamically
-  protected final boolean reverse; // defaults to natural order
+  protected final boolean reverse; // defaults to natural order 默认为false, 为desc。
 
   // Used for CUSTOM sort
   private FieldComparatorSource comparatorSource;

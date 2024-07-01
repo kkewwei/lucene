@@ -80,7 +80,7 @@ public record BooleanClause(Query query, Occur occur) {
   public boolean isRequired() {
     return occur == Occur.MUST || occur == Occur.FILTER;
   }
-
+  // 如果是must或者should，那就要打分
   public boolean isScoring() {
     return occur == Occur.MUST || occur == Occur.SHOULD;
   }

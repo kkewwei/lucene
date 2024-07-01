@@ -153,7 +153,7 @@ public abstract class PointInSetQuery extends Query implements Accountable {
     // We don't use RandomAccessWeight here: it's no good to approximate with "match all docs".
     // This is an inverted structure and should be used in the first pass:
 
-    return new ConstantScoreWeight(this, boost) {
+    return new ConstantScoreWeight(this, boost) {// 直接常量读取
       @Override
       public ScorerSupplier scorerSupplier(LeafReaderContext context) throws IOException {
         LeafReader reader = context.reader();
@@ -199,7 +199,7 @@ public abstract class PointInSetQuery extends Query implements Accountable {
           }
         }
 
-        if (numDims == 1) {
+        if (numDims == 1) {// 1维度才可用
           // We optimize this common case, effectively doing a merge sort of the indexed values vs
           // the queried set:
           return new ScorerSupplier() {
@@ -210,7 +210,7 @@ public abstract class PointInSetQuery extends Query implements Accountable {
               DocIdSetBuilder result = new DocIdSetBuilder(reader.maxDoc(), values);
               values.intersect(new MergePointVisitor(sortedPackedPoints, result));
               DocIdSetIterator iterator = result.build().iterator();
-              return new ConstantScoreScorer(score(), scoreMode, iterator);
+              return new ConstantScoreScorer(score(), scoreMode, iterator);// 匹配的文档全部读取出来，成本有点大
             }
 
             @Override
@@ -284,7 +284,7 @@ public abstract class PointInSetQuery extends Query implements Accountable {
    * Essentially does a merge sort, only collecting hits when the indexed point and query point are
    * the same. This is an optimization, used in the 1D case.
    */
-  private class MergePointVisitor implements IntersectVisitor {
+  private class MergePointVisitor implements IntersectVisitor { // 并归排序，需要数据原始有序
 
     private final DocIdSetBuilder result;
     private TermIterator iterator;
@@ -299,7 +299,7 @@ public abstract class PointInSetQuery extends Query implements Accountable {
       this.sortedPackedPoints = sortedPackedPoints;
       this.comparator = ArrayUtil.getUnsignedComparator(bytesPerDim);
       this.iterator = this.sortedPackedPoints.iterator();
-      nextQueryPoint = iterator.next();
+      nextQueryPoint = iterator.next();// 先取了第一个值
     }
 
     @Override
@@ -326,7 +326,7 @@ public abstract class PointInSetQuery extends Query implements Accountable {
 
     @Override
     public void visit(DocIdSetIterator iterator, byte[] packedValue) throws IOException {
-      if (matches(packedValue)) {
+      if (matches(packedValue)) { // 不断匹配，直到找到一个最好的
         adder.add(iterator);
       }
     }
@@ -336,9 +336,9 @@ public abstract class PointInSetQuery extends Query implements Accountable {
         int cmp = comparator.compare(nextQueryPoint.bytes, nextQueryPoint.offset, packedValue, 0);
         if (cmp == 0) {
           return true;
-        } else if (cmp < 0) {
+        } else if (cmp < 0) {// 当前query的term比当前doc的value小
           // Query point is before index point, so we move to next query point
-          nextQueryPoint = iterator.next();
+          nextQueryPoint = iterator.next();// query value不停的向前走，之后前面的就不再便利了
         } else {
           // Query point is after index point, so we don't collect and we return:
           break;
@@ -346,18 +346,18 @@ public abstract class PointInSetQuery extends Query implements Accountable {
       }
       return false;
     }
-
+    // 这个point的最大最小值：minPackedValue和maxPackedValue
     @Override
     public Relation compare(byte[] minPackedValue, byte[] maxPackedValue) {
       while (nextQueryPoint != null) {
         int cmpMin =
             comparator.compare(nextQueryPoint.bytes, nextQueryPoint.offset, minPackedValue, 0);
-        if (cmpMin < 0) {
+        if (cmpMin < 0) { // 比最小值还小，那就换成第二个
           // query point is before the start of this cell
-          nextQueryPoint = iterator.next();
+          nextQueryPoint = iterator.next();// 再取第二个值
           continue;
         }
-        int cmpMax =
+        int cmpMax =// 比最大值小，
             comparator.compare(nextQueryPoint.bytes, nextQueryPoint.offset, maxPackedValue, 0);
         if (cmpMax > 0) {
           // query point is after the end of this cell
@@ -383,11 +383,11 @@ public abstract class PointInSetQuery extends Query implements Accountable {
    * IntersectVisitor that queries against a highly degenerate shape: a single point. This is used
    * in the > 1D case.
    */
-  private class SinglePointVisitor implements IntersectVisitor {
+  private class SinglePointVisitor implements IntersectVisitor { // 主要用于一维以上场景
 
     private final ByteArrayComparator comparator;
     private final DocIdSetBuilder result;
-    private final byte[] pointBytes;
+    private final byte[] pointBytes;// 这个时
     private DocIdSetBuilder.BulkAdder adder;
 
     public SinglePointVisitor(DocIdSetBuilder result) {

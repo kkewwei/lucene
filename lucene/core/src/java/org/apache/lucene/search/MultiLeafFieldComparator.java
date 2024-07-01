@@ -69,7 +69,7 @@ final class MultiLeafFieldComparator implements LeafFieldComparator {
     if (cmp != 0) {
       return cmp;
     }
-    for (int i = 1; i < comparators.length; ++i) {
+    for (int i = 1; i < comparators.length; ++i) {// 第二个开始
       cmp = reverseMul[i] * comparators[i].compareTop(doc);
       if (cmp != 0) {
         return cmp;
@@ -95,7 +95,7 @@ final class MultiLeafFieldComparator implements LeafFieldComparator {
   @Override
   public void setHitsThresholdReached() throws IOException {
     // this is needed for skipping functionality that is only relevant for the 1st comparator
-    firstComparator.setHitsThresholdReached();
+    firstComparator.setHitsThresholdReached();// 仅仅跑到第一个compartor的跳过
   }
 
   @Override

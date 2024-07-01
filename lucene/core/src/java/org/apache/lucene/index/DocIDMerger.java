@@ -56,12 +56,12 @@ public abstract class DocIDMerger<T extends DocIDMerger.Sub> {
      * as a side effect.
      */
     public final int nextMappedDoc() throws IOException {
-      while (true) {
+      while (true) {// 找到一个非删除的doc
         int doc = nextDoc();
         if (doc == NO_MORE_DOCS) {
           return this.mappedDocID = NO_MORE_DOCS;
         }
-        int mappedDoc = docMap.get(doc);
+        int mappedDoc = docMap.get(doc);// 主要是将删除doc的空洞给移掉
         if (mappedDoc != -1) {
           return this.mappedDocID = mappedDoc;
         }
@@ -120,12 +120,12 @@ public abstract class DocIDMerger<T extends DocIDMerger.Sub> {
 
     @Override
     public T next() throws IOException {
-      while (current.nextMappedDoc() == NO_MORE_DOCS) {
+      while (current.nextMappedDoc() == NO_MORE_DOCS) {// segment内部的docId
         if (nextIndex == subs.size()) {
           current = null;
           return null;
         }
-        current = subs.get(nextIndex);
+        current = subs.get(nextIndex);// 换成下一个segment
         nextIndex++;
       }
       return current;
@@ -148,7 +148,7 @@ public abstract class DocIDMerger<T extends DocIDMerger.Sub> {
           new PriorityQueue<T>(maxCount - 1) {
             @Override
             protected boolean lessThan(Sub a, Sub b) {
-              assert a.mappedDocID != b.mappedDocID;
+              assert a.mappedDocID != b.mappedDocID;// 映射的mappedDocId
               return a.mappedDocID < b.mappedDocID;
             }
           };

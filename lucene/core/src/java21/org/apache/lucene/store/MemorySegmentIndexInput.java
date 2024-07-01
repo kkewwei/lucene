@@ -419,8 +419,8 @@ abstract class MemorySegmentIndexInput extends IndexInput implements MemorySegme
       }
       // Now align offset with the page size, this is required for madvise.
       // Compute the offset of the current position in the OS's page.
-      final long offsetInPage = (segment.address() + offset) % nativeAccess.getPageSize();
-      offset -= offsetInPage;
+      final long offsetInPage = (segment.address() + offset) % nativeAccess.getPageSize();// nativeAccess.getPageSize(): 16k
+      offset -= offsetInPage;// 16k一次加载
       length += offsetInPage;
       if (offset < 0) {
         // The start of the page is before the start of this segment, ignore the first page.
@@ -433,7 +433,7 @@ abstract class MemorySegmentIndexInput extends IndexInput implements MemorySegme
       }
 
       final MemorySegment advisedSlice = segment.asSlice(offset, length);
-      advice.accept(advisedSlice);
+      advice.accept(advisedSlice);//尝试loaded下
     } catch (
         @SuppressWarnings("unused")
         IndexOutOfBoundsException e) {

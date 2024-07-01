@@ -51,7 +51,7 @@ public abstract class Scorable {
    */
   public void setMinCompetitiveScore(float minScore) throws IOException {
     // no-op by default
-  }
+  }// 告诉scorer，遍历可以安全的忽略（由于打分）看仅仅用在top_socore上。
 
   /**
    * Returns child sub-scorers positioned on the current document

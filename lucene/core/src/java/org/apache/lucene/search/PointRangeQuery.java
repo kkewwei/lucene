@@ -52,10 +52,10 @@ import org.apache.lucene.util.IntsRef;
  * @lucene.experimental
  */
 public abstract class PointRangeQuery extends Query {
-  final String field;
-  final int numDims;
+  final String field; // 确定了读取那个域的索引
+  final int numDims; // 单个元素由几阶构成
   final int bytesPerDim;
-  final byte[] lowerPoint;
+  final byte[] lowerPoint; // 当前查找范围 的上下界
   final byte[] upperPoint;
   final ByteArrayComparator comparator;
 
@@ -121,7 +121,7 @@ public abstract class PointRangeQuery extends Query {
       visitor.visitLeaf(this);
     }
   }
-
+  //精确匹配的Weight都是常量得分匹配。（匹配与否比较明确）
   @Override
   public final Weight createWeight(IndexSearcher searcher, ScoreMode scoreMode, float boost)
       throws IOException {
@@ -133,7 +133,7 @@ public abstract class PointRangeQuery extends Query {
 
       private boolean matches(byte[] packedValue) {
         int offset = 0;
-        for (int dim = 0; dim < numDims; dim++, offset += bytesPerDim) {
+        for (int dim = 0; dim < numDims; dim++, offset += bytesPerDim) {//是否匹配上下界
           if (comparator.compare(packedValue, offset, lowerPoint, offset) < 0) {
             // Doc's value is too low, in this dimension
             return false;
@@ -146,19 +146,19 @@ public abstract class PointRangeQuery extends Query {
         return true;
       }
 
-      private IntersectVisitor getIntersectVisitor(DocIdSetBuilder result) {
+      private IntersectVisitor getIntersectVisitor(DocIdSetBuilder result) {// 为了遍历匹配使用的，下面还有个getInverseIntersectVisitor。结果中间保持者
         return new IntersectVisitor() {
 
-          DocIdSetBuilder.BulkAdder adder;
+          DocIdSetBuilder.BulkAdder adder;// 匹配的docID放这里
 
           @Override
           public void grow(int count) {
-            adder = result.grow(count);
+            adder = result.grow(count); // 先留好保存空间的结构，等待后面存储docId
           }
 
           @Override
           public void visit(int docID) {
-            adder.add(docID);
+            adder.add(docID); // 存放的是匹配的docId
           }
 
           @Override
@@ -173,8 +173,8 @@ public abstract class PointRangeQuery extends Query {
 
           @Override
           public void visit(int docID, byte[] packedValue) {
-            if (matches(packedValue)) {
-              visit(docID);
+            if (matches(packedValue)) { // 是否匹配上下界限,
+              visit(docID); // 就是上面这个函数,将docId存放起来
             }
           }
 
@@ -193,12 +193,12 @@ public abstract class PointRangeQuery extends Query {
       }
 
       /** Create a visitor that sets documents that do NOT match the range. */
-      private IntersectVisitor getInverseIntersectVisitor(FixedBitSet result, long[] cost) {
+      private IntersectVisitor getInverseIntersectVisitor(FixedBitSet result, long[] cost) {//相反visit，不match的会被置0
         return new IntersectVisitor() {
 
           @Override
           public void visit(int docID) {
-            result.set(docID);
+            result.set(docID);// 对应位置标记0
             cost[0]++;
           }
 
@@ -218,7 +218,7 @@ public abstract class PointRangeQuery extends Query {
 
           @Override
           public void visit(int docID, byte[] packedValue) {
-            if (matches(packedValue) == false) {
+            if (matches(packedValue) == false) { // 不mathc的，会被置0
               visit(docID);
             }
           }
@@ -229,15 +229,15 @@ public abstract class PointRangeQuery extends Query {
               visit(iterator);
             }
           }
-
+          //反着来
           @Override
           public Relation compare(byte[] minPackedValue, byte[] maxPackedValue) {
             Relation relation = relate(minPackedValue, maxPackedValue);
-            switch (relation) {
+            switch (relation) {//也是反着来的
               case CELL_INSIDE_QUERY:
                 // all points match, skip this subtree
                 return Relation.CELL_OUTSIDE_QUERY;
-              case CELL_OUTSIDE_QUERY:
+              case CELL_OUTSIDE_QUERY: // 是找哪些没匹配的，对这些docId进行置0操作
                 // none of the points match, clear all documents
                 return Relation.CELL_INSIDE_QUERY;
               case CELL_CROSSES_QUERY:
@@ -276,58 +276,60 @@ public abstract class PointRangeQuery extends Query {
         }
 
         boolean allDocsMatch;
-        if (values.getDocCount() == reader.maxDoc()) {
-          final byte[] fieldPackedLower = values.getMinPackedValue();
-          final byte[] fieldPackedUpper = values.getMaxPackedValue();
+        if (values.getDocCount() == reader.maxDoc()) { // 每个文档都包含的有这个字段
+          final byte[] fieldPackedLower = values.getMinPackedValue(); // 这个字段的最小值
+          final byte[] fieldPackedUpper = values.getMaxPackedValue(); // 获取最大值和最小值
           allDocsMatch = true;
           for (int i = 0; i < numDims; ++i) {
-            int offset = i * bytesPerDim;
+            int offset = i * bytesPerDim; // 查询范围
             if (comparator.compare(lowerPoint, offset, fieldPackedLower, offset) > 0
                 || comparator.compare(upperPoint, offset, fieldPackedUpper, offset) < 0) {
-              allDocsMatch = false;
+              allDocsMatch = false;// 需要查询的范围并不能把存储的范围完全包含中。
               break;
             }
           }
-        } else {
+        } else {//是否所有文档都包含该字段，并且查询范围包含在内
           allDocsMatch = false;
         }
 
-        if (allDocsMatch) {
+        if (allDocsMatch) {// 若子文档全部匹配
           // all docs have a value and all points are within bounds, so everything matches
           return ConstantScoreScorerSupplier.matchAll(score(), scoreMode, reader.maxDoc());
         } else {
           return new ConstantScoreScorerSupplier(score(), scoreMode, reader.maxDoc()) {
-
-            final DocIdSetBuilder result = new DocIdSetBuilder(reader.maxDoc(), values);
+            // result中记录了在BKD树中查找文档id的记录
+            final DocIdSetBuilder result = new DocIdSetBuilder(reader.maxDoc(), values);// 仅仅申明文档收集器
             final IntersectVisitor visitor = getIntersectVisitor(result);
             long cost = -1;
-
+            // 真正对比每条数据，判断是否是在范围内的
             @Override
-            public DocIdSetIterator iterator(long leadCost) throws IOException {
-              if (values.getDocCount() == reader.maxDoc()
-                  && values.getDocCount() == values.size()
-                  && cost() > reader.maxDoc() / 2) {
+            public DocIdSetIterator iterator(long leadCost) throws IOException {// 参数没用
+              if (values.getDocCount() == reader.maxDoc() // 判断segment包含的point和最大文档编号是否相等
+                  && values.getDocCount() == values.size() // 每个文档都有一个值
+                  && cost() > reader.maxDoc() / 2) {// 这里有个预估，若大部分匹配上了，那么就找未匹配的
                 // If all docs have exactly one value and the cost is greater
                 // than half the leaf size then maybe we can make things faster
                 // by computing the set of documents that do NOT match the range
-                final FixedBitSet result = new FixedBitSet(reader.maxDoc());
+                final FixedBitSet result = new FixedBitSet(reader.maxDoc());// 获取全部匹配的docId
                 long[] cost = new long[1];
-                values.intersect(getInverseIntersectVisitor(result, cost));
+                values.intersect(getInverseIntersectVisitor(result, cost));// 相反查找
                 // Flip the bit set and cost
                 result.flip(0, reader.maxDoc());
                 cost[0] = Math.max(0, reader.maxDoc() - cost[0]);
                 return new BitSetIterator(result, cost[0]);
               }
-
-              values.intersect(visitor);
-              return result.build().iterator();
+              if (cost != -1) {
+                visitor.grow((int) cost);
+              }
+              values.intersect(visitor); // 会进行具体的比较value,缓存docId
+              return result.build().iterator();// 哪些文档符合预期，结果保存在了iterator  BitSetIterator
             }
 
             @Override
-            public long cost() {
+            public long cost() { // 在bkd数中若叶子节点有一个满足，那么就认为预估节点为512/2个数据符合要求。
               if (cost == -1) {
                 // Computing the cost may be expensive, so only do it if necessary
-                cost = values.estimateDocCount(visitor);
+                cost = values.estimateDocCount(visitor);//会去遍历bkd索引，预计匹配的分片树：在bkd数中根据上下限对比，只要有相交，那么就认为预估节点为512/2个数据符合要求。
                 assert cost >= 0;
               }
               return cost;
@@ -462,7 +464,7 @@ public abstract class PointRangeQuery extends Query {
   public int getBytesPerDim() {
     return bytesPerDim;
   }
-
+  // 当前查询条件下限
   public byte[] getLowerPoint() {
     return lowerPoint.clone();
   }

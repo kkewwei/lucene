@@ -83,12 +83,12 @@ public final class Operations {
    *
    * @param list List of automata to be joined
    */
-  public static Automaton concatenate(List<Automaton> list) {
-    Automaton result = new Automaton();
+  public static Automaton concatenate(List<Automaton> list) {// 一系列Automaton是如何执行的
+    Automaton result = new Automaton();// 产生全局的Automaton
 
     // First pass: create all states
-    for (Automaton a : list) {
-      if (a.getNumStates() == 0) {
+    for (Automaton a : list) {// 遍历每个字符串
+      if (a.getNumStates() == 0) {// 如果有任何一个为空，就认为整体为空
         // concatenation with empty is empty
         return Automata.makeEmpty();
       }
@@ -101,34 +101,34 @@ public final class Operations {
     // Second pass: add transitions, carefully linking accept
     // states of A to init state of next A:
     int stateOffset = 0;
-    Transition t = new Transition();
+    Transition t = new Transition();// 一个新的Transition
     for (int i = 0; i < list.size(); i++) {
-      Automaton a = list.get(i);
+      Automaton a = list.get(i);// 获取这个的
       int numStates = a.getNumStates();
 
-      Automaton nextA = (i == list.size() - 1) ? null : list.get(i + 1);
+      Automaton nextA = (i == list.size() - 1) ? null : list.get(i + 1);// 获取下一个
 
       for (int s = 0; s < numStates; s++) {
-        int numTransitions = a.initTransition(s, t);
-        for (int j = 0; j < numTransitions; j++) {
-          a.getNextTransition(t);
+        int numTransitions = a.initTransition(s, t);// 先准备开始这个位的Transition
+        for (int j = 0; j < numTransitions; j++) {// 将这个Automaton的这个numStates的numTransitions全部转接到全局的Automaton
+          a.getNextTransition(t);// 真正读取这个state的Transition
           result.addTransition(stateOffset + s, stateOffset + t.dest, t.min, t.max);
         }
 
-        if (a.isAccept(s)) {
+        if (a.isAccept(s)) {//这个Automaton读取完了
           Automaton followA = nextA;
           int followOffset = stateOffset;
           int upto = i + 1;
           while (true) {
             if (followA != null) {
               // Adds a "virtual" epsilon transition:
-              numTransitions = followA.initTransition(0, t);
+              numTransitions = followA.initTransition(0, t);// 仅仅读取第0个的
               for (int j = 0; j < numTransitions; j++) {
                 followA.getNextTransition(t);
-                result.addTransition(
-                    stateOffset + s, followOffset + numStates + t.dest, t.min, t.max);
+                result.addTransition(// state就是编号，可以一直往后加。这里增加一批虚拟的的addTransition。就是一个桥接作用的。增加虚拟过度节点
+                    stateOffset + s, followOffset + numStates + t.dest, t.min, t.max);// 没太看懂这里dest是怎么计算出来的
               }
-              if (followA.isAccept(0)) {
+              if (followA.isAccept(0)) {// 这个followA是空的
                 // Keep chaining if followA accepts empty string
                 followOffset += followA.getNumStates();
                 followA = (upto == list.size() - 1) ? null : list.get(upto + 1);
@@ -453,7 +453,7 @@ public final class Operations {
     int numStates = a.getNumStates();
     assert numLive <= numStates
         : "numLive=" + numLive + " numStates=" + numStates + " " + liveStates;
-    return numLive < numStates;
+    return numLive < numStates;// statemei
   }
 
   // TODO: move to test-framework?
@@ -942,13 +942,13 @@ public final class Operations {
    * if it is reachable from the initial state.
    */
   private static BitSet getLiveStates(Automaton a) {
-    BitSet live = getLiveStatesFromInitial(a);
+    BitSet live = getLiveStatesFromInitial(a); // 从第0个state开始所有可达到的state
     live.and(getLiveStatesToAccept(a));
     return live;
   }
 
   /** Returns bitset marking states reachable from the initial state. */
-  private static BitSet getLiveStatesFromInitial(Automaton a) {
+  private static BitSet getLiveStatesFromInitial(Automaton a) {// 从初始状态（initial state）出发可以到达的所有状态
     int numStates = a.getNumStates();
     BitSet live = new BitSet(numStates);
     if (numStates == 0) {
@@ -959,12 +959,12 @@ public final class Operations {
     workList.add(0);
 
     Transition t = new Transition();
-    while (workList.isEmpty() == false) {
+    while (workList.isEmpty() == false) {// 原理比较简单，就是读取第0个state对应的所有可达的state
       int s = workList.removeFirst();
       int count = a.initTransition(s, t);
       for (int i = 0; i < count; i++) {
         a.getNextTransition(t);
-        if (live.get(t.dest) == false) {
+        if (live.get(t.dest) == false) {//目标置位下
           live.set(t.dest);
           workList.add(t.dest);
         }
@@ -973,10 +973,10 @@ public final class Operations {
 
     return live;
   }
-
+  // 从accept开始倒着读取Automaton遍历
   /** Returns bitset marking states that can reach an accept state. */
   private static BitSet getLiveStatesToAccept(Automaton a) {
-    Automaton.Builder builder = new Automaton.Builder();
+    Automaton.Builder builder = new Automaton.Builder();// 产生个新的Builder
 
     // NOTE: not quite the same thing as what reverse() does:
     Transition t = new Transition();
@@ -988,16 +988,16 @@ public final class Operations {
       int count = a.initTransition(s, t);
       for (int i = 0; i < count; i++) {
         a.getNextTransition(t);
-        builder.addTransition(t.dest, s, t.min, t.max);
+        builder.addTransition(t.dest, s, t.min, t.max);// 反正读取了一遍呀
       }
-    }
-    Automaton a2 = builder.finish();
+    }// 读取a的往builder放
+    Automaton a2 = builder.finish();// 相当于复制了一份，但是addTransition的soure+dist全部反着读取一次
 
     ArrayDeque<Integer> workList = new ArrayDeque<>();
     BitSet live = new BitSet(numStates);
     BitSet acceptBits = a.getAcceptStates();
     int s = 0;
-    while (s < numStates && (s = acceptBits.nextSetBit(s)) != -1) {
+    while (s < numStates && (s = acceptBits.nextSetBit(s)) != -1) {// 找到
       live.set(s);
       workList.add(s);
       s++;
@@ -1022,7 +1022,7 @@ public final class Operations {
    * Removes transitions to dead states (a state is "dead" if it is not reachable from the initial
    * state or no accept state is reachable from it.)
    */
-  public static Automaton removeDeadStates(Automaton a) {
+  public static Automaton removeDeadStates(Automaton a) {//
     int numStates = a.getNumStates();
     BitSet liveSet = getLiveStates(a);
     if (liveSet.cardinality() == numStates) {
@@ -1043,7 +1043,7 @@ public final class Operations {
     Transition t = new Transition();
 
     for (int i = 0; i < numStates; i++) {
-      if (liveSet.get(i)) {
+      if (liveSet.get(i)) {// 非存活那个点给抛弃了
         int numTransitions = a.initTransition(i, t);
         // filter out transitions to dead states:
         for (int j = 0; j < numTransitions; j++) {
@@ -1309,7 +1309,7 @@ public final class Operations {
       }
     }
 
-    Automaton result = builder.finish();
+    Automaton result = builder.finish(); //这里面还有Automaton的操作
 
     int s = 0;
     BitSet acceptStates = a.getAcceptStates();

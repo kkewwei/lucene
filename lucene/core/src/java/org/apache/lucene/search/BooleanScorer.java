@@ -29,7 +29,7 @@ import org.apache.lucene.util.PriorityQueue;
  * {@link BooleanQuery.Builder#setMinimumNumberShouldMatch(int)} and dense clauses. This scorer
  * scores documents by batches of 4,096 docs.
  */
-final class BooleanScorer extends BulkScorer {
+final class BooleanScorer extends BulkScorer {// 全部should，不仅有minShouldMatch要求，还有打分要求；MaxScoreBulkScorer是只有打分要求，没有minShouldMatch要求。
 
   static final int SHIFT = 12;
   static final int SIZE = 1 << SHIFT;
@@ -40,7 +40,7 @@ final class BooleanScorer extends BulkScorer {
     int freq;
   }
 
-  static final class HeadPriorityQueue extends PriorityQueue<DisiWrapper> {
+  static final class HeadPriorityQueue extends PriorityQueue<DisiWrapper> {//放head doc最大的那几个。。peak是已知top doc大的最小那个
 
     public HeadPriorityQueue(int maxSize) {
       super(maxSize);
@@ -60,7 +60,7 @@ final class BooleanScorer extends BulkScorer {
 
     @Override
     protected boolean lessThan(DisiWrapper a, DisiWrapper b) {
-      return a.cost < b.cost;
+      return a.cost < b.cost;////放的是cost最大的那批。peak是已知top cost大的最小个
     }
 
     public DisiWrapper get(int i) {
@@ -74,9 +74,9 @@ final class BooleanScorer extends BulkScorer {
   final Bucket[] buckets;
   final FixedBitSet matching = new FixedBitSet(SIZE);
 
-  final DisiWrapper[] leads;
-  final HeadPriorityQueue head;
-  final TailPriorityQueue tail;
+  final DisiWrapper[] leads;// 用于领导迭代
+  final HeadPriorityQueue head; //放head doc最大的那几个。。peak是已知top doc大的最小那个。下一个潜在匹配的查询
+  final TailPriorityQueue tail;//放的是cost最大的那批。peak是已知top cost大的最小那个
   final SimpleScorable score = new SimpleScorable();
   final int minShouldMatch;
   final long cost;
@@ -92,7 +92,7 @@ final class BooleanScorer extends BulkScorer {
       throw new IllegalArgumentException(
           "This scorer can only be used with two scorers or more, got " + scorers.size());
     }
-    if (needsScores || minShouldMatch > 1) {
+    if (needsScores || minShouldMatch > 1) {// 需要打分，或者minShouldMatch大于1，才需要统计频率
       buckets = new Bucket[SIZE];
       for (int i = 0; i < buckets.length; i++) {
         buckets[i] = new Bucket();
@@ -134,7 +134,7 @@ final class BooleanScorer extends BulkScorer {
     for (int i = 0; i < numScorers; ++i) {
       final DisiWrapper w = scorers[i];
       assert w.doc < max;
-
+      // 会统计每个匹配的文档的频率
       DocIdSetIterator it = w.iterator;
       if (w.doc < min) {
         it.advance(min);
@@ -159,7 +159,7 @@ final class BooleanScorer extends BulkScorer {
       } else {
         // Scores are not needed but we need to keep track of freqs to know which hits match
         assert minShouldMatch > 1;
-        for (int doc = it.docID(); doc < max; doc = it.nextDoc()) {
+        for (int doc = it.docID(); doc < max; doc = it.nextDoc()) {// 统计每个文档匹配的频率
           if (acceptDocs == null || acceptDocs.get(doc)) {
             final int d = doc & MASK;
             matching.set(d);
@@ -208,7 +208,7 @@ final class BooleanScorer extends BulkScorer {
     final TailPriorityQueue tail = this.tail;
     DisiWrapper headTop = head.top();
     DisiWrapper tailTop = tail.top();
-    while (headTop.doc < min) {
+    while (headTop.doc < min) {// 时刻保证head要保证doc都要超过min，tail放的是cost最大的那几个，
       if (tailTop == null || headTop.cost <= tailTop.cost) {
         headTop.doc = headTop.iterator.advance(min);
         headTop = head.updateTop();
@@ -223,7 +223,7 @@ final class BooleanScorer extends BulkScorer {
     return headTop;
   }
 
-  private void scoreWindowMultipleScorers(
+  private void scoreWindowMultipleScorers(// 参考https://issues.apache.org/jira/browse/LUCENE-6201介绍
       LeafCollector collector,
       Bits acceptDocs,
       int windowBase,
@@ -231,33 +231,33 @@ final class BooleanScorer extends BulkScorer {
       int windowMax,
       int maxFreq)
       throws IOException {
-    while (maxFreq < minShouldMatch && maxFreq + tail.size() >= minShouldMatch) {
+    while (maxFreq < minShouldMatch && maxFreq + tail.size() >= minShouldMatch) {// 先保证leads中文档个数超过了minShouldMatch，不够则从tail中拿
       // a match is still possible
       final DisiWrapper candidate = tail.pop();
-      if (candidate.doc < windowMin) {
+      if (candidate.doc < windowMin) {// 从tail中捞
         candidate.doc = candidate.iterator.advance(windowMin);
       }
       if (candidate.doc < windowMax) {
         leads[maxFreq++] = candidate;
-      } else {
+      } else {// 如果异常，则放入head中
         head.add(candidate);
       }
     }
 
-    if (maxFreq >= minShouldMatch) {
+    if (maxFreq >= minShouldMatch) {// 只有匹配的文档超过了minShouldMatch（最大可能），才有可能超过minShouldMatch
       // There might be matches in other scorers from the tail too
       for (int i = 0; i < tail.size(); ++i) {
         leads[maxFreq++] = tail.get(i);
       }
-      tail.clear();
+      tail.clear();// tail临时清空
 
-      scoreWindowIntoBitSetAndReplay(
+      scoreWindowIntoBitSetAndReplay(// 会统计每个匹配的文档的频率
           collector, acceptDocs, windowBase, windowMin, windowMax, leads, maxFreq);
     }
 
     // Push back scorers into head and tail
     for (int i = 0; i < maxFreq; ++i) {
-      final DisiWrapper evicted = head.insertWithOverflow(leads[i]);
+      final DisiWrapper evicted = head.insertWithOverflow(leads[i]);// 再放入head中，进行下一批
       if (evicted != null) {
         tail.add(evicted);
       }
@@ -303,11 +303,11 @@ final class BooleanScorer extends BulkScorer {
     // Fill 'leads' with all scorers from 'head' that are in the right window
     leads[0] = head.pop();
     int maxFreq = 1;
-    while (head.size() > 0 && head.top().doc < windowMax) {
+    while (head.size() > 0 && head.top().doc < windowMax) {// 将head这批在小于windowMax的全部拿出来，放入leads中
       leads[maxFreq++] = head.pop();
     }
 
-    if (minShouldMatch == 1 && maxFreq == 1) {
+    if (minShouldMatch == 1 && maxFreq == 1) {// 只有一个匹配了，就直接收集
       // special case: only one scorer can match in the current window,
       // we can collect directly
       final DisiWrapper bulkScorer = leads[0];
@@ -324,7 +324,7 @@ final class BooleanScorer extends BulkScorer {
   public int score(LeafCollector collector, Bits acceptDocs, int min, int max) throws IOException {
     collector.setScorer(score);
 
-    DisiWrapper top = advance(min);
+    DisiWrapper top = advance(min);//从最小cost的那几个选择一个最小doc的
     while (top.doc < max) {
       top = scoreWindow(top, collector, acceptDocs, min, max);
     }

@@ -154,7 +154,7 @@ public abstract class Analyzer implements Closeable {
     TokenStreamComponents components = reuseStrategy.getReusableComponents(this, fieldName);
     final Reader r = initReader(fieldName, reader);
     if (components == null) {
-      components = createComponents(fieldName);
+      components = createComponents(fieldName);//  就是我们关注的那个
       reuseStrategy.setReusableComponents(this, fieldName, components);
     }
     components.setReader(r);

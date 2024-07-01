@@ -118,7 +118,7 @@ public abstract class DocValuesConsumer implements Closeable {
    * @param field field information
    * @param valuesProducer produces the values to write
    * @throws IOException if an I/O error occurred.
-   */
+   */ // 刷新的时候才进来
   public abstract void addSortedSetField(FieldInfo field, DocValuesProducer valuesProducer)
       throws IOException;
 
@@ -235,7 +235,7 @@ public abstract class DocValuesConsumer implements Closeable {
 
     return new NumericDocValues() {
       private int docID = -1;
-      private NumericDocValuesSub current;
+      private NumericDocValuesSub current;// 当前segment的docvalue对象
 
       @Override
       public int docID() {
@@ -334,7 +334,7 @@ public abstract class DocValuesConsumer implements Closeable {
         }
       }
       if (values != null) {
-        cost += values.cost();
+        cost += values.cost();// 看有多少独立的词
         subs.add(new BinaryDocValuesSub(mergeState.docMaps[i], values));
       }
     }
@@ -878,16 +878,16 @@ public abstract class DocValuesConsumer implements Closeable {
     TermsEnum[] liveTerms = new TermsEnum[toMerge.size()];
     long[] weights = new long[liveTerms.length];
     for (int sub = 0; sub < liveTerms.length; sub++) {
-      SortedSetDocValues dv = toMerge.get(sub);
+      SortedSetDocValues dv = toMerge.get(sub); //SingletonSortedSetDocValues
       Bits liveDocs = mergeState.liveDocs[sub];
       if (liveDocs == null) {
-        liveTerms[sub] = dv.termsEnum();
+        liveTerms[sub] = dv.termsEnum();//Lucene80DocValuesProducer$TermsDict
         weights[sub] = dv.getValueCount();
       } else {
         LongBitSet bitset = new LongBitSet(dv.getValueCount());
         int docID;
         while ((docID = dv.nextDoc()) != NO_MORE_DOCS) {
-          if (liveDocs.get(docID)) {
+          if (liveDocs.get(docID)) {// 过滤真正live的文档
             for (int i = 0; i < dv.docValueCount(); i++) {
               bitset.set(dv.nextOrd());
             }
@@ -898,7 +898,7 @@ public abstract class DocValuesConsumer implements Closeable {
       }
     }
 
-    return OrdinalMap.build(null, liveTerms, weights, PackedInts.COMPACT);
+    return OrdinalMap.build(null, liveTerms, weights, PackedInts.COMPACT);// 进行真正的合并segment之间的合并,变成OrdinalMap了
   }
 
   /**
@@ -943,12 +943,12 @@ public abstract class DocValuesConsumer implements Closeable {
     long cost = 0;
     boolean allSingletons = true;
 
-    for (int i = 0; i < mergeState.docValuesProducers.length; i++) {
+    for (int i = 0; i < mergeState.docValuesProducers.length; i++) {// 遍历每个segment
       SortedSetDocValues values = null;
       DocValuesProducer docValuesProducer = mergeState.docValuesProducers[i];
       if (docValuesProducer != null) {
         FieldInfo readerFieldInfo = mergeState.fieldInfos[i].fieldInfo(mergeFieldInfo.name);
-        if (readerFieldInfo != null
+        if (readerFieldInfo != null // 获取该segment的该fieldInfo
             && readerFieldInfo.getDocValuesType() == DocValuesType.SORTED_SET) {
           values = docValuesProducer.getSortedSet(readerFieldInfo);
         }
@@ -991,7 +991,7 @@ public abstract class DocValuesConsumer implements Closeable {
       }
 
       @Override
-      public int nextDoc() throws IOException {
+      public int nextDoc() throws IOException {// 遍历所有的全局docId，返回的是全局docId
         currentSub = docIDMerger.next();
         if (currentSub == null) {
           docID = NO_MORE_DOCS;
@@ -1014,8 +1014,8 @@ public abstract class DocValuesConsumer implements Closeable {
 
       @Override
       public long nextOrd() throws IOException {
-        long subOrd = currentSub.values.nextOrd();
-        return currentSub.map.get(subOrd);
+        long subOrd = currentSub.values.nextOrd(); // 获取子词的order
+        return currentSub.map.get(subOrd);// 获取的全局order
       }
 
       @Override

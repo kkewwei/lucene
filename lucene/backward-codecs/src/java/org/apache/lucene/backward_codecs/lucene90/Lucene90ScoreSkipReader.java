@@ -32,10 +32,10 @@ final class Lucene90ScoreSkipReader extends Lucene90SkipReader {
   private final Impacts impacts;
   private int numLevels = 1;
   private final FreqAndNormBuffer[] perLevelImpacts;
-
+// 会从BlockImpactsDocsEnum对象初始化跑进来
   public Lucene90ScoreSkipReader(
       IndexInput skipStream,
-      int maxSkipLevels,
+      int maxSkipLevels,//maxSkipLevels=10
       boolean hasPos,
       boolean hasOffsets,
       boolean hasPayloads) {

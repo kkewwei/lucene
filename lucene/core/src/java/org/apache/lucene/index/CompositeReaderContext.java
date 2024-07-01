@@ -24,8 +24,8 @@ import java.util.List;
 /** {@link IndexReaderContext} for {@link CompositeReader} instance. */
 public final class CompositeReaderContext extends IndexReaderContext {
   private final List<IndexReaderContext> children;
-  private final List<LeafReaderContext> leaves;
-  private final CompositeReader reader;
+  private final List<LeafReaderContext> leaves;// 最终查询的时候从这里拿的leaves
+  private final CompositeReader reader;// ElasticsearchDirectoryReader
 
   static CompositeReaderContext create(CompositeReader reader) {
     return new Builder(reader).build();
@@ -84,7 +84,7 @@ public final class CompositeReaderContext extends IndexReaderContext {
   }
 
   private static final class Builder {
-    private final CompositeReader reader;
+    private final CompositeReader reader; //ExitableDirectoryReader
     private final List<LeafReaderContext> leaves = new ArrayList<>();
     private int leafDocBase = 0;
 
@@ -98,27 +98,27 @@ public final class CompositeReaderContext extends IndexReaderContext {
 
     private IndexReaderContext build(
         CompositeReaderContext parent, IndexReader reader, int ord, int docBase) {
-      if (reader instanceof LeafReader ar) {
+      if (reader instanceof LeafReader ar) {// 然后构建叶子Context
         final LeafReaderContext atomic =
             new LeafReaderContext(parent, ar, ord, docBase, leaves.size(), leafDocBase);
         leaves.add(atomic);
         leafDocBase += reader.maxDoc();
         return atomic;
-      } else {
+      } else { // 首先跑进来，构建复合Context
         final CompositeReader cr = (CompositeReader) reader;
         final List<? extends IndexReader> sequentialSubReaders = cr.getSequentialSubReaders();
-        final List<IndexReaderContext> children =
+        final List<IndexReaderContext> children =// 这个分片有多少segment
             Arrays.asList(new IndexReaderContext[sequentialSubReaders.size()]);
         final CompositeReaderContext newParent;
-        if (parent == null) {
+        if (parent == null) { // 默认跑到这里，重新构建这个
           newParent = new CompositeReaderContext(cr, children, leaves);
         } else {
           newParent = new CompositeReaderContext(parent, cr, ord, docBase, children);
         }
-        int newDocBase = 0;
-        for (int i = 0, c = sequentialSubReaders.size(); i < c; i++) {
-          final IndexReader r = sequentialSubReaders.get(i);
-          children.set(i, build(newParent, r, i, newDocBase));
+        int newDocBase = 0; // 统计所有文档个数
+        for (int i = 0, c = sequentialSubReaders.size(); i < c; i++) { // 开始构建CompositeReaderContext里面的Reader
+          final IndexReader r = sequentialSubReaders.get(i); //ExitableLeafReader
+          children.set(i, build(newParent, r, i, newDocBase)); // 注意这里，针对每个segment，都分配了一个起始docBase
           newDocBase += r.maxDoc();
         }
         assert newDocBase == cr.maxDoc();

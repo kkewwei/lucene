@@ -104,7 +104,7 @@ public abstract class PerFieldPostingsFormat extends PostingsFormat {
 
       FieldsGroup build() {
         List<String> fieldList = new ArrayList<>(fields);
-        fieldList.sort(null);
+        fieldList.sort(null);//排序
         return new FieldsGroup(fieldList, suffix, state);
       }
     }
@@ -139,12 +139,12 @@ public abstract class PerFieldPostingsFormat extends PostingsFormat {
 
     @Override
     public void write(Fields fields, NormsProducer norms) throws IOException {
-      Map<PostingsFormat, FieldsGroup> formatToGroups = buildFieldsGroupMapping(fields);
+      Map<PostingsFormat, FieldsGroup> formatToGroups = buildFieldsGroupMapping(fields);// 仅仅是Lucene101PostingsFormat->
 
       // Write postings
       boolean success = false;
       try {
-        for (Map.Entry<PostingsFormat, FieldsGroup> ent : formatToGroups.entrySet()) {
+        for (Map.Entry<PostingsFormat, FieldsGroup> ent : formatToGroups.entrySet()) {// 一般只有一种
           PostingsFormat format = ent.getKey();
           final FieldsGroup group = ent.getValue();
 
@@ -157,9 +157,9 @@ public abstract class PerFieldPostingsFormat extends PostingsFormat {
                 }
               };
 
-          FieldsConsumer consumer = format.fieldsConsumer(group.state);
+          FieldsConsumer consumer = format.fieldsConsumer(group.state); // 还是比较重要的，进入Lucene101PostingsFormat.fieldsConsumer。返回的是 Lucene90BlockTreeTermsWriter
           toClose.add(consumer);
-          consumer.write(maskedFields, norms);
+          consumer.write(maskedFields, norms); // 进去初始化 tip tim 进入Lucene90BlockTreeTermsWriter
         }
         success = true;
       } finally {
@@ -185,11 +185,11 @@ public abstract class PerFieldPostingsFormat extends PostingsFormat {
       // Merge postings
       boolean success = false;
       try {
-        for (Map.Entry<PostingsFormat, FieldsGroup> ent : formatToGroups.entrySet()) {
-          PostingsFormat format = ent.getKey();
+        for (Map.Entry<PostingsFormat, FieldsGroup> ent : formatToGroups.entrySet()) {// 只有一个值
+          PostingsFormat format = ent.getKey();//Lucene101PostingsFormat
           final FieldsGroup group = ent.getValue();
 
-          FieldsConsumer consumer = format.fieldsConsumer(group.state);
+          FieldsConsumer consumer = format.fieldsConsumer(group.state);// 跑到Lucene101PostingsFormat
           toClose.add(consumer);
           consumer.merge(PerFieldMergeState.restrictFields(mergeState, group.fields), norms);
         }
@@ -213,28 +213,28 @@ public abstract class PerFieldPostingsFormat extends PostingsFormat {
       for (String field : indexedFieldNames) {
         FieldInfo fieldInfo = writeState.fieldInfos.fieldInfo(field);
         // TODO: This should check current format from the field attribute?
-        final PostingsFormat format = getPostingsFormatForField(field);
+        final PostingsFormat format = getPostingsFormatForField(field); // Lucene101PostingsFormat，只能有一种格式
 
         if (format == null) {
           throw new IllegalStateException(
               "invalid null PostingsFormat for field=\"" + field + "\"");
         }
-        String formatName = format.getName();
+        String formatName = format.getName(); // Lucene101
 
         FieldsGroup.Builder groupBuilder = formatToGroupBuilders.get(format);
-        if (groupBuilder == null) {
+        if (groupBuilder == null) { // 域名相同
           // First time we are seeing this format; create a new instance
 
           // bump the suffix
-          Integer suffix = suffixes.get(formatName);
+          Integer suffix = suffixes.get(formatName); // 将这个formatName对应的个数+1
           if (suffix == null) {
-            suffix = 0;
+            suffix = 0; // 跑到这里
           } else {
             suffix = suffix + 1;
           }
           suffixes.put(formatName, suffix);
-
-          String segmentSuffix =
+          // Lucene50_0
+          String segmentSuffix = //返回Lucene101_0
               getFullSegmentSuffix(
                   field, writeState.segmentSuffix, getSuffix(formatName, Integer.toString(suffix)));
           groupBuilder =
@@ -250,8 +250,8 @@ public abstract class PerFieldPostingsFormat extends PostingsFormat {
 
         groupBuilder.addField(field);
 
-        fieldInfo.putAttribute(PER_FIELD_FORMAT_KEY, formatName);
-        fieldInfo.putAttribute(PER_FIELD_SUFFIX_KEY, Integer.toString(groupBuilder.suffix));
+        fieldInfo.putAttribute(PER_FIELD_FORMAT_KEY, formatName);// PerFieldPostingsFormat.format->Lucene101
+        fieldInfo.putAttribute(PER_FIELD_SUFFIX_KEY, Integer.toString(groupBuilder.suffix));// PerFieldPostingsFormat.suffix->0
       }
 
       Map<PostingsFormat, FieldsGroup> formatToGroups =
@@ -269,8 +269,8 @@ public abstract class PerFieldPostingsFormat extends PostingsFormat {
 
   private static class FieldsReader extends FieldsProducer {
 
-    private final Map<String, FieldsProducer> fields = new TreeMap<>();
-    private final Map<String, FieldsProducer> formats = new HashMap<>();
+    private final Map<String, FieldsProducer> fields = new TreeMap<>();// fileName1 -> BlockTreeTermsReader。value都是一个BlockTreeTermsReader；和formats的value也是同一个
+    private final Map<String, FieldsProducer> formats = new HashMap<>(); // "Lucene84_0" -> BlockTreeTermsReader。
     private final String segment;
 
     // clone for merge
@@ -292,17 +292,17 @@ public abstract class PerFieldPostingsFormat extends PostingsFormat {
 
       segment = other.segment;
     }
-
+    //
     public FieldsReader(final SegmentReadState readState) throws IOException {
 
       // Read _X.per and init each format:
       boolean success = false;
       try {
         // Read field name -> format name
-        for (FieldInfo fi : readState.fieldInfos) {
+        for (FieldInfo fi : readState.fieldInfos) { // 读取每个域的配置信息
           if (fi.getIndexOptions() != IndexOptions.NONE) {
             final String fieldName = fi.name;
-            final String formatName = fi.getAttribute(PER_FIELD_FORMAT_KEY);
+            final String formatName = fi.getAttribute(PER_FIELD_FORMAT_KEY); // Lucene50，
             if (formatName != null) {
               // null formatName means the field is in fieldInfos, but has no postings!
               final String suffix = fi.getAttribute(PER_FIELD_SUFFIX_KEY);
@@ -310,13 +310,13 @@ public abstract class PerFieldPostingsFormat extends PostingsFormat {
                 throw new IllegalStateException(
                     "missing attribute: " + PER_FIELD_SUFFIX_KEY + " for field: " + fieldName);
               }
-              PostingsFormat format = PostingsFormat.forName(formatName);
-              String segmentSuffix = getSuffix(formatName, suffix);
-              if (!formats.containsKey(segmentSuffix)) {
+              PostingsFormat format = PostingsFormat.forName(formatName);// Lucene84PostingsFormat
+              String segmentSuffix = getSuffix(formatName, suffix);// Lucene84_0
+              if (!formats.containsKey(segmentSuffix)) { // 包含Lucene84_0,那么就进入。这里会对所有fields都读取到，只要字段属性format相同，那么就可以一个读完，别的都不用再读取了
                 formats.put(
                     segmentSuffix,
-                    format.fieldsProducer(new SegmentReadState(readState, segmentSuffix)));
-              }
+                    format.fieldsProducer(new SegmentReadState(readState, segmentSuffix)));// format=Lucene84PostingsFormat.fieldsProducer，会有读取tim操作
+              }// segmentSuffix -> BlockTreeTermsReader
               fields.put(fieldName, formats.get(segmentSuffix));
             }
           }
@@ -337,10 +337,10 @@ public abstract class PerFieldPostingsFormat extends PostingsFormat {
     }
 
     @Override
-    public Terms terms(String field) throws IOException {
-      FieldsProducer fieldsProducer = fields.get(field);
-      return fieldsProducer == null ? null : fieldsProducer.terms(field);
-    }
+    public Terms terms(String field) throws IOException {// 返回的是FieldReader
+      FieldsProducer fieldsProducer = fields.get(field);// 获取对应的 Lucene90BlockTreeTermsReader
+      return fieldsProducer == null ? null : fieldsProducer.terms(field);// 无论什么字段，BlockTreeTermsReader都是一个
+    }// 将返回BlockTreeTermsReader
 
     @Override
     public int size() {

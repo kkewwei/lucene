@@ -48,7 +48,7 @@ class FreqProxFields extends Fields {
 
   @Override
   public Terms terms(String field) throws IOException {
-    FreqProxTermsWriterPerField perField = fields.get(field);
+    FreqProxTermsWriterPerField perField = fields.get(field); // 4个域
     return perField == null ? null : new FreqProxTerms(perField);
   }
 
@@ -66,7 +66,7 @@ class FreqProxFields extends Fields {
 
     @Override
     public TermsEnum iterator() {
-      FreqProxTermsEnum termsEnum = new FreqProxTermsEnum(terms);
+      FreqProxTermsEnum termsEnum = new FreqProxTermsEnum(terms); // terms=FreqProxTermsWriterPerField
       termsEnum.reset();
       return termsEnum;
     }
@@ -117,20 +117,20 @@ class FreqProxFields extends Fields {
       return terms.sawPayloads;
     }
   }
-
+  // 词的二分查找，按大小遍历，每个词的倒排索引结构通过fst，都可以在这个类中完成
   private static class FreqProxTermsEnum extends BaseTermsEnum {
-    final FreqProxTermsWriterPerField terms;
+    final FreqProxTermsWriterPerField terms;// 实际就是一个FreqProxTermsWriterPerField
     final BytesRefBlockPool termsPool;
-    final int[] sortedTermIDs;
+    final int[] sortedTermIDs; // 下标是词从小到大排序，value是词的termsID, 也就是最先写入顺序
     final FreqProxPostingsArray postingsArray;
     final BytesRef scratch = new BytesRef();
-    final int numTerms;
-    int ord;
+    final int numTerms; // 该域总共多少个词，ord从0开始，不能超过numTerms个数
+    int ord; // 目前是开始读取的该域所有文档所有term的从小达到排序后的第几个词，term已经排好序了
 
     FreqProxTermsEnum(FreqProxTermsWriterPerField terms) {
       this.terms = terms;
       this.termsPool = new BytesRefBlockPool(terms.bytePool);
-      this.numTerms = terms.getNumTerms();
+      this.numTerms = terms.getNumTerms();// 存储的是distinct(单词)的个数
       sortedTermIDs = terms.getSortedTermIDs();
       assert sortedTermIDs != null;
       postingsArray = (FreqProxPostingsArray) terms.postingsArray;
@@ -139,7 +139,7 @@ class FreqProxFields extends Fields {
     public void reset() {
       ord = -1;
     }
-
+// 如何在倒排索引中快速找到这个词， 在刷盘前，通过内存结构通过termID快速定位
     @Override
     public SeekStatus seekCeil(BytesRef text) {
       // TODO: we could instead keep the BytesRefHash
@@ -148,7 +148,7 @@ class FreqProxFields extends Fields {
       // binary search:
       int lo = 0;
       int hi = numTerms - 1;
-      while (hi >= lo) {
+      while (hi >= lo) { // 二分查找，从tip内存结构的倒排索引中查找，效果更高
         int mid = (lo + hi) >>> 1;
         int textStart = postingsArray.textStarts[sortedTermIDs[mid]];
         termsPool.fillBytesRef(scratch, textStart);
@@ -157,7 +157,7 @@ class FreqProxFields extends Fields {
           lo = mid + 1;
         } else if (cmp > 0) {
           hi = mid - 1;
-        } else {
+        } else { // 是否找到词了
           // found:
           ord = mid;
           assert term().compareTo(text) == 0;
@@ -183,15 +183,15 @@ class FreqProxFields extends Fields {
       int textStart = postingsArray.textStarts[sortedTermIDs[this.ord]];
       termsPool.fillBytesRef(scratch, textStart);
     }
-
+    // 还是内存结构中的进行查找
     @Override
-    public BytesRef next() {
+    public BytesRef next() { // 读取按照词sort排序后的顺序读取
       ord++;
-      if (ord >= numTerms) {
+      if (ord >= numTerms) { // 总共词的个数
         return null;
       } else {
-        int textStart = postingsArray.textStarts[sortedTermIDs[ord]];
-        termsPool.fillBytesRef(scratch, textStart);
+        int textStart = postingsArray.textStarts[sortedTermIDs[ord]];// 取order为0的词在数组中的起始位置
+        termsPool.fillBytesRef(scratch, textStart);// 读取这个termID的具体bytes，根据长度获取
         return scratch;
       }
     }
@@ -221,12 +221,12 @@ class FreqProxFields extends Fields {
       // through the postings:
       throw new UnsupportedOperationException();
     }
-
+    // 返回的是该词的所有文档id
     @Override
     public PostingsEnum postings(PostingsEnum reuse, int flags) {
-      if (PostingsEnum.featureRequested(flags, PostingsEnum.POSITIONS)) {
-        FreqProxPostingsEnum posEnum;
-
+      if (PostingsEnum.featureRequested(flags, PostingsEnum.POSITIONS)) {// 需要存储position部分
+        FreqProxPostingsEnum posEnum; // 先去读取一个term
+       // 检查freq是否需要
         if (!terms.hasProx) {
           // Caller wants positions but we didn't index them;
           // don't lie:
@@ -244,16 +244,16 @@ class FreqProxFields extends Fields {
           if (posEnum.postingsArray != postingsArray) {
             posEnum = new FreqProxPostingsEnum(terms, postingsArray);
           }
-        } else {
+        } else { // 跑到这里
           posEnum = new FreqProxPostingsEnum(terms, postingsArray);
         }
-        posEnum.reset(sortedTermIDs[ord]);
-        return posEnum;
+        posEnum.reset(sortedTermIDs[ord]); // 需要进来看下
+        return posEnum; // 就直接返回了
       }
 
       FreqProxDocsEnum docsEnum;
 
-      if (!terms.hasFreq && PostingsEnum.featureRequested(flags, PostingsEnum.FREQS)) {
+      if (!terms.hasFreq && PostingsEnum.featureRequested(flags, PostingsEnum.FREQS)) {//
         // Caller wants freqs but we didn't index them;
         // don't lie:
         throw new IllegalArgumentException("did not index freq");
@@ -301,14 +301,14 @@ class FreqProxFields extends Fields {
 
     final FreqProxTermsWriterPerField terms;
     final FreqProxPostingsArray postingsArray;
-    final ByteSliceReader reader = new ByteSliceReader();
+    final ByteSliceReader reader = new ByteSliceReader(); // 这个termID对应的所有文档iD
     final boolean readTermFreq;
     int docID = -1;
     int freq;
-    boolean ended;
+    boolean ended;// 读取已经结束了
     int termID;
 
-    public FreqProxDocsEnum(
+    public FreqProxDocsEnum(// 写入时读取内存中的doc列表
         FreqProxTermsWriterPerField terms, FreqProxPostingsArray postingsArray) {
       this.terms = terms;
       this.postingsArray = postingsArray;
@@ -316,7 +316,7 @@ class FreqProxFields extends Fields {
     }
 
     public void reset(int termID) {
-      this.termID = termID;
+      this.termID = termID;// 词的编号
       terms.initReader(reader, termID, 0);
       ended = false;
       docID = -1;
@@ -363,7 +363,7 @@ class FreqProxFields extends Fields {
       if (docID == -1) {
         docID = 0;
       }
-      if (reader.eof()) {
+      if (reader.eof()) { // 是否读到结尾了
         if (ended) {
           return NO_MORE_DOCS;
         } else {
@@ -407,15 +407,15 @@ class FreqProxFields extends Fields {
 
     final FreqProxTermsWriterPerField terms;
     final FreqProxPostingsArray postingsArray;
-    final ByteSliceReader reader = new ByteSliceReader();
-    final ByteSliceReader posReader = new ByteSliceReader();
+    final ByteSliceReader reader = new ByteSliceReader(); // 读取单个term的freq等信息(stream0)
+    final ByteSliceReader posReader = new ByteSliceReader(); // 读取单个term的offset等信息(stream1)
     final boolean readOffsets;
     int docID = -1;
     int freq;
     int pos;
     int startOffset;
     int endOffset;
-    int posLeft;
+    int posLeft; // freqency 什么含义
     int termID;
     boolean ended;
     boolean hasPayload;
@@ -425,15 +425,15 @@ class FreqProxFields extends Fields {
         FreqProxTermsWriterPerField terms, FreqProxPostingsArray postingsArray) {
       this.terms = terms;
       this.postingsArray = postingsArray;
-      this.readOffsets = terms.hasOffsets;
+      this.readOffsets = terms.hasOffsets; // true
       assert terms.hasProx;
       assert terms.hasFreq;
     }
 
     public void reset(int termID) {
       this.termID = termID;
-      terms.initReader(reader, termID, 0);
-      terms.initReader(posReader, termID, 1);
+      terms.initReader(reader, termID, 0); // FreqProxTermsWriterPerField, 把词频等信息从PoolBuffer0中读取出来，放入reader中
+      terms.initReader(posReader, termID, 1); // FreqProxTermsWriterPerField, 把offset、position等信息从PoolBuffer1中读取出来，放入posReader
       ended = false;
       docID = -1;
       posLeft = 0;
@@ -450,7 +450,7 @@ class FreqProxFields extends Fields {
     }
 
     @Override
-    public int nextDoc() throws IOException {
+    public int nextDoc() throws IOException { // 读取一个词，将docId&freq读取出来
       if (docID == -1) {
         docID = 0;
       }
@@ -458,7 +458,7 @@ class FreqProxFields extends Fields {
         nextPosition();
       }
 
-      if (reader.eof()) {
+      if (reader.eof()) { // 是否到达了该词的末尾
         if (ended) {
           return NO_MORE_DOCS;
         } else {
@@ -466,10 +466,10 @@ class FreqProxFields extends Fields {
           docID = postingsArray.lastDocIDs[termID];
           freq = postingsArray.termFreqs[termID];
         }
-      } else {
-        int code = reader.readVInt();
-        docID += code >>> 1;
-        if ((code & 1) != 0) {
+      } else {// 跑到这里
+        int code = reader.readVInt(); // 可以看下 FreqProxTermsWriterPerField.addTerm()里面存储doc的过程L168，就是
+        docID += code >>> 1; // doc就是一直累加的
+        if ((code & 1) != 0) { // 低位为1，就说明freq为1
           freq = 1;
         } else {
           freq = reader.readVInt();
@@ -497,21 +497,21 @@ class FreqProxFields extends Fields {
     @Override
     public int nextPosition() throws IOException {
       assert posLeft > 0;
-      posLeft--;
-      int code = posReader.readVInt();
-      pos += code >>> 1;
-      if ((code & 1) != 0) {
+      posLeft--; // 词的频率
+      int code = posReader.readVInt(); // 可参考建立索引时候的过程：FreqProxTermsWriterPerField.addTerm(), position-lastPosition   L184
+      pos += code >>> 1; // 当前第几个position
+      if ((code & 1) != 0) { //
         hasPayload = true;
         // has a payload
         payload.setLength(posReader.readVInt());
         payload.growNoCopy(payload.length());
         posReader.readBytes(payload.bytes(), 0, payload.length());
       } else {
-        hasPayload = false;
+        hasPayload = false; // 跑这里
       }
 
       if (readOffsets) {
-        startOffset += posReader.readVInt();
+        startOffset += posReader.readVInt(); // 可参考建立索引时候的过程：FreqProxTermsWriterPerField.writeOffsets(), offset-lastOffset
         endOffset = startOffset + posReader.readVInt();
       }
 

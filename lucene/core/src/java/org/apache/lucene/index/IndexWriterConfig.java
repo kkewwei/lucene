@@ -56,16 +56,16 @@ public final class IndexWriterConfig extends LiveIndexWriterConfig {
   /** Specifies the open mode for {@link IndexWriter}. */
   public enum OpenMode {
     /** Creates a new index or overwrites an existing one. */
-    CREATE,
+    CREATE, // 写一个新的索引，若存在，则覆盖掉
 
     /** Opens an existing index. */
-    APPEND,
+    APPEND, // ES默认追加，见InternalEngine.getIndexWriterConfig()函数
 
     /**
      * Creates a new index if one does not exist, otherwise it opens the index and documents will be
      * appended.
      */
-    CREATE_OR_APPEND
+    CREATE_OR_APPEND// 存在则追加
   }
 
   /** Denotes a flush trigger is disabled. */
@@ -117,7 +117,7 @@ public final class IndexWriterConfig extends LiveIndexWriterConfig {
    * @throws AlreadySetException if this config is already attached to a writer.
    */
   IndexWriterConfig setIndexWriter(IndexWriter writer) {
-    if (this.writer.get() != null) {
+    if (this.writer.get() != null) {// 防止这个IndexWriterConfig被被别人先用了
       throw new IllegalStateException(
           "do not share IndexWriterConfig instances across IndexWriters");
     }
@@ -419,7 +419,7 @@ public final class IndexWriterConfig extends LiveIndexWriterConfig {
   public IndexWriterConfig setMergePolicy(MergePolicy mergePolicy) {
     return (IndexWriterConfig) super.setMergePolicy(mergePolicy);
   }
-
+  //ES中没有设置这个参数，刷新是自己控制的
   @Override
   public IndexWriterConfig setMaxBufferedDocs(int maxBufferedDocs) {
     return (IndexWriterConfig) super.setMaxBufferedDocs(maxBufferedDocs);
@@ -429,7 +429,7 @@ public final class IndexWriterConfig extends LiveIndexWriterConfig {
   public IndexWriterConfig setMergedSegmentWarmer(IndexReaderWarmer mergeSegmentWarmer) {
     return (IndexWriterConfig) super.setMergedSegmentWarmer(mergeSegmentWarmer);
   }
-
+  // es中使用indices.memory.index_buffer_size控制，内存的10%
   @Override
   public IndexWriterConfig setRAMBufferSizeMB(double ramBufferSizeMB) {
     return (IndexWriterConfig) super.setRAMBufferSizeMB(ramBufferSizeMB);

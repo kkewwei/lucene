@@ -41,7 +41,7 @@ public class ParentChildrenBlockJoinQuery extends Query {
 
   private final BitSetProducer parentFilter;
   private final Query childQuery;
-  private final int parentDocId;
+  private final int parentDocId;// 就是说不能超过这个docId
 
   /**
    * Creates a <code>ParentChildrenBlockJoinQuery</code> instance
@@ -114,7 +114,7 @@ public class ParentChildrenBlockJoinQuery extends Query {
       @Override
       public ScorerSupplier scorerSupplier(LeafReaderContext context) throws IOException {
         // Childs docs only reside in a single segment, so no need to evaluate all segments
-        if (context.ord != readerIndex) {
+        if (context.ord != readerIndex) { // 肯定是在同一个segment内
           return null;
         }
 
@@ -128,7 +128,7 @@ public class ParentChildrenBlockJoinQuery extends Query {
         }
 
         final BitSet parents = parentFilter.getBitSet(context);
-        final int firstChildDocId = parents.prevSetBit(localParentDocId - 1) + 1;
+        final int firstChildDocId = parents.prevSetBit(localParentDocId - 1) + 1;//第一个child起点
         // A parent doc doesn't have child docs, so we can early exit here:
         if (firstChildDocId == localParentDocId) {
           return null;

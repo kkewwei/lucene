@@ -72,11 +72,11 @@ class SortedDocValuesTermsEnum extends BaseTermsEnum {
 
   @Override
   public BytesRef next() throws IOException {
-    currentOrd++;
-    if (currentOrd >= values.getValueCount()) {
+    currentOrd++;/// 当前取的词典词个数不能超过总的词典词的个数
+    if (currentOrd >= values.getValueCount()) { // segment内该distinct(termId)的个数
       return null;
     }
-    scratch.copyBytes(values.lookupOrd(currentOrd));
+    scratch.copyBytes(values.lookupOrd(currentOrd)); // 按照字母排序后的termId依次读取
     return scratch.get();
   }
 

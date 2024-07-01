@@ -31,15 +31,15 @@ public abstract class BitSet implements Bits, Accountable {
    * will fully consume the {@link DocIdSetIterator}.
    */
   public static BitSet of(DocIdSetIterator it, int maxDoc) throws IOException {
-    final long cost = it.cost();
-    final int threshold = maxDoc >>> 7;
+    final long cost = it.cost(); // 匹配的文档数
+    final int threshold = maxDoc >>> 7; // 最大文档数
     BitSet set;
-    if (cost < threshold) {
-      set = new SparseFixedBitSet(maxDoc);
+    if (cost < threshold) {// 如果使用
+      set = new SparseFixedBitSet(maxDoc);// 匹配的文档比较少
     } else {
-      set = new FixedBitSet(maxDoc);
+      set = new FixedBitSet(maxDoc);// 匹配的文档比较多
     }
-    set.or(it);
+    set.or(it);// 开始逐个遍历了。
     return set;
   }
 

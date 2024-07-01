@@ -32,10 +32,10 @@ final class Lucene84ScoreSkipReader extends Lucene84SkipReader {
   private final Impacts impacts;
   private int numLevels = 1;
   private final FreqAndNormBuffer[] perLevelImpacts;
-
+// 会从BlockImpactsDocsEnum对象初始化跑进来
   public Lucene84ScoreSkipReader(
       IndexInput skipStream,
-      int maxSkipLevels,
+      int maxSkipLevels,//maxSkipLevels=10
       boolean hasPos,
       boolean hasOffsets,
       boolean hasPayloads) {
@@ -73,7 +73,7 @@ final class Lucene84ScoreSkipReader extends Lucene84SkipReader {
           }
         };
   }
-
+  // target是文档号
   @Override
   public int skipTo(int target) throws IOException {
     int result = super.skipTo(target);

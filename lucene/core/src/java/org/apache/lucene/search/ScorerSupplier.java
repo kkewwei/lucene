@@ -34,8 +34,8 @@ public abstract class ScorerSupplier {
    *     doubt, pass {@link Long#MAX_VALUE}, which will produce a {@link Scorer} that has good
    *     iteration capabilities.
    */
-  public abstract Scorer get(long leadCost) throws IOException;
-
+  public abstract Scorer get(long leadCost) throws IOException; // 仅仅从里面选择个score出来
+  //大部分都没用lastCost，但是可以看下IndexOrDocValuesQuery是如何用的
   /**
    * Optional method: Get a scorer that is optimized for bulk-scoring. The default implementation
    * iterates matches from the {@link Scorer} but some queries can have more efficient approaches
@@ -51,7 +51,7 @@ public abstract class ScorerSupplier {
    *
    * @see DocIdSetIterator#cost
    */
-  public abstract long cost();
+  public abstract long cost();//预估消耗
 
   /**
    * Inform this {@link ScorerSupplier} that its returned scorers produce scores that get passed to

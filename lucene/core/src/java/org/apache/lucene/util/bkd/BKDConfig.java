@@ -28,10 +28,10 @@ import org.apache.lucene.util.ArrayUtil;
  * @param bytesPerDim How many bytes each value in each dimension takes.
  * @param maxPointsInLeafNode max points allowed on a Leaf block
  */
-public record BKDConfig(int numDims, int numIndexDims, int bytesPerDim, int maxPointsInLeafNode) {
-
+public record BKDConfig(int numDims, int numIndexDims, int bytesPerDim, int maxPointsInLeafNode) {//maxPointsInLeafNode=一个叶子节点多少个Point, 默认512
+// numDims=一个元素几个维度,// 在叶子节点，每个元素几个维度；numIndexDims=一个元素几个维度,在叶子节点，每个元素几个维度， bytesPerDim=单个元素某个维度占用的长度
   /** Default maximum number of point in each leaf block */
-  public static final int DEFAULT_MAX_POINTS_IN_LEAF_NODE = 512;
+  public static final int DEFAULT_MAX_POINTS_IN_LEAF_NODE = 512;// 每个叶子block中文档最大个数
 
   /** Maximum number of index dimensions (2 * max index dimensions) */
   public static final int MAX_DIMS = 16;

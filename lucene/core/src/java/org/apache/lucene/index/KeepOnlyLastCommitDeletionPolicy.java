@@ -22,13 +22,13 @@ import java.util.List;
  * This {@link IndexDeletionPolicy} implementation that keeps only the most recent commit and
  * immediately removes all prior commits after a new commit is done. This is the default deletion
  * policy.
- */
+ */// 仅仅保留最后面那个IndexCommit
 public final class KeepOnlyLastCommitDeletionPolicy extends IndexDeletionPolicy {
 
   /** Sole constructor. */
   public KeepOnlyLastCommitDeletionPolicy() {}
 
-  /** Deletes all commits except the most recent one. */
+  /** Deletes all commits except the most recent one. */  // 初始化时删除比较旧的commits
   @Override
   public void onInit(List<? extends IndexCommit> commits) {
     // Note that commits.size() should normally be 1:
@@ -36,7 +36,7 @@ public final class KeepOnlyLastCommitDeletionPolicy extends IndexDeletionPolicy 
   }
 
   /** Deletes all commits except the most recent one. */
-  @Override
+  @Override//这里删除的时候，把最新的那个commit给保留了
   public void onCommit(List<? extends IndexCommit> commits) {
     // Note that commits.size() should normally be 2 (if not
     // called by onInit above):

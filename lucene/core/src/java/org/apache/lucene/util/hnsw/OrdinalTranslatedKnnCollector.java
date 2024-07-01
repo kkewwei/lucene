@@ -24,7 +24,7 @@ import org.apache.lucene.search.TotalHits;
 /**
  * Wraps a provided KnnCollector object, translating the provided vectorId ordinal to a documentId
  */
-public final class OrdinalTranslatedKnnCollector extends KnnCollector.Decorator {
+public final class OrdinalTranslatedKnnCollector extends KnnCollector.Decorator { // 节点用 ordinal（序号）而非 docID 表示 。向量在 segment 内按写入顺序编号 0..N-1，图只认 ordinal，最后通过 OrdinalTranslatedKnnCollector 把 ordinal 翻译回 docID
 
   private final IntToIntFunction vectorOrdinalToDocId;
 

@@ -41,8 +41,8 @@ abstract class DocValuesUpdate {
       8 * NUM_BYTES_OBJECT_HEADER + 8 * NUM_BYTES_OBJECT_REF + 8 * Integer.BYTES;
 
   final DocValuesType type;
-  final Term term;
-  final String field;
+  final Term term;/// _id:xxx
+  final String field; // _soft_delete
   // used in BufferedDeletes to apply this update only to a slice of docs. It's initialized to
   // BufferedUpdates.MAX_INT
   // since it's safe and most often used this way we save object creations.
@@ -154,8 +154,8 @@ abstract class DocValuesUpdate {
   }
 
   /** An in-place update to a numeric DocValues field */
-  static final class NumericDocValuesUpdate extends DocValuesUpdate {
-    private final long value;
+  static final class NumericDocValuesUpdate extends DocValuesUpdate {// __soft_delete的就跑这里。一条删除记录
+    private final long value; //1
 
     NumericDocValuesUpdate(Term term, String field, long value) {
       this(term, field, value, BufferedUpdates.MAX_INT, true);

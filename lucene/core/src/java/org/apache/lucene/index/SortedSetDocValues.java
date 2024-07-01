@@ -28,7 +28,7 @@ import org.apache.lucene.util.automaton.CompiledAutomaton;
  * each document. Ordinals are dense and in increasing sorted order.
  */
 public abstract class SortedSetDocValues extends DocValuesIterator {
-
+// 仅仅会去map dv docId，orderId, 及term的一二级索引结构
   /** Sole constructor. (For invocation by subclass constructors, typically implicit.) */
   protected SortedSetDocValues() {}
 
@@ -40,7 +40,7 @@ public abstract class SortedSetDocValues extends DocValuesIterator {
    * @return next ordinal for the document. ordinals are dense, start at 0, then increment by 1 for
    *     the next value in sorted order.
    */
-  public abstract long nextOrd() throws IOException;
+  public abstract long nextOrd() throws IOException; // 得到当前文档的下一个排好序value的orderId
 
   /**
    * Retrieves the number of unique ords for the current document. This must always be greater than
@@ -57,7 +57,7 @@ public abstract class SortedSetDocValues extends DocValuesIterator {
    * @param ord ordinal to lookup
    * @see #nextOrd
    */
-  public abstract BytesRef lookupOrd(long ord) throws IOException;
+  public abstract BytesRef lookupOrd(long ord) throws IOException;//获取排好序的某个order的值
 
   /**
    * Returns the number of unique values.

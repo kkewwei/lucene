@@ -51,7 +51,7 @@ public class BitSetIterator extends AbstractDocIdSetIterator {
     return getBitSet(iterator, SparseFixedBitSet.class);
   }
 
-  private final BitSet bits;
+  private final BitSet bits; // FixedBitSet
   private final int length;
   private final long cost;
 
@@ -61,8 +61,8 @@ public class BitSetIterator extends AbstractDocIdSetIterator {
       throw new IllegalArgumentException("cost must be >= 0, got " + cost);
     }
     this.bits = bits;
-    this.length = bits.length();
-    this.cost = cost;
+    this.length = bits.length(); // 总共存储了多少个数据
+    this.cost = cost;  // 多少匹配上了
   }
 
   /** Return the wrapped {@link BitSet}. */
@@ -76,16 +76,16 @@ public class BitSetIterator extends AbstractDocIdSetIterator {
   }
 
   @Override
-  public int nextDoc() {
+  public int nextDoc() { // 获取下一个文档Id
     return advance(doc + 1);
   }
 
   @Override
   public int advance(int target) {
-    if (target >= length) {
+    if (target >= length) {  // 若没有了，就超过
       return doc = NO_MORE_DOCS;
     }
-    return doc = bits.nextSetBit(target);
+    return doc = bits.nextSetBit(target); // 通过bkd树判断有值的文档id
   }
 
   @Override

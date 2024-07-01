@@ -85,18 +85,18 @@ public class WildcardQuery extends AutomatonQuery {
     List<Automaton> automata = new ArrayList<>();
 
     String wildcardText = wildcardquery.text();
-
+    // 自动补全，进行填充
     for (int i = 0; i < wildcardText.length(); ) {
       final int c = wildcardText.codePointAt(i);
       int length = Character.charCount(c);
       switch (c) {
-        case WILDCARD_STRING:
+        case WILDCARD_STRING: // *
           automata.add(Automata.makeAnyString());
           break;
-        case WILDCARD_CHAR:
+        case WILDCARD_CHAR:   // ？
           automata.add(Automata.makeAnyChar());
           break;
-        case WILDCARD_ESCAPE:
+        case WILDCARD_ESCAPE://转义字符
           // add the next codepoint instead, if it exists
           if (i + length < wildcardText.length()) {
             final int nextChar = wildcardText.codePointAt(i + length);
@@ -105,7 +105,7 @@ public class WildcardQuery extends AutomatonQuery {
             break;
           } // else fallthru, lenient parsing with a trailing \
         default:
-          automata.add(Automata.makeChar(c));
+          automata.add(Automata.makeChar(c));// 只能是c
       }
       i += length;
     }

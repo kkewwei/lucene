@@ -76,10 +76,10 @@ public abstract class ConstantScoreScorerSupplier extends ScorerSupplier {
 
   @Override
   public final BulkScorer bulkScorer() throws IOException {
-    DocIdSetIterator iterator = iterator(Long.MAX_VALUE);
+    DocIdSetIterator iterator = iterator(Long.MAX_VALUE);// 计算leader的匹配文档列表。
     TwoPhaseIterator twoPhase = TwoPhaseIterator.unwrap(iterator);
-    if (maxDoc >= DenseConjunctionBulkScorer.WINDOW_SIZE / 2
-        && iterator.cost() >= maxDoc / DenseConjunctionBulkScorer.DENSITY_THRESHOLD_INVERSE) {
+    if (maxDoc >= DenseConjunctionBulkScorer.WINDOW_SIZE / 2//  文档个数要大约2048个
+        && iterator.cost() >= maxDoc / DenseConjunctionBulkScorer.DENSITY_THRESHOLD_INVERSE) {//文档数超过/32时，才使用bitsit来计算为集合
       List<DocIdSetIterator> iterators;
       List<TwoPhaseIterator> twoPhases;
       if (twoPhase == null) {
@@ -88,7 +88,7 @@ public abstract class ConstantScoreScorerSupplier extends ScorerSupplier {
       } else {
         iterators = Collections.emptyList();
         twoPhases = Collections.singletonList(twoPhase);
-      }
+      }// 匹配文档大于1/32，就认为密集的
       return new DenseConjunctionBulkScorer(iterators, twoPhases, maxDoc, score);
     } else if (scoreMode.needsScores() == false) {
       // Collect window-by-window via intoBitSet. For a two-phase iterator this confirms matches in

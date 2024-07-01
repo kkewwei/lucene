@@ -47,22 +47,22 @@ import org.apache.lucene.util.BitUtil;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.IOUtils;
 import org.apache.lucene.util.packed.PackedInts;
-
+// 被DocumentsWriterPerThread拥有，每刷新产生segment一次，则该对象就被置空（在merge时也会自动单独创建一个,公用一个shard的IndexWriter）。下次写入就写到另外一个索引文档
 /**
  * {@link StoredFieldsWriter} impl for {@link Lucene90CompressingStoredFieldsFormat}.
  *
  * @lucene.experimental
- */
+ */ //    单个文档形式的，tvd和fdt都是一样存储方式
 public final class Lucene90CompressingStoredFieldsWriter extends StoredFieldsWriter {
-
+// Lucene8.5.2中会产生三个文件fdt、fdm、fdx。 fdm存放byte[]的元数据，fdx存放byte[]的具体数据,fdt存放元数据
   /** Extension of stored fields file */
-  public static final String FIELDS_EXTENSION = "fdt";
+  public static final String FIELDS_EXTENSION = "fdt";// 存数据的
 
   /** Extension of stored fields index */
   public static final String INDEX_EXTENSION = "fdx";
 
   /** Extension of stored fields meta */
-  public static final String META_EXTENSION = "fdm";
+  public static final String META_EXTENSION = "fdm";// 存元数据的
 
   /** Codec name for the index. */
   public static final String INDEX_CODEC_NAME = "Lucene90FieldsIndex";
@@ -74,7 +74,7 @@ public final class Lucene90CompressingStoredFieldsWriter extends StoredFieldsWri
   static final int NUMERIC_LONG = 0x04;
   static final int NUMERIC_DOUBLE = 0x05;
 
-  static final int TYPE_BITS = PackedInts.bitsRequired(NUMERIC_DOUBLE);
+  static final int TYPE_BITS = PackedInts.bitsRequired(NUMERIC_DOUBLE);// 需要几位才可以表示总共的字段类型
   static final int TYPE_MASK = (int) PackedInts.maxValue(TYPE_BITS);
 
   static final int VERSION_START = 1;
@@ -82,19 +82,19 @@ public final class Lucene90CompressingStoredFieldsWriter extends StoredFieldsWri
   static final int META_VERSION_START = 0;
 
   private final String segment;
-  private FieldsIndexWriter indexWriter;
-  private IndexOutput metaStream, fieldsStream;
+  private FieldsIndexWriter indexWriter;//向_fdx写数据wtriter=CompressingStoredFieldsIndexWriter
+  private IndexOutput metaStream, fieldsStream;// 只有在merge阶段，向fdt中写入数据时，,才是RateLimitedIndexOutput
 
   private Compressor compressor;
   private final CompressionMode compressionMode;
-  private final int chunkSize;
-  private final int maxDocsPerChunk;
+  private final int chunkSize; // 16kb
+  private final int maxDocsPerChunk; // 128
 
-  private final ByteBuffersDataOutput bufferedDocs;
-  private int[] numStoredFields; // number of stored fields
-  private int[] endOffsets; // end offsets in bufferedDocs
-  private int docBase; // doc ID at the beginning of the chunk
-  private int numBufferedDocs; // docBase + numBufferedDocs == current doc ID
+  private final ByteBuffersDataOutput bufferedDocs;// 其中之一存放的是fdt里面的值，域编号->域类型->域value
+  private int[] numStoredFields; // number of stored fields 下标为文档号，value是这个文档有几个域
+  private int[] endOffsets; // end offsets in bufferedDocs  下标是文档号，value是这个文档store value在bufferedDocs中存储域值的截止位置。
+  private int docBase; // doc ID at the beginning of the chunk // 记录当前chunk在整个segment的起始docId下标。
+  private int numBufferedDocs; // docBase + numBufferedDocs == current doc ID// 当前chunk缓存的文档个数.
 
   private long numChunks;
   private long numDirtyChunks; // number of incomplete compressed blocks written
@@ -119,14 +119,14 @@ public final class Lucene90CompressingStoredFieldsWriter extends StoredFieldsWri
     this.chunkSize = chunkSize;
     this.maxDocsPerChunk = maxDocsPerChunk;
     this.docBase = 0;
-    this.bufferedDocs = ByteBuffersDataOutput.newResettableInstance();
-    this.numStoredFields = new int[16];
-    this.endOffsets = new int[16];
-    this.numBufferedDocs = 0;
+    this.bufferedDocs = ByteBuffersDataOutput.newResettableInstance();// 分配该 doc 的 store field buffer，实际大小会比 chunkSize 多1/8，因为每次扩容会扩原有大小的1/8
+    this.numStoredFields = new int[16];// 长度是缓存的 doc 数量，自扩容，每个元素是单个 doc 中的所有 stored field 的总数量
+    this.endOffsets = new int[16];// 长度是缓存的 doc 数量，自扩容，每个元素是单个 doc 的所有 stored field 的 value 的总长度
+    this.numBufferedDocs = 0;// flush 之前缓存的 doc 数量
 
-    boolean success = false;
+    boolean success = false;// 创建_0.fdx和_0.fdt文件
     try {
-      metaStream =
+      metaStream =// fdt文件，合并时将产生RateLimitedIndexOutput
           directory.createOutput(
               IndexFileNames.segmentFileName(segment, segmentSuffix, META_EXTENSION), context);
       CodecUtil.writeIndexHeader(
@@ -141,8 +141,8 @@ public final class Lucene90CompressingStoredFieldsWriter extends StoredFieldsWri
           fieldsStream, formatName, VERSION_CURRENT, si.getId(), segmentSuffix);
       assert CodecUtil.indexHeaderLength(formatName, segmentSuffix)
           == fieldsStream.getFilePointer();
-
-      indexWriter =
+      // 里面会建立俩新文件名_eg7_Lucene85FieldsIndex-doc_ids_0.tmp及_eg7_Lucene85FieldsIndexfile_pointers_1.tmp
+      indexWriter = // 这俩文件在refresh前，都会创建好，等待124个doc的刷新
           new FieldsIndexWriter(
               directory,
               segment,
@@ -152,8 +152,8 @@ public final class Lucene90CompressingStoredFieldsWriter extends StoredFieldsWri
               si.getId(),
               blockShift,
               context);
-
-      metaStream.writeVInt(chunkSize);
+      // 每个chunkSize的大小
+      metaStream.writeVInt(chunkSize);// 写 fdt 文件 chunkSize 和 packedInts 版本号
 
       success = true;
     } finally {
@@ -169,36 +169,36 @@ public final class Lucene90CompressingStoredFieldsWriter extends StoredFieldsWri
       IOUtils.close(metaStream, fieldsStream, indexWriter, compressor);
     } finally {
       metaStream = null;
-      fieldsStream = null;
+      fieldsStream = null; // 全部置空
       indexWriter = null;
       compressor = null;
     }
   }
 
-  private int numStoredFieldsInDoc;
+  private int numStoredFieldsInDoc;// 这个文档有几个需要存储的。
 
   @Override
   public void startDocument() throws IOException {}
-
+  // 写完一个文档后，就会调用
   @Override
   public void finishDocument() throws IOException {
-    if (numBufferedDocs == this.numStoredFields.length) {
+    if (numBufferedDocs == this.numStoredFields.length) {// 需要扩容
       final int newLength = ArrayUtil.oversize(numBufferedDocs + 1, 4);
       this.numStoredFields = ArrayUtil.growExact(this.numStoredFields, newLength);
       endOffsets = ArrayUtil.growExact(endOffsets, newLength);
     }
-    this.numStoredFields[numBufferedDocs] = numStoredFieldsInDoc;
+    this.numStoredFields[numBufferedDocs] = numStoredFieldsInDoc; // 该doc有几个域需要存储
     numStoredFieldsInDoc = 0;
-    endOffsets[numBufferedDocs] = Math.toIntExact(bufferedDocs.size());
+    endOffsets[numBufferedDocs] = Math.toIntExact(bufferedDocs.size());// 是把整个字段结束位置给存储起来，起始位置是从source部分开始计算的
     ++numBufferedDocs;
-    if (triggerFlush()) {
+    if (triggerFlush()) { // 该bufferedDocs使用大小超过chunk限制16k了，或者该bufferedDocs存储文档书超过chunk限制128了
       flush(false);
     }
   }
-
+  // 如何压缩存储int,全部存储到out中
   private static void saveInts(int[] values, int length, DataOutput out) throws IOException {
     if (length == 1) {
-      out.writeVInt(values[0]);
+      out.writeVInt(values[0]);// 存储第一个
     } else {
       StoredFieldsInts.writeInts(values, 0, length, out);
     }
@@ -215,64 +215,64 @@ public final class Lucene90CompressingStoredFieldsWriter extends StoredFieldsWri
     final int slicedBit = sliced ? 1 : 0;
     final int dirtyBit = dirtyChunk ? 2 : 0;
     // save docBase and numBufferedDocs
-    fieldsStream.writeVInt(docBase);
-    fieldsStream.writeVInt((numBufferedDocs << 2) | dirtyBit | slicedBit);
+    fieldsStream.writeVInt(docBase);// 向fdt中写入当前chunk的起始位置
+    fieldsStream.writeVInt((numBufferedDocs << 2) | dirtyBit | slicedBit); // 向fdt中写入该chunk的文档个数
 
     // save numStoredFields
-    saveInts(numStoredFields, numBufferedDocs, fieldsStream);
+    saveInts(numStoredFields, numBufferedDocs, fieldsStream); // 首先存储所有文件的numStoredFields
 
     // save lengths
-    saveInts(lengths, numBufferedDocs, fieldsStream);
+    saveInts(lengths, numBufferedDocs, fieldsStream);// 存储了所有文档的字节长度
   }
 
   private boolean triggerFlush() {
-    return bufferedDocs.size() >= chunkSize
+    return bufferedDocs.size() >= chunkSize//大小超过了81kb
         || // chunks of at least chunkSize bytes
-        numBufferedDocs >= maxDocsPerChunk;
-  }
-
-  private void flush(boolean force) throws IOException {
+        numBufferedDocs >= maxDocsPerChunk; // 1024个文档
+  }// flush主要还是在构建fdt数据结构， flush里面的writeBlock是在构建fdx数据结构
+  // 只有当本类内存中缓存的个数或者大小超过81kb,或者1024个文档，在每个文档addDocument完成时都会检查这两项而刷新。当然flush、commit都会调用
+  private void flush(boolean force) throws IOException {// 两个地方会调用：1. 每次写完128/16K文档时， flush阶段，若还有缓存文档，则会主动调用
     assert triggerFlush() != force;
     numChunks++;
     if (force) {
       numDirtyChunks++; // incomplete: we had to force this flush
       numDirtyDocs += numBufferedDocs;
-    }
-    indexWriter.writeIndex(numBufferedDocs, fieldsStream.getFilePointer());
+    }//表示开始这个chunk了
+    indexWriter.writeIndex(numBufferedDocs, fieldsStream.getFilePointer()); // 主要是向doc_ids和file_pointers中写入文档个数、fdt偏移量信息
 
     // transform end offsets into lengths
-    final int[] lengths = endOffsets;
+    final int[] lengths = endOffsets;// 不用计算第0个文档
     for (int i = numBufferedDocs - 1; i > 0; --i) {
-      lengths[i] = endOffsets[i] - endOffsets[i - 1];
+      lengths[i] = endOffsets[i] - endOffsets[i - 1]; // 每个文档的长度
       assert lengths[i] >= 0;
     }
-    final boolean sliced = bufferedDocs.size() >= 2L * chunkSize;
+    final boolean sliced = bufferedDocs.size() >= 2L * chunkSize;// 若存储总长度大于82kb, 就需要分开压缩
     final boolean dirtyChunk = force;
-    writeHeader(docBase, numBufferedDocs, numStoredFields, lengths, sliced, dirtyChunk);
-    ByteBuffersDataInput bytebuffers = bufferedDocs.toDataInput();
+    writeHeader(docBase, numBufferedDocs, numStoredFields, lengths, sliced, dirtyChunk);// 向fdt写入numStoredFields与lengths
+    ByteBuffersDataInput bytebuffers = bufferedDocs.toDataInput();// 原始文档存放的地方
     // compress stored fields to fieldsStream.
-    if (sliced) {
+    if (sliced) { // 若切分的话，就切分存储，一次写入不能超过chunk大小（82kb）
       // big chunk, slice it, using ByteBuffersDataInput ignore memory copy
       final int capacity = (int) bytebuffers.length();
       for (int compressed = 0; compressed < capacity; compressed += chunkSize) {
-        int l = Math.min(chunkSize, capacity - compressed);
+        int l = Math.min(chunkSize, capacity - compressed);// 按照slice存储
         ByteBuffersDataInput bbdi = bytebuffers.slice(compressed, l);
         compressor.compress(bbdi, fieldsStream);
       }
-    } else {
+    } else {// 压缩 stored fields value 并写入文件，压缩是按 chunk 来压缩的
       compressor.compress(bytebuffers, fieldsStream);
     }
 
     // reset
-    docBase += numBufferedDocs;
+    docBase += numBufferedDocs;// 记录所有chunk中已经包含的文档数
     numBufferedDocs = 0;
-    bufferedDocs.reset();
+    bufferedDocs.reset();// 将原始文档释放没问题
   }
 
   @Override
   public void writeField(FieldInfo info, int value) throws IOException {
     ++numStoredFieldsInDoc;
-    final long infoAndBits = (((long) info.number) << TYPE_BITS) | NUMERIC_INT;
+    final long infoAndBits = (((long) info.number) << TYPE_BITS) | NUMERIC_INT; // 字段类型
     bufferedDocs.writeVLong(infoAndBits);
     bufferedDocs.writeZInt(value);
   }
@@ -305,7 +305,7 @@ public final class Lucene90CompressingStoredFieldsWriter extends StoredFieldsWri
   public void writeField(FieldInfo info, BytesRef value) throws IOException {
     ++numStoredFieldsInDoc;
     final long infoAndBits = (((long) info.number) << TYPE_BITS) | BYTE_ARR;
-    bufferedDocs.writeVLong(infoAndBits);
+    bufferedDocs.writeVLong(infoAndBits); //写入字段编号，字段类型
     bufferedDocs.writeVInt(value.length);
     bufferedDocs.writeBytes(value.bytes, value.offset, value.length);
   }
@@ -314,8 +314,8 @@ public final class Lucene90CompressingStoredFieldsWriter extends StoredFieldsWri
   public void writeField(FieldInfo info, StoredFieldDataInput value) throws IOException {
     int length = value.getLength();
     ++numStoredFieldsInDoc;
-    final long infoAndBits = (((long) info.number) << TYPE_BITS) | BYTE_ARR;
-    bufferedDocs.writeVLong(infoAndBits);
+    final long infoAndBits = (((long) info.number) << TYPE_BITS) | BYTE_ARR; // 低三位代表类型，高5位代表字段编号
+    bufferedDocs.writeVLong(infoAndBits); //写入字段编号，字段类型
     bufferedDocs.writeVInt(length);
     bufferedDocs.copyBytes(value.getDataInput(), length);
   }
@@ -323,8 +323,8 @@ public final class Lucene90CompressingStoredFieldsWriter extends StoredFieldsWri
   @Override
   public void writeField(FieldInfo info, String value) throws IOException {
     ++numStoredFieldsInDoc;
-    final long infoAndBits = (((long) info.number) << TYPE_BITS) | STRING;
-    bufferedDocs.writeVLong(infoAndBits);
+    final long infoAndBits = (((long) info.number) << TYPE_BITS) | STRING; // 低三位代表类型，高5位代表字段编号
+    bufferedDocs.writeVLong(infoAndBits); //写入字段编号，字段类型
     bufferedDocs.writeString(value);
   }
 
@@ -469,7 +469,7 @@ public final class Lucene90CompressingStoredFieldsWriter extends StoredFieldsWri
       out.writeVLong(upperBits);
     }
   }
-
+  // 只有在主动indexWriter.flush()/若文档数或者内存使用数达到上限，才会主动调用。去关闭旧的fdx。表示写完一个segment了
   @Override
   public void finish(int numDocs) throws IOException {
     if (numBufferedDocs > 0) {
@@ -481,7 +481,7 @@ public final class Lucene90CompressingStoredFieldsWriter extends StoredFieldsWri
       throw new RuntimeException(
           "Wrote " + docBase + " docs, finish called with numDocs=" + numDocs);
     }
-    indexWriter.finish(numDocs, fieldsStream.getFilePointer(), metaStream);
+    indexWriter.finish(numDocs, fieldsStream.getFilePointer(), metaStream);// 仅仅向fdx中写入索引信息，处理 fdx 的 finish 流程，写 block， 写文件尾。
     metaStream.writeVLong(numChunks);
     metaStream.writeVLong(numDirtyChunks);
     metaStream.writeVLong(numDirtyDocs);
@@ -550,10 +550,10 @@ public final class Lucene90CompressingStoredFieldsWriter extends StoredFieldsWri
       if (numBufferedDocs > 0) {
         flush(true);
       }
-      final IndexInput rawDocs = reader.getFieldsStream();
+      final IndexInput rawDocs = reader.getFieldsStream();// fdt文件
       rawDocs.seek(fromPointer);
       do {
-        final int base = rawDocs.readVInt();
+        final int base = rawDocs.readVInt();// base没啥用
         final int code = rawDocs.readVInt();
         final int bufferedDocs = code >>> 2;
         if (base != docID) {
@@ -561,8 +561,8 @@ public final class Lucene90CompressingStoredFieldsWriter extends StoredFieldsWri
               "invalid state: base=" + base + ", docID=" + docID, rawDocs);
         }
         // write a new index entry and new header for this chunk.
-        indexWriter.writeIndex(bufferedDocs, fieldsStream.getFilePointer());
-        fieldsStream.writeVInt(docBase); // rebase
+        indexWriter.writeIndex(bufferedDocs, fieldsStream.getFilePointer());// 向doc,filepoint写入
+        fieldsStream.writeVInt(docBase); // rebase  // rebase  自己维护一个segment类的全局的docBase
         fieldsStream.writeVInt(code);
         docID += bufferedDocs;
         docBase += bufferedDocs;
@@ -574,12 +574,12 @@ public final class Lucene90CompressingStoredFieldsWriter extends StoredFieldsWri
         // copy bytes until the next chunk boundary (or end of chunk data).
         // using the stored fields index for this isn't the most efficient, but fast enough
         // and is a source of redundancy for detecting bad things.
-        final long endChunkPointer;
+        final long endChunkPointer;// 这里有点错位不好理解：doc文件写入0,128,255,385这样的，而filepointer写入n1,n2,n3，实际chunk=1指的是doc中的128、filepointer中的n2
         if (docID == sub.maxDoc) {
           endChunkPointer = reader.getMaxPointer();
         } else {
-          endChunkPointer = index.getStartPointer(docID);
-        }
+          endChunkPointer = index.getStartPointer(docID);// 错位，实际效果找的是chunk+1在fdt中的起始位置。
+        } // 发现这个操作也很耗时,从rawDocs读取数据
         fieldsStream.copyBytes(rawDocs, endChunkPointer - rawDocs.getFilePointer());
         ++numChunks;
         final boolean dirtyChunk = (code & 2) != 0;
@@ -598,14 +598,14 @@ public final class Lucene90CompressingStoredFieldsWriter extends StoredFieldsWri
       copyOneDoc(reader, docID++);
     }
   }
-
-  @Override
+  // 将从ElasticsearchConcurrentMergeScheduler.doMerge()->ConcurrentMergeScheduler.doMerge()->IndexWriter.merge()->IndexWriter.mergeMiddle()
+  @Override// 该函数接受一个 MergeState mergeState 对象。其包含了merge 需要的各个 segment 文件的 store field reader 对象
   public int merge(MergeState mergeState) throws IOException {
     final MatchingReaders matchingReaders = new MatchingReaders(mergeState);
-    final MergeVisitor[] visitors = new MergeVisitor[mergeState.storedFieldsReaders.length];
+    final MergeVisitor[] visitors = new MergeVisitor[mergeState.storedFieldsReaders.length];// 多少个semgent来合并
     final List<CompressingStoredFieldsMergeSub> subs =
         new ArrayList<>(mergeState.storedFieldsReaders.length);
-    for (int i = 0; i < mergeState.storedFieldsReaders.length; i++) {
+    for (int i = 0; i < mergeState.storedFieldsReaders.length; i++) { // 遍历每一个storedFieldsReaders文件
       final StoredFieldsReader reader = mergeState.storedFieldsReaders[i];
       mergeState.checkAborted();
       reader.checkIntegrity();
@@ -615,11 +615,11 @@ public final class Lucene90CompressingStoredFieldsWriter extends StoredFieldsWri
       }
       subs.add(new CompressingStoredFieldsMergeSub(mergeState, mergeStrategy, i));
     }
-    int docCount = 0;
+    int docCount = 0; // 变量是所有segment中全局的
     final DocIDMerger<CompressingStoredFieldsMergeSub> docIDMerger =
         DocIDMerger.of(subs, mergeState.needsIndexSort);
     CompressingStoredFieldsMergeSub sub = docIDMerger.next();
-    while (sub != null) {
+    while (sub != null) {// 开始遍历了，
       assert sub.mappedDocID == docCount : sub.mappedDocID + " != " + docCount;
       final StoredFieldsReader reader = mergeState.storedFieldsReaders[sub.readerIndex];
       if (sub.mergeStrategy == MergeStrategy.BULK) {
@@ -633,7 +633,7 @@ public final class Lucene90CompressingStoredFieldsWriter extends StoredFieldsWri
         ++toDocID; // exclusive bound
         copyChunks(mergeState, current, fromDocID, toDocID);
         docCount += (toDocID - fromDocID);
-      } else if (sub.mergeStrategy == MergeStrategy.DOC) {
+      } else if (sub.mergeStrategy == MergeStrategy.DOC) { // 或者有删除文档、或者有太多脏chunk
         copyOneDoc((Lucene90CompressingStoredFieldsReader) reader, sub.docID);
         ++docCount;
         sub = docIDMerger.next();
@@ -648,7 +648,7 @@ public final class Lucene90CompressingStoredFieldsWriter extends StoredFieldsWri
         throw new AssertionError("Unknown merge strategy [" + sub.mergeStrategy + "]");
       }
     }
-    finish(docCount);
+    finish(docCount);// 其实这里刷新意义不大，是不是可以最后统一刷新就好了？
     return docCount;
   }
 
@@ -659,7 +659,7 @@ public final class Lucene90CompressingStoredFieldsWriter extends StoredFieldsWri
    * <p>The last chunk written for a segment is typically incomplete, so without recompressing, in
    * some worst-case situations (e.g. frequent reopen with tiny flushes), over time the compression
    * ratio can degrade. This is a safety switch.
-   */
+   */// 因为太多脏chunk,某些情况下，压缩效率会降低
   boolean tooDirty(Lucene90CompressingStoredFieldsReader candidate) {
     // A segment is considered dirty only if it has enough dirty docs to make a full block
     // AND more than 1% blocks are dirty.
@@ -692,7 +692,7 @@ public final class Lucene90CompressingStoredFieldsWriter extends StoredFieldsWri
         && reader.getCompressionMode() == compressionMode
         && reader.getChunkSize() == chunkSize
         // its not worth fine-graining this if there are deletions.
-        && mergeState.liveDocs[readerIndex] == null
+        && mergeState.liveDocs[readerIndex] == null // 没有删除的话
         && !tooDirty(reader)) {
       return MergeStrategy.BULK;
     } else {

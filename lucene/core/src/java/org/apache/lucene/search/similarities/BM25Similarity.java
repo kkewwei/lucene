@@ -30,8 +30,8 @@ import org.apache.lucene.util.SmallFloat;
  * <b>RE</b>trieval <b>C</b>onference (TREC 1994). Gaithersburg, USA, November 1994.
  */
 public class BM25Similarity extends Similarity {
-  private final float k1;
-  private final float b;
+  private final float k1; // 默认1.2 越大：词频增加带来的收益越明显
+  private final float b; // 默认0.75， 可以通过参数控制
 
   /**
    * BM25 with the supplied parameter values.
@@ -99,13 +99,13 @@ public class BM25Similarity extends Similarity {
   }
 
   /** Implemented as <code>log(1 + (docCount - docFreq + 0.5)/(docFreq + 0.5))</code>. */
-  protected float idf(long docFreq, long docCount) {
+  protected float idf(long docFreq, long docCount) { // docFreq越大，idf 越小
     return (float) Math.log(1 + (docCount - docFreq + 0.5D) / (docFreq + 0.5D));
   }
 
   /** The default implementation computes the average as <code>sumTotalTermFreq / docCount</code> */
   protected float avgFieldLength(CollectionStatistics collectionStats) {
-    return (float) (collectionStats.sumTotalTermFreq() / (double) collectionStats.docCount());
+    return (float) (collectionStats.sumTotalTermFreq() / (double) collectionStats.docCount());// 每个字段平均词的个数
   }
 
   /** Cache of decoded bytes. */
@@ -138,9 +138,9 @@ public class BM25Similarity extends Similarity {
    *     term.
    */
   public Explanation idfExplain(CollectionStatistics collectionStats, TermStatistics termStats) {
-    final long df = termStats.docFreq();
-    final long docCount = collectionStats.docCount();
-    final float idf = idf(df, docCount);
+    final long df = termStats.docFreq();// 文档频率
+    final long docCount = collectionStats.docCount();// 包含这个field的文档个数
+    final float idf = idf(df, docCount);// 稀有程度
     return Explanation.match(
         idf,
         "idf, computed as log(1 + (N - n + 0.5) / (n + 0.5)) from:",
@@ -176,12 +176,12 @@ public class BM25Similarity extends Similarity {
         termStats.length == 1
             ? idfExplain(collectionStats, termStats[0])
             : idfExplain(collectionStats, termStats);
-    float avgdl = avgFieldLength(collectionStats);
+    float avgdl = avgFieldLength(collectionStats);// // 每个字段平均词的个数
 
     float[] cache = new float[256];
     for (int i = 0; i < cache.length; i++) {
       cache[i] = 1f / (k1 * ((1 - b) + b * LENGTH_TABLE[i] / avgdl));
-    }
+    } // score = boost * idf * (freq * (k1 + 1)) / (freq + k1 * (1 - b + b * dl / avgdl))
     return new BM25Scorer(boost, k1, b, idf, avgdl, cache);
   }
 
@@ -200,10 +200,10 @@ public class BM25Similarity extends Similarity {
     private final Explanation idf;
 
     /** The average document length. */
-    private final float avgdl;
+    private final float avgdl; // 这个字段在文档的平均长度
 
     /** precomputed norm[256] with k1 * ((1 - b) + b * dl / avgdl) */
-    private final float[] cache;
+    private final float[] cache;// 缓存的是打分路径的一个中间结果
 
     /** weight (idf * boost) */
     private final float weight;
@@ -214,8 +214,8 @@ public class BM25Similarity extends Similarity {
       this.avgdl = avgdl;
       this.k1 = k1;
       this.b = b;
-      this.cache = cache;
-      this.weight = boost * idf.getValue().floatValue();
+      this.cache = cache; // 缓存的
+      this.weight = boost * idf.getValue().floatValue();// 越少，越有区分度，weight越大
     }
 
     private float doScore(float freq, float normInverse) {
@@ -228,12 +228,12 @@ public class BM25Similarity extends Similarity {
       // x -> 1 + x and x -> 1 - 1/x.
       // Finally we expand weight * (1 - 1 / (1 + freq * 1/norm)) to
       // weight - weight / (1 + freq * 1/norm), which runs slightly faster.
-      return weight - weight / (1f + freq * normInverse);
+      return weight - weight / (1f + freq * normInverse);//打分机制
     }
 
     @Override
     public float score(float freq, long encodedNorm) {
-      float normInverse = cache[((byte) encodedNorm) & 0xFF];
+      float normInverse = cache[((byte) encodedNorm) & 0xFF];// 取中间结果
       return doScore(freq, normInverse);
     }
 

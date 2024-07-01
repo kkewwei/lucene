@@ -135,7 +135,7 @@ public class HnswGraphBuilder implements HnswBuilder {
   protected HnswGraphBuilder(
       RandomVectorScorerSupplier scorerSupplier, int M, int beamWidth, long seed, int graphSize)
       throws IOException {
-    this(scorerSupplier, M, beamWidth, seed, new OnHeapHnswGraph(M, graphSize));
+    this(scorerSupplier, M, beamWidth, seed, new OnHeapHnswGraph(M, graphSize));// 图中点的出度，计算最大出度
   }
 
   protected HnswGraphBuilder(
@@ -301,14 +301,14 @@ public class HnswGraphBuilder implements HnswBuilder {
     if (frozen) {
       throw new IllegalStateException("Graph builder is already frozen");
     }
-    final int nodeLevel = getRandomGraphLevel(ml, random);
+    final int nodeLevel = getRandomGraphLevel(ml, random);// 随机分配一个层级
     // first add nodes to all levels
     for (int level = nodeLevel; level >= 0; level--) {
-      hnsw.addNode(level, node);
+      hnsw.addNode(level, node);// 添加到对应的层级
     }
     // then promote itself as entry node if entry node is not set (this is the first ever node of
     // the graph)
-    if (hnsw.trySetNewEntryNode(node, nodeLevel)) {
+    if (hnsw.trySetNewEntryNode(node, nodeLevel)) {// 图中第一个点
       return;
     }
     // if the entry node is already set, then we have to do all connections first before we can

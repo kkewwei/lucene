@@ -39,9 +39,9 @@ import org.apache.lucene.util.LongsRef;
 import org.apache.lucene.util.TimSorter;
 import org.apache.lucene.util.automaton.CompiledAutomaton;
 import org.apache.lucene.util.packed.PackedInts;
-
+// 写_X.tim,_X.tip, _X.doc, _X.pos文件。
 final class FreqProxTermsWriter extends TermsHash {
-
+  // segment内固定，，每个DocumentsWriterPerThread都拥有单独的一个
   FreqProxTermsWriter(
       final IntBlockPool.Allocator intBlockAllocator,
       final ByteBlockPool.Allocator byteBlockAllocator,
@@ -49,36 +49,36 @@ final class FreqProxTermsWriter extends TermsHash {
       TermsHash termVectors) {
     super(intBlockAllocator, byteBlockAllocator, bytesUsed, termVectors);
   }
-
-  private void applyDeletes(SegmentWriteState state, Fields fields) throws IOException {
+  // 根据倒排索引信息，找到对应field对应term的词列表，然后遍历删除
+  private void applyDeletes(SegmentWriteState state, Fields fields) throws IOException { // fields=FreqProxFields
     // Process any pending Term deletes for this newly
     // flushed segment:
-    if (state.segUpdates != null && state.segUpdates.deleteTerms.size() > 0) {
+    if (state.segUpdates != null && state.segUpdates.deleteTerms.size() > 0) {//对于term类的删除
 
       BufferedUpdates.DeletedTerms segDeletes = state.segUpdates.deleteTerms;
-      FrozenBufferedUpdates.TermDocsIterator iterator =
+      FrozenBufferedUpdates.TermDocsIterator iterator =// 词都是排好序了
           new FrozenBufferedUpdates.TermDocsIterator(fields, true);
 
-      segDeletes.forEachOrdered(
-          (term, docId) -> {
-            DocIdSetIterator postings = iterator.nextTerm(term.field(), term.bytes());
-            if (postings != null) {
+      segDeletes.forEachOrdered(// 遍历每一个deleteTerm
+          (term, docId) -> {// docId:需要删除文档的上限
+            DocIdSetIterator postings = iterator.nextTerm(term.field(), term.bytes());//首先确定哪个FreqProxFields$FreqProxTermsEnum，然后再确定哪个term的docId列表
+            if (postings != null) {// 找到了这个
               assert docId < PostingsEnum.NO_MORE_DOCS;
-              int doc;
-              while ((doc = postings.nextDoc()) < docId) {
-                if (state.liveDocs == null) {
+              int doc;// delDocLimit之后的文件不用再考虑删除。
+              while ((doc = postings.nextDoc()) < docId) {// 主要是统计有多少文档需要删除+把不删除的文档仍然保存在liveDocs中
+                if (state.liveDocs == null) {// 第一次置位
                   state.liveDocs = new FixedBitSet(state.segmentInfo.maxDoc());
-                  state.liveDocs.set(0, state.segmentInfo.maxDoc());
+                  state.liveDocs.set(0, state.segmentInfo.maxDoc());// 置位0-maxDoc位全部为1
                 }
-                if (state.liveDocs.getAndClear(doc)) {
-                  state.delCountOnFlush++;
+                if (state.liveDocs.getAndClear(doc)) {// 仅仅是把需要删除的文档从live中去掉
+                  state.delCountOnFlush++;// 计算硬删除
                 }
               }
             }
           });
     }
   }
-
+  // 单个segment刷新时，写tvd、tvm文件，然后在写tip、tim文件
   @Override
   public void flush(
       Map<String, TermsHashPerField> fieldsToFlush,
@@ -86,15 +86,15 @@ final class FreqProxTermsWriter extends TermsHash {
       Sorter.DocMap sortMap,
       NormsProducer norms)
       throws IOException {
-    super.flush(fieldsToFlush, state, sortMap, norms);
+    super.flush(fieldsToFlush, state, sortMap, norms);//单个文档粒度的： tvd、tvm文件构建过程
 
     // Gather all fields that saw any postings:
-    List<FreqProxTermsWriterPerField> allFields = new ArrayList<>();
+    List<FreqProxTermsWriterPerField> allFields = new ArrayList<>(); // 就四个域
 
-    for (TermsHashPerField f : fieldsToFlush.values()) {
+    for (TermsHashPerField f : fieldsToFlush.values()) { // 把所有字段都弄出来
       final FreqProxTermsWriterPerField perField = (FreqProxTermsWriterPerField) f;
-      if (perField.getNumTerms() > 0) {
-        perField.sortTerms();
+      if (perField.getNumTerms() > 0) {// FreqProxTermsWriterPerField里面存储的是该域所有文档所有distinct(term)
+        perField.sortTerms(); // 该域所有文档所有的termId根据大小进行排序。主要是是为了二分快速定位这个词是否存在
         assert perField.indexOptions != IndexOptions.NONE;
         allFields.add(perField);
       }
@@ -106,11 +106,11 @@ final class FreqProxTermsWriter extends TermsHash {
     }
 
     // Sort by field name
-    CollectionUtil.introSort(allFields);
+    CollectionUtil.introSort(allFields); //基于fieldName进行排序。里面的termId已经排好序了
 
     Fields fields = new FreqProxFields(allFields);
-    applyDeletes(state, fields);
-    if (sortMap != null) {
+    applyDeletes(state, fields); //通过倒排索引结构进行删除，会根据倒排进行term类精确删除操作（结果放入liveDocs中），而不会进行query类删除。（就是硬删除）
+    if (sortMap != null) {// 为null，（放这里删除的原因是希望利用内存中的倒排索引结构找到文档然后删除）
       final Sorter.DocMap docMap = sortMap;
       final FieldInfos infos = state.fieldInfos;
       fields =
@@ -129,12 +129,12 @@ final class FreqProxTermsWriter extends TermsHash {
     }
 
     try (FieldsConsumer consumer =
-        state.segmentInfo.getCodec().postingsFormat().fieldsConsumer(state)) {
-      consumer.write(fields, norms);
+        state.segmentInfo.getCodec().postingsFormat().fieldsConsumer(state)) { // 返回 FieldsWriter
+      consumer.write(fields, norms);// 需要进去看下, 跑到  。创建字典结构，有tim tip、doc文件文件
     }
   }
 
-  @Override
+  @Override  // segment内共享，segment完成后就清空
   public TermsHashPerField addField(FieldInvertState invertState, FieldInfo fieldInfo) {
     return new FreqProxTermsWriterPerField(
         invertState, this, fieldInfo, nextTermsHash.addField(invertState, fieldInfo));

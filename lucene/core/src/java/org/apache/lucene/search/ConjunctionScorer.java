@@ -19,7 +19,7 @@ package org.apache.lucene.search;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
-
+// 联合score
 /** Scorer for conjunctions, sets of queries, all of which are required. */
 class ConjunctionScorer extends Scorer {
 
@@ -34,7 +34,7 @@ class ConjunctionScorer extends Scorer {
   ConjunctionScorer(Collection<Scorer> required, Collection<Scorer> scorers) {
     assert required.containsAll(scorers);
     this.disi = ConjunctionUtils.intersectScorers(required);
-    this.scorers = scorers.toArray(Scorer[]::new);
+    this.scorers = scorers.toArray(Scorer[]::new);// 需要score的单独放这里
     this.required = required;
   }
 

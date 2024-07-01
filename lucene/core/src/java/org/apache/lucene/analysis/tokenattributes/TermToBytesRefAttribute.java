@@ -55,5 +55,5 @@ public interface TermToBytesRefAttribute extends Attribute {
    *
    * @return a BytesRef to be indexed (only stays valid until token stream gets incremented)
    */
-  public BytesRef getBytesRef();
+  public BytesRef getBytesRef(); //
 }

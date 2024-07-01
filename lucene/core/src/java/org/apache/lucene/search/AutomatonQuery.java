@@ -40,7 +40,7 @@ import org.apache.lucene.util.automaton.CompiledAutomaton;
  *
  * @lucene.experimental
  */
-public class AutomatonQuery extends MultiTermQuery implements Accountable {
+public class AutomatonQuery extends MultiTermQuery implements Accountable {// 支持prefixQuery,RegexQuery,TermRangeQuery,WildcardQuery
   private static final long BASE_RAM_BYTES =
       RamUsageEstimator.shallowSizeOfInstance(AutomatonQuery.class);
 

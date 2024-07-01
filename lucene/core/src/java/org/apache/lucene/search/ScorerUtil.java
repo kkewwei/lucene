@@ -35,29 +35,29 @@ class ScorerUtil {
   private static final Class<?> DEFAULT_ACCEPT_DOCS_CLASS =
       new FixedBitSet(1).asReadOnlyBits().getClass();
 
-  static long costWithMinShouldMatch(LongStream costs, int numScorers, int minShouldMatch) {
+  static long costWithMinShouldMatch(LongStream costs, int numScorers, int minShouldMatch) { // minShouldMatch=0或者1的效果，cost=c1+c2+c3+...cn
     // the idea here is the following: a boolean query c1,c2,...cn with minShouldMatch=m
     // could be rewritten to:
     // (c1 AND (c2..cn|msm=m-1)) OR (!c1 AND (c2..cn|msm=m))
     // if we assume that clauses come in ascending cost, then
-    // the cost of the first part is the cost of c1 (because the cost of a conjunction is
+    // the cost of the first part is the cost of c1 (because the cost of a conjunction is// (c1 AND (c2..cn|msm=m-1))的cost就是c1，因为cost就是成本最低的那个
     // the cost of the least costly clause)
-    // the cost of the second part is the cost of finding m matches among the c2...cn
-    // remaining clauses
+    // the cost of the second part is the cost of finding m matches among the c2...cn// (!c1 AND (c2..cn|msm=m))的cost就是(c2..cn|msm=m)
+    // remaining clauses// 最终cost=c1+c2+[c(n-m+1)..cn|m]=c1+c2+...+(n-m+1)
     // since it is a disjunction overall, the total cost is the sum of the costs of these
     // two parts
 
     // If we recurse infinitely, we find out that the cost of a msm query is the sum of the
     // costs of the num_scorers - minShouldMatch + 1 least costly scorers
     final PriorityQueue<Long> pq =
-        new PriorityQueue<Long>(numScorers - minShouldMatch + 1) {
+        new PriorityQueue<Long>(numScorers - minShouldMatch + 1) {// 完全理解了：(c1 AND (c2..cn|msm=m-1)) OR (!c1 AND (c2..cn|msm=m))=c1+(c2....cn)|m=c1+c2+c3
           @Override
           protected boolean lessThan(Long a, Long b) {
-            return a > b;
+            return a > b;// 新元素只有比栈顶元素小，才可以放进去
           }
         };
     costs.forEach(pq::insertWithOverflow);
-    return StreamSupport.stream(pq.spliterator(), false).mapToLong(Number::longValue).sum();
+    return StreamSupport.stream(pq.spliterator(), false).mapToLong(Number::longValue).sum();// 求取最小的前n个最小值。
   }
 
   /**
@@ -68,10 +68,10 @@ class ScorerUtil {
    */
   static DocIdSetIterator likelyImpactsEnum(DocIdSetIterator it) {
     if (it.getClass() != DEFAULT_IMPACTS_ENUM_CLASS
-        && it.getClass() != FilterDocIdSetIterator.class) {
+        && it.getClass() != FilterDocIdSetIterator.class) {// 要不FilterDocIdSetIterator
       it = new FilterDocIdSetIterator(it);
-    }
-    return it;
+    }// 看起来主要加快BlockPostingsEnum的内联调用，对别的是危害的。
+    return it;// 要不getImpactsEnumImpl
   }
 
   /**

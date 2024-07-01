@@ -41,7 +41,7 @@ final class PForUtil {
   static {
     assert ForUtil.BLOCK_SIZE <= 256 : "blocksize must fit in one byte. got " + ForUtil.BLOCK_SIZE;
   }
-
+  // 往pos写入
   /** Encode 128 integers from {@code ints} into {@code out}. */
   void encode(int[] ints, DataOutput out) throws IOException {
     // histogram of bit widths
@@ -84,7 +84,7 @@ final class PForUtil {
       assert exceptionCount == numExceptions : exceptionCount + " " + numExceptions;
     }
 
-    if (allEqual(ints) && maxBitsRequired <= 8) {
+    if (allEqual(ints) && maxBitsRequired <= 8) {// 如果全部equal
       for (int i = 0; i < numExceptions; ++i) {
         exceptions[2 * i + 1] =
             (byte) (Byte.toUnsignedInt(exceptions[2 * i + 1]) << patchedBitsRequired);

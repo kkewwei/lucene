@@ -19,7 +19,7 @@ package org.apache.lucene.search;
 /** Controls {@link LeafFieldComparator} how to skip documents */
 public enum Pruning {
   /** Not allowed to skip documents. */
-  NONE,
+  NONE,// 若sort的字段是第二个，就不会bkd跳过
   /**
    * Allowed to skip documents that compare strictly better than the top value, or strictly worse
    * than the bottom value.

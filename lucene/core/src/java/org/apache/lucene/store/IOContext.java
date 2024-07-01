@@ -33,7 +33,7 @@ public interface IOContext {
   /** Context is an enumerator which specifies the context in which the Directory is being used. */
   enum Context {
     /** Context for reads and writes that are associated with a merge. */
-    MERGE,
+    MERGE,// 所指目录用作：merge,read,flush,default
     /** Context for writes that are associated with a segment flush. */
     FLUSH,
     /** Default context, can be used for reading or writing. */

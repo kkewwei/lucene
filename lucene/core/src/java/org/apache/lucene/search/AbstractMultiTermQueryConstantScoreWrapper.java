@@ -145,7 +145,7 @@ abstract class AbstractMultiTermQueryConstantScoreWrapper<Q extends MultiTermQue
      * invoked, {@code termsEnum} will be positioned on the next "uncollected" term. The terms that
      * were already collected will be in {@code collectedTerms}.
      */
-    protected abstract WeightOrDocIdSetIterator rewriteInner(
+    protected abstract WeightOrDocIdSetIterator rewriteInner(//超过16个term才进来
         LeafReaderContext context,
         int fieldDocCount,
         Terms terms,
@@ -154,7 +154,7 @@ abstract class AbstractMultiTermQueryConstantScoreWrapper<Q extends MultiTermQue
         long leadCost)
         throws IOException;
 
-    private WeightOrDocIdSetIterator rewriteAsBooleanQuery(
+    private WeightOrDocIdSetIterator rewriteAsBooleanQuery(// 不超过16个term
         LeafReaderContext context, List<TermAndState> collectedTerms) throws IOException {
       BooleanQuery.Builder bq = new BooleanQuery.Builder();
       for (TermAndState t : collectedTerms) {
@@ -166,13 +166,13 @@ abstract class AbstractMultiTermQueryConstantScoreWrapper<Q extends MultiTermQue
       final Weight weight = searcher.rewrite(q).createWeight(searcher, scoreMode, score());
       return new WeightOrDocIdSetIterator(weight);
     }
-
+      // termsEnum: 获取这个q匹配的所有terms在fst中所有匹配的倒排表
     private boolean collectTerms(int fieldDocCount, TermsEnum termsEnum, List<TermAndState> terms)
         throws IOException {
-      final int threshold =
+      final int threshold =//最多16个
           Math.min(BOOLEAN_REWRITE_TERM_COUNT_THRESHOLD, IndexSearcher.getMaxClauseCount());
-      for (int i = 0; i < threshold; i++) {
-        final BytesRef term = termsEnum.next();
+      for (int i = 0; i < threshold; i++) {//只收集16个term
+        final BytesRef term = termsEnum.next(); // termsEnum: 获取这个terms在fst中所有匹配的倒排表
         if (term == null) {
           return true;
         }
@@ -180,7 +180,7 @@ abstract class AbstractMultiTermQueryConstantScoreWrapper<Q extends MultiTermQue
         int docFreq = termsEnum.docFreq();
         TermAndState termAndState =
             new TermAndState(BytesRef.deepCopyOf(term), state, docFreq, termsEnum.totalTermFreq());
-        if (fieldDocCount == docFreq) {
+        if (fieldDocCount == docFreq) { // 若词在每个文档中都出现了，那么就直接返回
           // If the term contains every document with a value for the field, we can ignore all
           // other terms:
           terms.clear();
@@ -189,7 +189,7 @@ abstract class AbstractMultiTermQueryConstantScoreWrapper<Q extends MultiTermQue
         }
         terms.add(termAndState);
       }
-      return termsEnum.next() == null;
+      return termsEnum.next() == null;// 收集完了
     }
 
     private Scorer scorerForIterator(DocIdSetIterator iterator) {
@@ -221,8 +221,8 @@ abstract class AbstractMultiTermQueryConstantScoreWrapper<Q extends MultiTermQue
 
       assert terms != null;
 
-      final int fieldDocCount = terms.getDocCount();
-      final TermsEnum termsEnum = q.getTermsEnum(terms);
+      final int fieldDocCount = terms.getDocCount();// 包含这个field的文档个数
+      final TermsEnum termsEnum = q.getTermsEnum(terms);// 这个query匹配的所有terms的倒排表
       assert termsEnum != null;
 
       final long cost;
@@ -273,16 +273,16 @@ abstract class AbstractMultiTermQueryConstantScoreWrapper<Q extends MultiTermQue
               }
             };
       } else {
-        cost = estimateCost(terms, q.getTermsCount());
+        cost = estimateCost(terms, q.getTermsCount());// 就是看这些terms匹配的文档数
         weightOrIteratorSupplier =
             leadCost -> {
               List<TermAndState> collectedTerms = new ArrayList<>();
-              if (collectTerms(fieldDocCount, termsEnum, collectedTerms)) {
+              if (collectTerms(fieldDocCount, termsEnum, collectedTerms)) {// terms收集完了，少于16个term
                 return rewriteAsBooleanQuery(context, collectedTerms);
               } else {
                 // Too many terms to rewrite as a simple bq.
                 // Invoke rewriteInner logic to handle rewriting:
-                return rewriteInner(
+                return rewriteInner(// 如果超过16个term， 这里会递归继续。会分CONSTANT_SCORE_BLENDED_REWRITE和CONSTANT_SCORE_REWRITE两种情况
                     context, fieldDocCount, terms, termsEnum, collectedTerms, leadCost);
               }
             };
@@ -363,13 +363,13 @@ abstract class AbstractMultiTermQueryConstantScoreWrapper<Q extends MultiTermQue
       if (queryTermsCount == -1) {
         cost = terms.getSumDocFreq();
       } else {
-        long potentialExtraCost = terms.getSumDocFreq();
-        final long indexedTermCount = terms.size();
+        long potentialExtraCost = terms.getSumDocFreq();// 总的总文档数
+        final long indexedTermCount = terms.size(); // 这个term总共的词个数
         if (indexedTermCount != -1) {
           potentialExtraCost -= indexedTermCount;
         }
-        cost = queryTermsCount + potentialExtraCost;
-      }
+        cost = queryTermsCount + potentialExtraCost;//
+      }// 预估逻辑比较简单，总文档书-总次数+terms里面词的个数
 
       return cost;
     }

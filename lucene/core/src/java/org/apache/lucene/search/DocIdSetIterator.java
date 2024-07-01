@@ -47,7 +47,7 @@ public abstract class DocIdSetIterator {
   public static DocIdSetIterator range(int minDoc, int maxDoc) {
     if (minDoc >= maxDoc) {
       throw new IllegalArgumentException(
-          "minDoc must be < maxDoc but got minDoc=" + minDoc + " maxDoc=" + maxDoc);
+        "minDoc must be < maxDoc but got minDoc=" + minDoc + " maxDoc=" + maxDoc);
     }
     if (minDoc < 0) {
       throw new IllegalArgumentException("minDoc must be >= 0 but got minDoc=" + minDoc);
@@ -100,7 +100,7 @@ public abstract class DocIdSetIterator {
 
     @Override
     public int docIDRunEnd() throws IOException {
-      return maxDoc;
+      return maxDoc;// 在这个范围内的文档，都有相同的打分
     }
   }
 
@@ -131,7 +131,7 @@ public abstract class DocIdSetIterator {
    *
    * @since 2.9
    */
-  public abstract int nextDoc() throws IOException;
+  public abstract int nextDoc() throws IOException; // 读取下一个匹配的结果
 
   /**
    * Advances to the first beyond the current whose document number is greater than or equal to
@@ -159,7 +159,7 @@ public abstract class DocIdSetIterator {
    * recommended that you check for that value in each call to this method.
    *
    * @since 2.9
-   */
+   */ //查找第一个，使其doc个数大于等于target
   public abstract int advance(int target) throws IOException;
 
   /**
@@ -202,7 +202,7 @@ public abstract class DocIdSetIterator {
    *
    * @lucene.internal
    */
-  public void intoBitSet(int upTo, FixedBitSet bitSet, int offset) throws IOException {
+  public void intoBitSet(int upTo, FixedBitSet bitSet, int offset) throws IOException {// 比如是segment的baseDocId
     assert offset <= docID() : "offset=" + offset + " docID()=" + docID() + " upTo=" + upTo;
     for (int doc = docID(); doc < upTo; doc = nextDoc()) {
       bitSet.set(doc - offset);

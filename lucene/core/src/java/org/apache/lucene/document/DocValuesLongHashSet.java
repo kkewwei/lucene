@@ -25,7 +25,7 @@ import org.apache.lucene.util.RamUsageEstimator;
 import org.apache.lucene.util.packed.PackedInts;
 
 /** Set of longs, optimized for docvalues usage */
-final class DocValuesLongHashSet implements Accountable {
+final class DocValuesLongHashSet implements Accountable {// 和普通数组的区别，就是便于快速查找是否包含，并且快速确定最大最小值
   private static final long BASE_RAM_BYTES =
       RamUsageEstimator.shallowSizeOfInstance(DocValuesLongHashSet.class);
 
@@ -89,7 +89,7 @@ final class DocValuesLongHashSet implements Accountable {
    * <p>You should use {@link #minValue} and {@link #maxValue} to guide/terminate iteration before
    * calling this.
    */
-  boolean contains(long l) {
+  boolean contains(long l) {// 便于快速查找
     if (l == MISSING) {
       return hasMissingValue;
     }

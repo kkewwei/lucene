@@ -41,19 +41,19 @@ public final class OnHeapFSTStore implements FSTReader {
 
   /** Used at read time when the FST fits into a single byte[]. */
   private final byte[] bytesArray;
-
+  // 这里是倒排读取，因为是从尾像头存储的，那么读取时候就从尾向头读取
   public OnHeapFSTStore(int maxBlockBits, DataInput in, long numBytes) throws IOException {
     if (maxBlockBits < 1 || maxBlockBits > 30) {
       throw new IllegalArgumentException("maxBlockBits should be 1 .. 30; got " + maxBlockBits);
     }
 
-    if (numBytes > 1 << maxBlockBits) {
+    if (numBytes > 1 << maxBlockBits) {// 大于1G，选用
       // FST is big: we need multiple pages
       dataOutput = (ReadWriteDataOutput) getOnHeapReaderWriter(maxBlockBits);
       dataOutput.copyBytes(in, numBytes);
       dataOutput.freeze();
       bytesArray = null;
-    } else {
+    } else {// 小于1G选用
       // FST fits into a single block: use ByteArrayBytesStoreReader for less overhead
       bytesArray = new byte[(int) numBytes];
       in.readBytes(bytesArray, 0, bytesArray.length);

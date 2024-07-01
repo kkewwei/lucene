@@ -27,15 +27,15 @@ import org.apache.lucene.util.Counter;
 import org.apache.lucene.util.FixedBitSet;
 import org.apache.lucene.util.packed.PackedInts;
 import org.apache.lucene.util.packed.PackedLongValues;
-
+// // 一个docId只能拥有这个字段一个value
 /** Buffers up pending long per doc, then flushes when segment flushes. */
 class NumericDocValuesWriter extends DocValuesWriter<NumericDocValues> {
 
-  private final PackedLongValues.Builder pending;
-  private PackedLongValues finalValues;
+  private final PackedLongValues.Builder pending; // 存储的每个数据
+  private PackedLongValues finalValues;//// 存储的每个数据
   private final Counter iwBytesUsed;
   private long bytesUsed;
-  private DocsWithFieldSet docsWithField;
+  private DocsWithFieldSet docsWithField;// 依次存储含这个字段的docId
   private final FieldInfo fieldInfo;
   private int lastDocID = -1;
 
@@ -143,7 +143,7 @@ class NumericDocValuesWriter extends DocValuesWriter<NumericDocValues> {
 
   static DocValuesProducer getDocValuesProducer(
       FieldInfo writerFieldInfo,
-      PackedLongValues values,
+      PackedLongValues values,//
       DocsWithFieldSet docsWithField,
       Sorter.DocMap sortMap)
       throws IOException {
@@ -174,13 +174,13 @@ class NumericDocValuesWriter extends DocValuesWriter<NumericDocValues> {
 
   // iterates over the values we have in ram
   static class BufferedNumericDocValues extends NumericDocValues {
-    final PackedLongValues.Iterator iter;
-    final DocIdSetIterator docsWithField;
+    final PackedLongValues.Iterator iter;// 针对sortset的话，是orderId，也就是大小排序后的顺序；若是sortednumber，则是原始value值
+    final DocIdSetIterator docsWithField;// 有字段的value
     private long value;
 
     BufferedNumericDocValues(PackedLongValues values, DocIdSetIterator docsWithFields) {
-      this.iter = values.iterator();
-      this.docsWithField = docsWithFields;
+      this.iter = values.iterator();// 针对sortset的话，是orderId，也就是大小排序后的顺序；若是sortednumber，则是原始value值
+      this.docsWithField = docsWithFields;// 包含这个字段的docId
     }
 
     @Override
@@ -192,7 +192,7 @@ class NumericDocValuesWriter extends DocValuesWriter<NumericDocValues> {
     public int nextDoc() throws IOException {
       int docID = docsWithField.nextDoc();
       if (docID != NO_MORE_DOCS) {
-        value = iter.next();
+        value = iter.next();// 该字段每个doc只有一个value。若是sortedset，则是orderId，若是sortednumber，则是原始值
       }
       return docID;
     }

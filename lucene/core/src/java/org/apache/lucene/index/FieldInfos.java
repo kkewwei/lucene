@@ -46,14 +46,14 @@ public class FieldInfos implements Iterable<FieldInfo> {
   /** An instance without any fields. */
   public static final FieldInfos EMPTY = new FieldInfos(new FieldInfo[0]);
 
-  private final boolean hasFreq;
+  private final boolean hasFreq; //所有域的汇总
   private final boolean hasPostings;
-  private final boolean hasProx;
+  private final boolean hasProx; // keyword字段是不保存词频的
   private final boolean hasPayloads;
-  private final boolean hasOffsets;
-  private final boolean hasTermVectors;
+  private final boolean hasOffsets;//所有域的汇总
+  private final boolean hasTermVectors;//所有域的汇总
   private final boolean hasNorms;
-  private final boolean hasDocValues;
+  private final boolean hasDocValues; //所有域的汇总
   private final boolean hasPointValues;
   private final boolean hasVectorValues;
   private final String softDeletesField;
@@ -62,7 +62,7 @@ public class FieldInfos implements Iterable<FieldInfo> {
 
   // used only by fieldInfo(int)
   private final FieldInfo[] byNumber;
-  private final HashMap<String, FieldInfo> byName;
+  private final HashMap<String, FieldInfo> byName;// 字段->域信息
 
   /** Iterator in ascending order of field number. */
   private final Collection<FieldInfo> values;
@@ -367,15 +367,15 @@ public class FieldInfos implements Iterable<FieldInfo> {
       FieldDimensions fieldDimensions,
       FieldVectorProperties fieldVectorProperties) {}
 
-  static final class FieldNumbers {
+  static final class FieldNumbers {// 全局性的
 
-    private final IntObjectHashMap<String> numberToName;
+    private final IntObjectHashMap<String> numberToName;// 域编号->域名
     private final Map<String, FieldProperties> fieldProperties;
 
     // TODO: we should similarly catch an attempt to turn
     // norms back on after they were already committed; today
     // we silently discard the norm but this is badly trappy
-    private int lowestUnassignedFieldNumber = -1;
+    private int lowestUnassignedFieldNumber = -1; // 当前最新的没有使用到的域number
 
     // The soft-deletes field from IWC to enforce a single soft-deletes field
     private final String softDeletesFieldName;
@@ -383,7 +383,7 @@ public class FieldInfos implements Iterable<FieldInfo> {
     // The parent document field from IWC to mark parent document when indexing
     private final String parentFieldName;
 
-    FieldNumbers(String softDeletesFieldName, String parentFieldName) {
+    FieldNumbers(String softDeletesFieldName, String parentFieldName) {// 所有segment中的字段的全局唯一性
       this.numberToName = new IntObjectHashMap<>();
       this.fieldProperties = new HashMap<>();
       this.softDeletesFieldName = softDeletesFieldName;
@@ -416,20 +416,20 @@ public class FieldInfos implements Iterable<FieldInfo> {
       String fieldName = fi.getName();
       verifySoftDeletedFieldName(fieldName, fi.isSoftDeletesField());
       verifyParentFieldName(fieldName, fi.isParentField());
-      var fieldProperties = this.fieldProperties.get(fieldName);
+      var fieldProperties = this.fieldProperties.get(fieldName);;// 字段的全局唯一性id
 
       if (fieldProperties != null) {
         verifySameSchema(fi);
-      } else { // first time we see this field in this index
+      } else { // first time we see this field in this index// 空的跑这里
         int fieldNumber;
-        if (fi.number != -1 && numberToName.containsKey(fi.number) == false) {
+        if (fi.number != -1 && numberToName.containsKey(fi.number) == false) {// 说明这个字段是历史存在的
           // cool - we can use this number globally
           fieldNumber = fi.number;
-        } else {
+        } else {// 是一个新的字段
           // find a new FieldNumber
           while (numberToName.containsKey(++lowestUnassignedFieldNumber)) {
             // might not be up to date - lets do the work once needed
-          }
+          }  // 给这个域分配一个字段（从低点给分配一个id）
           fieldNumber = lowestUnassignedFieldNumber;
         }
         assert fieldNumber >= 0;
@@ -699,8 +699,8 @@ public class FieldInfos implements Iterable<FieldInfo> {
   }
 
   static final class Builder {
-    private final HashMap<String, FieldInfo> byName = new HashMap<>();
-    final FieldNumbers globalFieldNumbers;
+    private final HashMap<String, FieldInfo> byName = new HashMap<>(); // 存放的所有name->FieldInfo映射关系， 由globalFieldNumbers保证全局唯一
+    final FieldNumbers globalFieldNumbers; //globalFieldNumberMap： 所有IndexWriter构造函数中初始化，所有IndexWriter共享一个，在其构造函数中初始化的, 所有segment都被计算在内
     private boolean finished;
 
     /** Creates a new instance with the given {@link FieldNumbers}. */
@@ -823,7 +823,7 @@ public class FieldInfos implements Iterable<FieldInfo> {
       }
       return true;
     }
-
+// 这个segment总的段数
     FieldInfos finish() {
       finished = true;
       return new FieldInfos(byName.values().toArray(FieldInfo[]::new));

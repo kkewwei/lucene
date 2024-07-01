@@ -72,7 +72,7 @@ public class Lucene95Codec extends Codec {
   private final FieldInfosFormat fieldInfosFormat = new Lucene94FieldInfosFormat();
   private final SegmentInfoFormat segmentInfosFormat = new Lucene90SegmentInfoFormat();
   private final LiveDocsFormat liveDocsFormat = new Lucene90LiveDocsFormat();
-  private final CompoundFormat compoundFormat = new Lucene90CompoundFormat();
+  private final CompoundFormat compoundFormat = new Lucene90CompoundFormat(); // 复合文件读取
   private final NormsFormat normsFormat = new Lucene90NormsFormat();
 
   private final PostingsFormat defaultPostingsFormat;
@@ -102,7 +102,7 @@ public class Lucene95Codec extends Codec {
         }
       };
 
-  private final StoredFieldsFormat storedFieldsFormat;
+  private final StoredFieldsFormat storedFieldsFormat; // Lucene50StoredFieldsFormat
 
   /** Instantiates a new codec. */
   public Lucene95Codec() {
@@ -119,13 +119,13 @@ public class Lucene95Codec extends Codec {
     this.storedFieldsFormat =
         new Lucene90StoredFieldsFormat(Objects.requireNonNull(mode).storedMode);
     this.defaultPostingsFormat = new Lucene90PostingsFormat();
-    this.defaultDVFormat = new Lucene90DocValuesFormat();
+    this.defaultDVFormat = new Lucene90DocValuesFormat(); // 申请一个默认Lucene84PostingsFormat
     this.defaultKnnVectorsFormat = new Lucene95HnswVectorsFormat();
   }
 
   @Override
   public final StoredFieldsFormat storedFieldsFormat() {
-    return storedFieldsFormat;
+    return storedFieldsFormat;// Lucene50StoredFieldsFormat
   }
 
   @Override
@@ -140,12 +140,12 @@ public class Lucene95Codec extends Codec {
 
   @Override
   public final FieldInfosFormat fieldInfosFormat() {
-    return fieldInfosFormat;
+    return fieldInfosFormat;// Lucene60FieldInfosFormat
   }
 
   @Override
   public SegmentInfoFormat segmentInfoFormat() {
-    return segmentInfosFormat;
+    return segmentInfosFormat;// Lucene70Segement
   }
 
   @Override
@@ -155,7 +155,7 @@ public class Lucene95Codec extends Codec {
 
   @Override
   public final CompoundFormat compoundFormat() {
-    return compoundFormat;
+    return compoundFormat; //Lucene50CompoundFormat
   }
 
   @Override
@@ -177,7 +177,7 @@ public class Lucene95Codec extends Codec {
    * future version of Lucene are only guaranteed to be able to read the default implementation,
    */
   public PostingsFormat getPostingsFormatForField(String field) {
-    return defaultPostingsFormat;
+    return defaultPostingsFormat;//Lucene50PostingsFormat
   }
 
   /**
@@ -190,7 +190,7 @@ public class Lucene95Codec extends Codec {
    * future version of Lucene are only guaranteed to be able to read the default implementation.
    */
   public DocValuesFormat getDocValuesFormatForField(String field) {
-    return defaultDVFormat;
+    return defaultDVFormat;// 就是DocValuesFormat
   }
 
   /**
@@ -207,7 +207,7 @@ public class Lucene95Codec extends Codec {
 
   @Override
   public final DocValuesFormat docValuesFormat() {
-    return docValuesFormat;
+    return docValuesFormat;// 就是DocValuesFormat
   }
 
   @Override

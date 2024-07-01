@@ -38,16 +38,16 @@ import org.apache.lucene.util.ThreadInterruptedException;
  *
  * <p>Once a {@link DocumentsWriterPerThread} is selected for flush the {@link
  * DocumentsWriterPerThread} will be checked out of the thread pool and won't be reused for
- * indexing. See {@link #checkout(DocumentsWriterPerThread)}.
- */
+ * indexing. See {@link #checkout(DocumentsWriterPerThread)}.// 每个shard 都拥有一个DocumentsWriterPerThreadPool
+ */ // DocumentsWriterPerThread 对象创建了DocConsumer 即IndexChain(整个索引的核心)，同时ThreadState  封装了DocumentsWriterPerThread对象，同时拥有每一个线程需要flush的对象数据，他得每一个成员和方法必须在一个时刻只能一个线程访问，调用者必须自己加锁，解锁。
 final class DocumentsWriterPerThreadPool implements Iterable<DocumentsWriterPerThread>, Closeable {
-
-  private final Set<DocumentsWriterPerThread> dwpts =
+  // DocumentsWriterPerThread定义在DocumentsWriter初始化中
+  private final Set<DocumentsWriterPerThread> dwpts =// freeList中的一定包含在dwpts；若某个写入触发es refresh的话，那么这个DocumentsWriterPerThread就从dwpts中彻底去掉了
       Collections.newSetFromMap(new IdentityHashMap<>());
-  private final LockableConcurrentApproximatePriorityQueue<DocumentsWriterPerThread> freeList =
+  private final LockableConcurrentApproximatePriorityQueue<DocumentsWriterPerThread> freeList =// 锁放这里，每写一个doc时，都会从freeList（删掉）申请获取一个现成的，若没有的话，则从新产生一个，并同时放入dwpts。写完后最终再放入
       new LockableConcurrentApproximatePriorityQueue<>();
-  private final Supplier<DocumentsWriterPerThread> dwptFactory;
-  private int takenWriterPermits = 0;
+  private final Supplier<DocumentsWriterPerThread> dwptFactory; // 定义在DocumentsWriter初始化中。每个shard,只会拥有唯一一个dwptFactory。
+  private int takenWriterPermits = 0;// 作用类似型号量，与刷新时相关，在全量刷新阶段，会短暂临时+1, 此时将不能继续不能创建新的ThreadState。
   private volatile boolean closed;
 
   DocumentsWriterPerThreadPool(Supplier<DocumentsWriterPerThread> dwptFactory) {
@@ -58,17 +58,17 @@ final class DocumentsWriterPerThreadPool implements Iterable<DocumentsWriterPerT
   synchronized int size() {
     return dwpts.size();
   }
-
+  // 不让再继续创建锁进行写入了
   synchronized void lockNewWriters() {
     // this is similar to a semaphore - we need to acquire all permits ie. takenWriterPermits must
     // be == 0
     // any call to lockNewWriters() must be followed by unlockNewWriters() otherwise we will
     // deadlock at some
     // point
-    assert takenWriterPermits >= 0;
+    assert takenWriterPermits >= 0;// 此时新线程将不能再获取新的ThreadState
     takenWriterPermits++;
   }
-
+  // 作用类似型号量
   synchronized void unlockNewWriters() {
     assert takenWriterPermits > 0;
     takenWriterPermits--;
@@ -82,9 +82,9 @@ final class DocumentsWriterPerThreadPool implements Iterable<DocumentsWriterPerT
    *
    * @return a new {@link DocumentsWriterPerThread}
    */
-  private synchronized DocumentsWriterPerThread newWriter() {
+  private synchronized DocumentsWriterPerThread newWriter() {// 使用了并发控制，难道只能有一个线程获取takenThreadStatePermits
     assert takenWriterPermits >= 0;
-    while (takenWriterPermits > 0) {
+    while (takenWriterPermits > 0) { // 只能一直等待
       // we can't create new DWPTs while not all permits are available
       try {
         wait();
@@ -99,7 +99,7 @@ final class DocumentsWriterPerThreadPool implements Iterable<DocumentsWriterPerT
     // end of the world it's violating the contract that we don't release any new DWPT after this
     // pool is closed
     ensureOpen();
-    DocumentsWriterPerThread dwpt = dwptFactory.get();
+    DocumentsWriterPerThread dwpt = dwptFactory.get(); // 将跑到 DocumentsWriter 构造函数perThreadPool的构造中
     dwpt.lock(); // lock so nobody else will get this DWPT
     dwpts.add(dwpt);
     return dwpt;
@@ -123,7 +123,7 @@ final class DocumentsWriterPerThreadPool implements Iterable<DocumentsWriterPerT
     // `freeList` at this point, it will be added later on once DocumentsWriter has indexed a
     // document into this DWPT and then gives it back to the pool by calling
     // #marksAsFreeAndUnlock.
-    return newWriter();
+    return newWriter();// 这个被锁
   }
 
   private void ensureOpen() {
@@ -149,11 +149,11 @@ final class DocumentsWriterPerThreadPool implements Iterable<DocumentsWriterPerT
             + state.isQueueAdvanced();
     assert contains(state)
         : "we tried to add a DWPT back to the pool but the pool doesn't know about this DWPT";
-    freeList.addAndUnlock(state, ramBytesUsed);
+    freeList.addAndUnlock(state, ramBytesUsed);// 将ThreadState归还，但是并没有将DocumentsWriterPerThread清空
   }
 
   @Override
-  public synchronized Iterator<DocumentsWriterPerThread> iterator() {
+  public synchronized Iterator<DocumentsWriterPerThread> iterator() {// 实际遍历的dwpts
     // copy on read - this is a quick op since num states is low
     return List.copyOf(dwpts).iterator();
   }
@@ -166,10 +166,10 @@ final class DocumentsWriterPerThreadPool implements Iterable<DocumentsWriterPerT
    */
   List<DocumentsWriterPerThread> filterAndLock(Predicate<DocumentsWriterPerThread> predicate) {
     List<DocumentsWriterPerThread> list = new ArrayList<>();
-    for (DocumentsWriterPerThread perThread : this) {
+    for (DocumentsWriterPerThread perThread : this) { //遍历的dwpts
       if (predicate.test(perThread)) {
-        perThread.lock();
-        if (isRegistered(perThread)) {
+        perThread.lock(); // 先锁住。锁不住的话，就代表还在被别人使用。那么flush线程就死等
+        if (isRegistered(perThread)) { //
           list.add(perThread);
         } else {
           // somebody else has taken this DWPT out of the pool.
@@ -185,7 +185,7 @@ final class DocumentsWriterPerThreadPool implements Iterable<DocumentsWriterPerT
    * Removes the given DWPT from the pool unless it's already been removed before.
    *
    * @return <code>true</code> iff the given DWPT has been removed. Otherwise <code>false</code>
-   */
+   */ // 从当前dwpts、freeList中删掉
   synchronized boolean checkout(DocumentsWriterPerThread perThread) {
     // The DWPT must be held by the current thread. This guarantees that concurrent calls to
     // #getAndLock cannot pull this DWPT out of the pool since #getAndLock does a DWPT#tryLock to

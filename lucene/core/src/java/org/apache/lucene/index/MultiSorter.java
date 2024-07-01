@@ -131,7 +131,7 @@ final class MultiSorter {
       }
       top.docID++;
       if (top.docID < top.maxDoc) {
-        setComparableValues(comparables, parents[top.readerIndex], top.readerIndex, top.docID);
+        setComparableValues(comparables, parents[top.readerIndex], top.readerIndex, top.docID);// 直接排序字段的值来进行比较
         queue.updateTop();
       } else {
         queue.pop();
@@ -148,7 +148,7 @@ final class MultiSorter {
       docMaps[i] =
           docID -> {
             if (liveDocs == null || liveDocs.get(docID)) {
-              return (int) remapped.get(docID);
+              return (int) remapped.get(docID);// remapped映射后的全局文档id
             } else {
               return -1;
             }

@@ -29,7 +29,7 @@ import org.apache.lucene.index.LeafReaderContext;
  * SortedNumericDocValuesField}s with the same values, an efficient range query could be created by
  * doing:
  *
- * <pre class="prettyprint">
+ * <pre class="prettyprint"> // 一个查询既可以使用pointQuery来查询，也可以使用dvQuery来查询，如果Range的代价小，可以用来引领合并过程，就走PointRangeQuery，直接构造bitset来进行迭代------ 如果range的代价高，构造bitset太慢，就使用SortedSetDocValuesRangeQuery，利用DocValues的全局docID序，并包含每个docid对应value的数据结构来做文档的匹配
  *   String field;
  *   long minValue, maxValue;
  *   Query pointQuery = LongPoint.newRangeQuery(field, minValue, maxValue);
@@ -52,10 +52,10 @@ import org.apache.lucene.index.LeafReaderContext;
  * equivalent doc values queries.
  *
  * @lucene.experimental
- */
+ */ // 只要设置为keyword的话，都会默认创建DocValue字段（可参考KeywordFieldMapper和NumberFieldMapper）
 public final class IndexOrDocValuesQuery extends Query {
-
-  private final Query indexQuery, dvQuery;
+ // 为什么会设计IndexOrDocValuesQuery，可以看下这篇文档https://www.amazingkoala.com.cn/Lucene/Search/2021/0701/196.html
+  private final Query indexQuery, dvQuery; //可以分别是LongPoint$1，SortedNumericDocValuesRangeQuery$1
 
   /**
    * Create an {@link IndexOrDocValuesQuery}. Both provided queries must match the same documents
@@ -108,11 +108,11 @@ public final class IndexOrDocValuesQuery extends Query {
     h = 31 * h + dvQuery.hashCode();
     return h;
   }
-
+  //range的会变成2部分
   @Override
   public Query rewrite(IndexSearcher indexSearcher) throws IOException {
-    Query indexRewrite = indexQuery.rewrite(indexSearcher);
-    Query dvRewrite = dvQuery.rewrite(indexSearcher);
+    Query indexRewrite = indexQuery.rewrite(indexSearcher);// indexQuery可以是LongPoint$1
+    Query dvRewrite = dvQuery.rewrite(indexSearcher);// dvQuery可以是SortedNumericDocValuesField$1
     if (indexRewrite.getClass() == MatchAllDocsQuery.class
         || dvRewrite.getClass() == MatchAllDocsQuery.class) {
       return MatchAllDocsQuery.INSTANCE;
@@ -137,11 +137,11 @@ public final class IndexOrDocValuesQuery extends Query {
   @Override
   public Weight createWeight(IndexSearcher searcher, ScoreMode scoreMode, float boost)
       throws IOException {
-    final Weight indexWeight = indexQuery.createWeight(searcher, scoreMode, boost);
-    final Weight dvWeight = dvQuery.createWeight(searcher, scoreMode, boost);
+    final Weight indexWeight = indexQuery.createWeight(searcher, scoreMode, boost); // indexWeight=PointRangeQuery$1,   indexQuery=LatLonPoint$1或者fst里面查找。 terms：[xxxx]
+    final Weight dvWeight = dvQuery.createWeight(searcher, scoreMode, boost);// dvWeight=LatLonDocValuesBoxQuery$1 , dvQuery=LatLonDocValuesBoxQuery   或者在dvd里面找
     return new Weight(this) {
       @Override
-      public Matches matches(LeafReaderContext context, int doc) throws IOException {
+      public Matches matches(LeafReaderContext context, int doc) throws IOException {// 单个文档的匹配，使用docValue更合适，而不是二叉树遍历。批量处理，使用Point处理更合适
         // We need to check a single doc, so the dv query should perform better
         return dvWeight.matches(context, doc);
       }
@@ -163,22 +163,22 @@ public final class IndexOrDocValuesQuery extends Query {
 
       @Override
       public ScorerSupplier scorerSupplier(LeafReaderContext context) throws IOException {
-        final ScorerSupplier indexScorerSupplier = indexWeight.scorerSupplier(context);
-        final ScorerSupplier dvScorerSupplier = dvWeight.scorerSupplier(context);
+        final ScorerSupplier indexScorerSupplier = indexWeight.scorerSupplier(context);//更适合少量匹配的文档  在fst里面找
+        final ScorerSupplier dvScorerSupplier = dvWeight.scorerSupplier(context);  // 在dvd里面查找
         if (indexScorerSupplier == null || dvScorerSupplier == null) {
           return null;
         }
         return new ScorerSupplier() {
-          @Override
+          @Override // 看起来是不始终不会跑这里的
           public Scorer get(long leadCost) throws IOException {
-            // At equal costs, doc values tend to be worse than points since they
+            // At equal costs, doc values tend to be worse than points since they 若cost相同，
             // still need to perform one comparison per document while points can
             // do much better than that given how values are organized. So we give
             // an arbitrary 8x penalty to doc values.
-            final long threshold = cost() >>> 3;
+            final long threshold = cost() >>> 3; // docValue需要逐个比对，成本更大，故docValue增加8倍并发
             if (threshold <= leadCost) {
               return indexScorerSupplier.get(leadCost);
-            } else {
+            } else { // 若leader就是indexScorerSupplier，那么肯定跑到indexScorerSupplier中了。若leader不是indexScorerSupplier，dv最多leadCost次对比，若indexScorerSupplier本来就小，就直接选择indexScorerSupplier了
               return dvScorerSupplier.get(leadCost);
             }
           }
@@ -187,12 +187,12 @@ public final class IndexOrDocValuesQuery extends Query {
           public BulkScorer bulkScorer() throws IOException {
             // Bulk scorers need to consume the entire set of docs, so using an
             // index structure should perform better
-            return indexScorerSupplier.bulkScorer();
+            return indexScorerSupplier.bulkScorer();// 需要消耗所有的文档，所以只能indexScorerSupplier。比如query只有一个number 的term查询，没有leader，我们不可能在用dvScorerSupplier全量匹配
           }
 
           @Override
           public long cost() {
-            return indexScorerSupplier.cost();
+            return indexScorerSupplier.cost();// point的预估耗时
           }
         };
       }

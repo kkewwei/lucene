@@ -33,26 +33,26 @@ final class SegmentTermsEnumFrame {
 
   boolean hasTerms;
   boolean hasTermsOrig;
-  boolean isFloor;
+  boolean isFloor;// 46个term仅构成一个block，就不是floor
 
   FST.Arc<BytesRef> arc;
 
   // static boolean DEBUG = BlockTreeTermsWriter.DEBUG;
 
   // File pointer where this block was loaded from
-  long fp;
+  long fp;// tim中该block起始位置
   long fpOrig;
-  long fpEnd;
+  long fpEnd;//这个block在tim中的截止位置
   long totalSuffixBytes; // for stats
 
   byte[] suffixBytes = new byte[128];
   final ByteArrayDataInput suffixesReader = new ByteArrayDataInput();
 
   byte[] suffixLengthBytes;
-  final ByteArrayDataInput suffixLengthsReader;
+  final ByteArrayDataInput suffixLengthsReader;// 全是内存数据了
 
   byte[] statBytes = new byte[64];
-  int statsSingletonRunLength = 0;
+  int statsSingletonRunLength = 0;// 这个block多少个term只在一个doc中出现过（压缩会用）
   final ByteArrayDataInput statsReader = new ByteArrayDataInput();
 
   int rewindPos;
@@ -62,41 +62,41 @@ final class SegmentTermsEnumFrame {
   int prefixLength;
 
   // Number of entries (term or sub-block) in this block
-  int entCount;
+  int entCount;// 在这个block中多少个term
 
   // Which term we will next read, or -1 if the block
   // isn't loaded yet
-  int nextEnt;
+  int nextEnt;// 这个block中，即将读取哪个term（一个block 26-45个term）,每读取一个term，nextEnt就+1 （假如查询第30个词，那么最终nextEnt=30）
 
   // True if this block is either not a floor block,
   // or, it's the last sub-block of a floor block
-  boolean isLastInFloor;
+  boolean isLastInFloor; // 获取46个词是一个整体，或者是floor block最后一个
 
   // True if all entries are terms
-  boolean isLeafBlock;
+  boolean isLeafBlock;// 这个block都是具体的term
 
   // True if all entries have the same length.
   boolean allEqual;
 
   long lastSubFP;
 
-  int nextFloorLabel;
-  int numFollowFloorBlocks;
+  int nextFloorLabel;// 第一个子block的label
+  int numFollowFloorBlocks;// 从out中读取多少个子block
 
   // Next term to decode metaData; we decode metaData
   // lazily so that scanning to find the matching term is
   // fast and only if you find a match and app wants the
   // stats or docs/positions enums, will we decode the
   // metaData
-  int metaDataUpto;
+  int metaDataUpto;// 解析当前block第几个词了，假如需要解析第30个词，需要前面29个词都解析出来
 
   final BlockTermState state;
 
   // metadata buffer
   byte[] bytes = new byte[32];
-  final ByteArrayDataInput bytesReader = new ByteArrayDataInput();
+  final ByteArrayDataInput bytesReader = new ByteArrayDataInput(); // // metaWriter读取，主要是指向doc文件
 
-  private final SegmentTermsEnum ste;
+  private final SegmentTermsEnum ste;// 产生一个IntBlockTermState
 
   public SegmentTermsEnumFrame(SegmentTermsEnum ste, int ord) throws IOException {
     this.ste = ste;
@@ -108,9 +108,9 @@ final class SegmentTermsEnumFrame {
   }
 
   public void setFloorData(SegmentTermsEnum.OutputAccumulator outputAccumulator) {
-    outputAccumulator.setFloorData(floorDataReader);
+    outputAccumulator.setFloorData(floorDataReader);// 将outputAccumulator放入floorDataReader中
     rewindPos = floorDataReader.getPosition();
-    numFollowFloorBlocks = floorDataReader.readVInt();
+    numFollowFloorBlocks = floorDataReader.readVInt();// 有多少个子block
     nextFloorLabel = floorDataReader.readByte() & 0xff;
     // if (DEBUG) {
     // System.out.println("    setFloorData fpOrig=" + fpOrig + " bytes=" + new
@@ -157,12 +157,12 @@ final class SegmentTermsEnumFrame {
   intensive consumes (eg certain MTQs, respelling) to
   not pay the price of decoding metadata they won't
   use. */
-  void loadBlock() throws IOException {
+  void loadBlock() throws IOException { //写入可参考参考：Lucene90BlockTreeTermsWriter.writeBlock
 
     // Clone the IndexInput lazily, so that consumers
     // that just pull a TermsEnum to
     // seekExact(TermState) don't pay this cost:
-    ste.initIndexInput();
+    ste.initIndexInput();// tim文件（词典文件）初始化
 
     if (nextEnt != -1) {
       // Already loaded
@@ -170,9 +170,9 @@ final class SegmentTermsEnumFrame {
     }
     // System.out.println("blc=" + blockLoadCount);
 
-    ste.in.seek(fp);
-    int code = ste.in.readVInt();
-    entCount = code >>> 1;
+    ste.in.seek(fp);//// tim中该block起始位置
+    int code = ste.in.readVInt();// 参考：Lucene90BlockTreeTermsWriter.writeBlock
+    entCount = code >>> 1;// 这个block包含多少个terms
     assert entCount > 0;
     isLastInFloor = (code & 1) != 0;
 
@@ -186,19 +186,19 @@ final class SegmentTermsEnumFrame {
 
     final long startSuffixFP = ste.in.getFilePointer();
     // term suffixes:
-    final long codeL = ste.in.readVLong();
+    final long codeL = ste.in.readVLong(); // tim文件读取 
     isLeafBlock = (codeL & 0x04) != 0;
-    final int numSuffixBytes = (int) (codeL >>> 3);
+    final int numSuffixBytes = (int) (codeL >>> 3);// 26个term的后缀长度
     if (suffixBytes.length < numSuffixBytes) {
       suffixBytes = new byte[ArrayUtil.oversize(numSuffixBytes, 1)];
     }
     try {
-      compressionAlg = CompressionAlgorithm.byCode((int) codeL & 0x03);
+      compressionAlg = CompressionAlgorithm.byCode((int) codeL & 0x03);// 解压压缩算法
     } catch (IllegalArgumentException e) {
       throw new CorruptIndexException(e.getMessage(), ste.in, e);
     }
-    compressionAlg.read(ste.in, suffixBytes, numSuffixBytes);
-    suffixesReader.reset(suffixBytes, 0, numSuffixBytes);
+    compressionAlg.read(ste.in, suffixBytes, numSuffixBytes);// 读取全部的terms后缀
+    suffixesReader.reset(suffixBytes, 0, numSuffixBytes);//解压出来全部terms后缀放入suffixesReader
 
     int numSuffixLengthBytes = ste.in.readVInt();
     allEqual = (numSuffixLengthBytes & 0x01) != 0;
@@ -206,12 +206,12 @@ final class SegmentTermsEnumFrame {
     if (suffixLengthBytes.length < numSuffixLengthBytes) {
       suffixLengthBytes = new byte[ArrayUtil.oversize(numSuffixLengthBytes, 1)];
     }
-    if (allEqual) {
-      Arrays.fill(suffixLengthBytes, 0, numSuffixLengthBytes, ste.in.readByte());
-    } else {
+    if (allEqual) {// 后缀长度相同，仅读取第一次的后缀长度
+      Arrays.fill(suffixLengthBytes, 0, numSuffixLengthBytes, ste.in.readByte());// 读取第一个长度后，别的都直接fill
+    } else {// 读取后缀长度
       ste.in.readBytes(suffixLengthBytes, 0, numSuffixLengthBytes);
     }
-    suffixLengthsReader.reset(suffixLengthBytes, 0, numSuffixLengthBytes);
+    suffixLengthsReader.reset(suffixLengthBytes, 0, numSuffixLengthBytes);//读取出来后缀长度放入suffixLengthsReader
     totalSuffixBytes = ste.in.getFilePointer() - startSuffixFP;
 
     /*if (DEBUG) {
@@ -223,12 +223,12 @@ final class SegmentTermsEnumFrame {
     }*/
 
     // stats
-    int numBytes = ste.in.readVInt();
+    int numBytes = ste.in.readVInt();// stateWriter长度
     if (statBytes.length < numBytes) {
       statBytes = new byte[ArrayUtil.oversize(numBytes, 1)];
     }
-    ste.in.readBytes(statBytes, 0, numBytes);
-    statsReader.reset(statBytes, 0, numBytes);
+    ste.in.readBytes(statBytes, 0, numBytes);// statsWriter读取, 放入statBytes
+    statsReader.reset(statBytes, 0, numBytes);// 将statBytes来重置为statsReader
     statsSingletonRunLength = 0;
     metaDataUpto = 0;
 
@@ -239,16 +239,16 @@ final class SegmentTermsEnumFrame {
     // TODO: we could skip this if !hasTerms; but
     // that's rare so won't help much
     // metadata
-    numBytes = ste.in.readVInt();
+    numBytes = ste.in.readVInt(); // metaWriter长度，主要是指向doc文件
     if (bytes.length < numBytes) {
       bytes = new byte[ArrayUtil.oversize(numBytes, 1)];
     }
     ste.in.readBytes(bytes, 0, numBytes);
-    bytesReader.reset(bytes, 0, numBytes);
+    bytesReader.reset(bytes, 0, numBytes); //  metaWriter长度读取
 
     // Sub-blocks of a single floor block are always
     // written one after another -- tail recurse:
-    fpEnd = ste.in.getFilePointer();
+    fpEnd = ste.in.getFilePointer();// tim一个block读取结束位置
     // if (DEBUG) {
     //   System.out.println("      fpEnd=" + fpEnd);
     // }
@@ -374,8 +374,8 @@ final class SegmentTermsEnumFrame {
   // likely not worth it?  need to measure how many
   // floor blocks we "typically" get
   public void scanToFloorFrame(BytesRef target) {
-
-    if (!isFloor || target.length <= prefixLength) {
+     // 非isFloor
+    if (!isFloor || target.length <= prefixLength) {// 若长度相同，则肯定不包含
       // if (DEBUG) {
       //   System.out.println("    scanToFloorFrame skip: isFloor=" + isFloor + " target.length=" +
       // target.length + " vs prefix=" + prefix);
@@ -391,20 +391,20 @@ final class SegmentTermsEnumFrame {
     // + numFollowFloorBlocks);
     // }
 
-    if (targetLabel < nextFloorLabel) {
+    if (targetLabel < nextFloorLabel) {// 若第一个block不包含，肯定就不会匹配了
       // if (DEBUG) {
       //   System.out.println("      already on correct block");
       // }
       return;
     }
 
-    assert numFollowFloorBlocks != 0;
+    assert numFollowFloorBlocks != 0;//
 
     long newFP = fpOrig;
     while (true) {
       final long code = floorDataReader.readVLong();
       newFP = fpOrig + (code >>> 1);
-      hasTerms = (code & 1) != 0;
+      hasTerms = (code & 1) != 0;// 开始解析这个block是否包含具体的term
       // if (DEBUG) {
       //   System.out.println("      label=" + toHex(nextFloorLabel) + " fp=" + newFP +
       // " hasTerms?=" + hasTerms + " numFollowFloor=" + numFollowFloorBlocks);
@@ -444,19 +444,19 @@ final class SegmentTermsEnumFrame {
       // }
     }
   }
-
+    // 作用就是从这个block中解析出这个词。 解析的tim中的metaWriter部分，包括这个block的docStartFP/posStartFP等地址
   public void decodeMetaData() throws IOException {
 
     // if (DEBUG) System.out.println("\nBTTR.decodeMetadata seg=" + segment + " mdUpto=" +
     // metaDataUpto + " vs termBlockOrd=" + state.termBlockOrd);
 
     // lazily catch up on metadata decode:
-    final int limit = getTermBlockOrd();
-    boolean absolute = metaDataUpto == 0;
-    assert limit > 0;
+    final int limit = getTermBlockOrd();// 这个词在这个block排第几
+    boolean absolute = metaDataUpto == 0;// 绝对的
+    assert limit > 0;// 在seekTerms()（scanToTerm()）时会找到这个term属于这个block第几个term
 
     // TODO: better API would be "jump straight to term=N"???
-    while (metaDataUpto < limit) {
+    while (metaDataUpto < limit) {// 假如需要解析第30个词，需要前面29个词都解析出来
 
       // TODO: we could make "tiers" of metadata, ie,
       // decode docFreq/totalTF but don't decode postings
@@ -466,28 +466,28 @@ final class SegmentTermsEnumFrame {
 
       // TODO: if docFreq were bulk decoded we could
       // just skipN here:
-      if (statsSingletonRunLength > 0) {
+      if (statsSingletonRunLength > 0) {// 主要是解析词频，说明这个term仅在一个term中出现过（多个词都是这样的）
         state.docFreq = 1;
         state.totalTermFreq = 1;
-        statsSingletonRunLength--;
+        statsSingletonRunLength--;// 这个block多少个term只在一个doc中出现过（压缩会用）
       } else {
-        int token = statsReader.readVInt();
-        if ((token & 1) == 1) {
+        int token = statsReader.readVInt();// 参考 StatsWriter.add()实现
+        if ((token & 1) == 1) { //
           state.docFreq = 1;
           state.totalTermFreq = 1;
           statsSingletonRunLength = token >>> 1;
         } else {
-          state.docFreq = token >>> 1;
+          state.docFreq = token >>> 1;// 统计信息都放这里
           if (ste.fr.fieldInfo.getIndexOptions() == IndexOptions.DOCS) {
             state.totalTermFreq = state.docFreq;
           } else {
-            state.totalTermFreq = state.docFreq + statsReader.readVLong();
+            state.totalTermFreq = state.docFreq + statsReader.readVLong();// 解析词频
           }
         }
       }
 
-      // metadata
-      ste.fr.parent.postingsReader.decodeTerm(bytesReader, ste.fr.fieldInfo, state, absolute);
+      // 仅仅是解析的tim中的metaWriter部分，包括这个block的docStartFP/posStartFP等地址
+      ste.fr.parent.postingsReader.decodeTerm(bytesReader, ste.fr.fieldInfo, state, absolute);// Lucene101PostingsReader.decodeTerm
 
       metaDataUpto++;
       absolute = false;
@@ -540,9 +540,9 @@ final class SegmentTermsEnumFrame {
   }
 
   // NOTE: sets startBytePos/suffix as a side effect
-  public SeekStatus scanToTerm(BytesRef target, boolean exactOnly) throws IOException {
-    if (isLeafBlock) {
-      if (allEqual) {
+  public SeekStatus scanToTerm(BytesRef target, boolean exactOnly) throws IOException { //
+    if (isLeafBlock) {// 这个block都是具体的term
+      if (allEqual) {// 全部是相同的后缀长度
         return binarySearchTermLeaf(target, exactOnly);
       } else {
         return scanToTermLeaf(target, exactOnly);
@@ -581,7 +581,7 @@ final class SegmentTermsEnumFrame {
     assert prefixMatches(target);
 
     // Loop over each entry (term or sub-block) in this block:
-    do {
+    do {// 遍历这个term每个value
       nextEnt++;
 
       suffixLength = suffixLengthsReader.readVInt();
@@ -595,12 +595,12 @@ final class SegmentTermsEnumFrame {
       // + ToStringUtils.bytesRefToString(suffixBytesRef));
       // }
 
-      startBytePos = suffixesReader.getPosition();
-      suffixesReader.skipBytes(suffixLength);
+      startBytePos = suffixesReader.getPosition();//只是方便下次记录起始位置
+      suffixesReader.skipBytes(suffixLength);// 跳过这么多后缀
 
       // Compare suffix and target.
       final int cmp =
-          Arrays.compareUnsigned(
+          Arrays.compareUnsigned(// 比较这个term和block中这个term
               suffixBytes,
               startBytePos,
               startBytePos + suffixLength,
@@ -611,14 +611,14 @@ final class SegmentTermsEnumFrame {
       if (cmp < 0) {
         // Current entry is still before the target;
         // keep scanning
-      } else if (cmp > 0) {
+      } else if (cmp > 0) {//没找到
         // Done!  Current entry is after target --
         // return NOT_FOUND:
-        fillTerm();
+        fillTerm();// 组装当前发现的最新term
 
         // if (DEBUG) System.out.println("        not found");
         return SeekStatus.NOT_FOUND;
-      } else {
+      } else {// 精确找到了这个字段
         // Exact match!
 
         // This cannot be a sub-block because we
@@ -769,7 +769,7 @@ final class SegmentTermsEnumFrame {
       nextEnt++;
 
       final int code = suffixLengthsReader.readVInt();
-      suffixLength = code >>> 1;
+      suffixLength = code >>> 1;// 前缀长度
 
       // if (DEBUG) {
       //  BytesRef suffixBytesRef = new BytesRef();
@@ -781,11 +781,11 @@ final class SegmentTermsEnumFrame {
       // ToStringUtils.bytesRefToString(suffixBytesRef));
       // }
 
-      startBytePos = suffixesReader.getPosition();
-      suffixesReader.skipBytes(suffixLength);
+      startBytePos = suffixesReader.getPosition();// 开始位置。suffixesReader已经将后缀全部读取出来了
+      suffixesReader.skipBytes(suffixLength);// 方便下一个对比，认为读完了这次的
       ste.termExists = (code & 1) == 0;
       if (ste.termExists) {
-        state.termBlockOrd++;
+        state.termBlockOrd++;//  block中term总个数
         subCode = 0;
       } else {
         subCode = suffixLengthsReader.readVLong();
@@ -796,16 +796,16 @@ final class SegmentTermsEnumFrame {
       final int cmp =
           Arrays.compareUnsigned(
               suffixBytes,
-              startBytePos,
-              startBytePos + suffixLength,
+              startBytePos,// 起始位置
+              startBytePos + suffixLength,// 截止位置
               target.bytes,
               target.offset + prefixLength,
               target.offset + target.length);
 
-      if (cmp < 0) {
+      if (cmp < 0) {// 小于target，那么就继续找
         // Current entry is still before the target;
         // keep scanning
-      } else if (cmp > 0) {
+      } else if (cmp > 0) {// 大于当前term，就没找到
         // Done!  Current entry is after target --
         // return NOT_FOUND:
         fillTerm();
@@ -831,7 +831,7 @@ final class SegmentTermsEnumFrame {
 
         // if (DEBUG) System.out.println("        not found");
         return SeekStatus.NOT_FOUND;
-      } else {
+      } else {// 彻底找到了
         // Exact match!
 
         // This cannot be a sub-block because we

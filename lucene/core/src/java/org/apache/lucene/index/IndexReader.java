@@ -125,7 +125,7 @@ public abstract sealed class IndexReader implements Closeable permits CompositeR
      * Add a {@link ClosedListener} which will be called when the resource guarded by {@link
      * #getKey()} is closed.
      */
-    void addClosedListener(ClosedListener listener);
+    void addClosedListener(ClosedListener listener);// 这个CacheHelper关闭时会去主动释放的资源
   }
 
   /** A cache key identifying a resource that is being cached on. */
@@ -146,7 +146,7 @@ public abstract sealed class IndexReader implements Closeable permits CompositeR
     void onClose(CacheKey key) throws IOException;
   }
 
-  private final Set<IndexReader> parentReaders =
+  private final Set<IndexReader> parentReaders =  // 谁拥有这个IndexReader，都会注册进来。比如 NonClosingReaderWrapper
       Collections.synchronizedSet(
           Collections.newSetFromMap(new WeakHashMap<IndexReader, Boolean>()));
 
@@ -161,7 +161,7 @@ public abstract sealed class IndexReader implements Closeable permits CompositeR
    */
   public final void registerParentReader(IndexReader reader) {
     ensureOpen();
-    parentReaders.add(reader);
+    parentReaders.add(reader);//
   }
 
   /**
@@ -175,7 +175,7 @@ public abstract sealed class IndexReader implements Closeable permits CompositeR
 
   private void reportCloseToParentReaders() throws IOException {
     synchronized (parentReaders) {
-      for (IndexReader parent : parentReaders) {
+      for (IndexReader parent : parentReaders) {// 主要是为了会掉关闭closedByChild和refCount
         parent.closedByChild = true;
         // cross memory barrier by a fake write:
         parent.refCount.addAndGet(0);
@@ -255,7 +255,7 @@ public abstract sealed class IndexReader implements Closeable permits CompositeR
       closed = true;
       try (Closeable finalizer = this::reportCloseToParentReaders;
           Closeable finalizer1 = this::notifyReaderClosedListeners) {
-        doClose();
+        doClose();// 可以跑到StandardDirectoryReader.doClose()
       }
     } else if (rc < 0) {
       throw new IllegalStateException(
@@ -273,7 +273,7 @@ public abstract sealed class IndexReader implements Closeable permits CompositeR
     }
     // the happens before rule on reading the refCount, which must be after the fake write,
     // ensures that we see the value:
-    if (closedByChild) {
+    if (closedByChild) {// 里面依赖已经关闭了
       throw new AlreadyClosedException(
           "this IndexReader cannot be used anymore as one of its child readers was closed");
     }
@@ -415,7 +415,7 @@ public abstract sealed class IndexReader implements Closeable permits CompositeR
    * @see IndexReaderContext#leaves()
    */
   public final List<LeafReaderContext> leaves() {
-    return getContext().leaves();
+    return getContext().leaves(); // 该shard下面所有的segment
   }
 
   /**

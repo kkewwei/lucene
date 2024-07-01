@@ -27,9 +27,9 @@ import org.apache.lucene.search.DocIdSetIterator;
  * BitSet of fixed length (numBits), backed by accessible ({@link #getBits}) long[], accessed with
  * an int index, implementing {@link Bits} and {@link DocIdSet}. If you need to manage more than
  * 2.1B bits, use {@link LongBitSet}.
- *
+ *  // 存储固定长度的length,原理超简单https://www.amazingkoala.com.cn/Lucene/gongjulei/2019/0404/45.html
  * @lucene.internal
- */
+ */// 以 long作为长度为64位长的bytes, 若64以内某个数有值，那么就将对应byte置为1。以x/64来缩小每个数，0-63全部放在第一个long中，64-127放在第二个long中
 public final class FixedBitSet extends BitSet {
 
   private static final long BASE_RAM_BYTES_USED =
@@ -39,8 +39,8 @@ public final class FixedBitSet extends BitSet {
   // Arrays#mismatch to use SIMD instructions and multiple registers under the hood.
   private static final long[] ZEROES = new long[32];
 
-  private final long[] bits; // Array of longs holding the bits
-  private final int numBits; // The number of bits in use
+  private final long[] bits; // Array of longs holding the bits// 使用bits来装这些数据
+  private final int numBits; // The number of bits in use 这个FixedBitSet总共会装多少个文档
   private final int numWords; // The exact number of longs needed to hold numBits (<= bits.length)
 
   /// Ensure the given `bits` can store a value at `desiredBit` index. If the current [#length()] is
@@ -85,7 +85,7 @@ public final class FixedBitSet extends BitSet {
   }
 
   /** returns the number of 64 bit words it would take to hold numBits */
-  public static int bits2words(int numBits) {
+  public static int bits2words(int numBits) { // 需要用到多少个long
     // I.e.: get the word-offset of the last bit and add one (make sure to use >> so 0
     // returns 0!)
     return ((numBits - 1) >> 6) + 1;
@@ -145,7 +145,7 @@ public final class FixedBitSet extends BitSet {
    *
    * @param numBits the number of bits needed
    */
-  public FixedBitSet(int numBits) {
+  public FixedBitSet(int numBits) {// 填写的是最大文档ID
     this.numBits = numBits;
     bits = new long[bits2words(numBits)];
     numWords = bits.length;
@@ -214,7 +214,7 @@ public final class FixedBitSet extends BitSet {
    * result is not internally cached!
    */
   @Override
-  public int cardinality() {
+  public int cardinality() {// 返回多少个位为1的
     // Depends on the ghost bits being clear!
     long tot = 0;
     for (int i = 0; i < numWords; ++i) {
@@ -294,11 +294,11 @@ public final class FixedBitSet extends BitSet {
   }
 
   @Override
-  public void set(int index) {
+  public void set(int index) {// 将index根据64进行划分，比如 0~63都属于一个wordNum, 64~127属于另一个wordNum
     assert index >= 0 && index < numBits : "index=" + index + ", numBits=" + numBits;
-    int wordNum = index >> 6; // div 64
-    long bitmask = 1L << index;
-    bits[wordNum] |= bitmask;
+    int wordNum = index >> 6; // div 64    // 首先获取在哪个long里面，右移6位就是除以64
+    long bitmask = 1L << index;    // 这个long对应byte置为1，溢出了再回头继续。溢出长度为64位
+    bits[wordNum] |= bitmask; //存放
   }
 
   /**
@@ -332,13 +332,13 @@ public final class FixedBitSet extends BitSet {
     bits[wordNum] |= bitmask;
     return val;
   }
-
+  //
   @Override
   public void clear(int index) {
     assert index >= 0 && index < numBits : "index=" + index + ", numBits=" + numBits;
     int wordNum = index >> 6;
     long bitmask = 1L << index;
-    bits[wordNum] &= ~bitmask;
+    bits[wordNum] &= ~bitmask; // 对应为标志为0
   }
 
   public boolean getAndClear(int index) {
@@ -349,7 +349,7 @@ public final class FixedBitSet extends BitSet {
     bits[wordNum] &= ~bitmask;
     return val;
   }
-
+  // 计算大于等于参数index的位置有文档的Index
   @Override
   public int nextSetBit(int index) {
     // Override with a version that skips the bound check on the result since we know it will not
@@ -415,16 +415,16 @@ public final class FixedBitSet extends BitSet {
     assert start >= 0 && start < numBits : "index=" + start + ", numBits=" + numBits;
     assert start < upperBound : "index=" + start + ", upperBound=" + upperBound;
     assert upperBound <= numBits : "upperBound=" + upperBound + ", numBits=" + numBits;
-    int i = start >> 6;
+    int i = start >> 6;// 注意：：丢弃之前的位数
     long word = bits[i] >> start; // skip all the bits to the right of index
 
-    if (word != 0) {
-      return start + Long.numberOfTrailingZeros(word);
+    if (word != 0) {// 如果word的值不为0，说明大于等于index的位中存在被置位(1)的位
+      return start + Long.numberOfTrailingZeros(word);// 返回大于等于该index，第一个被置位的Index(从低位到高位)
     }
 
     int limit = upperBound == numBits ? numWords : bits2words(upperBound);
     while (++i < limit) {
-      word = bits[i];
+      word = bits[i];// 遍历下一个bits
       if (word != 0) {
         return (i << 6) + Long.numberOfTrailingZeros(word);
       }
@@ -773,7 +773,7 @@ public final class FixedBitSet extends BitSet {
    * @param startIndex lower index
    * @param endIndex one-past the last bit to set
    */
-  public void set(int startIndex, int endIndex) {
+  public void set(int startIndex, int endIndex) {//  从start到end全部置为1
     assert startIndex >= 0 && startIndex < numBits
         : "startIndex=" + startIndex + ", numBits=" + numBits;
     assert endIndex >= 0 && endIndex <= numBits : "endIndex=" + endIndex + ", numBits=" + numBits;
@@ -781,13 +781,13 @@ public final class FixedBitSet extends BitSet {
       return;
     }
 
-    int startWord = startIndex >> 6;
-    int endWord = (endIndex - 1) >> 6;
+    int startWord = startIndex >> 6;// 第几个数
+    int endWord = (endIndex - 1) >> 6;// 第几个数
 
-    long startmask = -1L << startIndex;
-    long endmask = -1L >>> -endIndex;
+    long startmask = -1L << startIndex;// 保证从startIndex到该long最大位，全为1
+    long endmask = -1L >>> -endIndex;  // 64-(endIndex&0x3f) is the same as -endIndex since only the lowest 6 bits are used
 
-    if (startWord == endWord) {
+    if (startWord == endWord) { // 同一个
       bits[startWord] |= (startmask & endmask);
       return;
     }

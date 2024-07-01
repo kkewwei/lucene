@@ -105,7 +105,7 @@ final class ConcurrentApproximatePriorityQueue<T> {
       final int index = (threadHash + i) % concurrency;
       final Lock lock = locks[index];
       final ApproximatePriorityQueue<T> queue = queues[index];
-      if (lock.tryLock()) {
+      if (lock.tryLock()) {//若不成功，说明已经被抢占了
         try {
           T entry = queue.poll(predicate);
           if (entry != null) {

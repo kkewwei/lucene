@@ -40,7 +40,7 @@ public abstract class SortedDocValues extends DocValuesIterator {
    * @return ordinal for the document: this is dense, starts at 0, then increments by 1 for the next
    *     value in sorted order.
    */
-  public abstract int ordValue() throws IOException;
+  public abstract int ordValue() throws IOException; // 当前doc的value的排序ord
 
   /**
    * Retrieves the value for the specified ordinal. The returned {@link BytesRef} may be re-used
@@ -58,7 +58,7 @@ public abstract class SortedDocValues extends DocValuesIterator {
    * @return number of unique values in this SortedDocValues. This is also equivalent to one plus
    *     the maximum ordinal.
    */
-  public abstract int getValueCount();
+  public abstract int getValueCount();// 总共多少个独立的valuecount
 
   /**
    * If {@code key} exists, returns its ordinal, else returns {@code -insertionPoint-1}, like {@code

@@ -75,7 +75,7 @@ import org.apache.lucene.util.AttributeSource;
  * non-abstract subclasses must be final or have at least a final implementation of {@link
  * #incrementToken}! This is checked when Java assertions are enabled.
  */
-public abstract class TokenStream extends AttributeSource implements Closeable {
+public abstract class TokenStream extends AttributeSource implements Closeable {// 可以看做token的迭代器
 
   /** Default {@link AttributeFactory} instance that should be used for TokenStreams. */
   public static final AttributeFactory DEFAULT_TOKEN_ATTRIBUTE_FACTORY =

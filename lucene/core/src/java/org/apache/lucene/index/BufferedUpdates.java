@@ -45,8 +45,8 @@ import org.apache.lucene.util.RamUsageEstimator;
 // NOTE: instances of this class are accessed either via a private
 // instance on DocumentWriterPerThread, or via sync'd code by
 // DocumentsWriterDeleteQueue
-
-class BufferedUpdates implements Accountable {
+// 每个DocumentsWriterDeleteQueue都会拥有一个BufferedUpdates，DocumentsWriterDeleteQueue也会持有一个该对象的全局实例：globalBufferedUpdates
+class BufferedUpdates implements Accountable {// 每个DocumentsWriterPerThread也都有一个BufferedUpdates和DeleteSlice
 
   /* Rough logic: HashMap has an array[Entry] w/ varying
   load factor (say 2 * POINTER).  Entry is object w/
@@ -58,12 +58,12 @@ class BufferedUpdates implements Accountable {
           + 2 * RamUsageEstimator.NUM_BYTES_OBJECT_HEADER
           + 2 * Integer.BYTES
           + 24;
-  final AtomicInteger numFieldUpdates = new AtomicInteger();
-
-  final DeletedTerms deleteTerms = new DeletedTerms();
+  final AtomicInteger numFieldUpdates = new AtomicInteger();//需要删除的term个数， 以字段粒度存放删除信息
+  // BufferedUpdates会维护三种类型的删除：
+  final DeletedTerms deleteTerms = new DeletedTerms();// 每个DocumentsWriterPerThread也都有一个BufferedUpdates和DeleteSlice
   final Map<Query, Integer> deleteQueries = new HashMap<>();
-
-  final Map<String, FieldUpdatesBuffer> fieldUpdates = new HashMap<>();
+  // key是__soft_delete
+  final Map<String, FieldUpdatesBuffer> fieldUpdates = new HashMap<>(); // 存放需要删除的docID，这里主要是记录新增或更新文档发生异常时已经缓存了的docID，在写入时会过滤这些doc，避免写入发生异常的doc
 
   public static final Integer MAX_INT = Integer.valueOf(Integer.MAX_VALUE);
 
@@ -106,7 +106,7 @@ class BufferedUpdates implements Accountable {
       return s;
     }
   }
-
+  // query可以是TermQuery
   public void addQuery(Query query, int docIDUpto) {
     Integer current = deleteQueries.put(query, docIDUpto);
     // increment bytes used only if the query wasn't added so far.
@@ -128,14 +128,14 @@ class BufferedUpdates implements Accountable {
       return;
     }
 
-    deleteTerms.put(term, docIDUpto);
+    deleteTerms.put(term, docIDUpto);// 这里有替换的意思。只要terms(指的是key和value都一样)一样，那么就替换掉了，因为后来的肯定比先来的docIDUpto大
   }
-
+    // _soft_delete一般跑这里
   void addNumericUpdate(NumericDocValuesUpdate update, int docIDUpto) {
     FieldUpdatesBuffer buffer =
         fieldUpdates.computeIfAbsent(
-            update.field, k -> new FieldUpdatesBuffer(fieldUpdatesBytesUsed, update, docIDUpto));
-    if (update.hasValue) {
+            update.field, k -> new FieldUpdatesBuffer(fieldUpdatesBytesUsed, update, docIDUpto));// 获取到__soft_deletes字段
+    if (update.hasValue) {// 如果有值,。可以更新
       buffer.addUpdate(update.term, update.getValue(), docIDUpto);
     } else {
       buffer.addNoValue(update.term, docIDUpto);

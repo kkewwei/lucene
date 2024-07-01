@@ -680,7 +680,7 @@ public final class Lucene99HnswVectorsWriter extends KnnVectorsWriter {
     private final FieldInfo fieldInfo;
     private HnswGraphBuilder hnswGraphBuilder; // only created when needed
     private int lastDocID = -1;
-    private int node = 0;
+    private int node = 0; // node代表docId
     private final FlatFieldVectorsWriter<T> flatFieldVectorsWriter;
     private final int graphThreshold;
     private final int M;
@@ -735,7 +735,7 @@ public final class Lucene99HnswVectorsWriter extends KnnVectorsWriter {
       this.beamWidth = beamWidth;
       this.infoStream = infoStream;
       this.flatFieldVectorsWriter = Objects.requireNonNull(flatFieldVectorsWriter);
-      this.graphThreshold = tinySegmentsThreshold;
+      this.graphThreshold = tinySegmentsThreshold;// 开始先不构建图
       this.scorerSupplier =
           scorer.getRandomVectorScorerSupplier(
               fieldInfo.getVectorSimilarityFunction(),
@@ -758,7 +758,7 @@ public final class Lucene99HnswVectorsWriter extends KnnVectorsWriter {
     }
 
     private void replayBufferedVectors() throws IOException {
-      for (int i = 0; i < flatFieldVectorsWriter.getVectors().size(); i++) {
+      for (int i = 0; i < flatFieldVectorsWriter.getVectors().size(); i++) {// 回放向量
         hnswGraphBuilder.addGraphNode(i);
       }
     }
@@ -771,11 +771,11 @@ public final class Lucene99HnswVectorsWriter extends KnnVectorsWriter {
                 + fieldInfo.name
                 + "\" appears more than once in this document (only one value is allowed per field)");
       }
-      flatFieldVectorsWriter.addValue(docID, vectorValue);
+      flatFieldVectorsWriter.addValue(docID, vectorValue);// 先缓存着，等超过范围再同一个构图
       // Check if we need to initialize graph builder for tiny segment optimization
-      if (hnswGraphBuilder == null && shouldCreateGraph(graphThreshold, node + 1)) {
-        initializeGraphBuilder();
-        replayBufferedVectors();
+      if (hnswGraphBuilder == null && shouldCreateGraph(graphThreshold, node + 1)) {// 是否应该初始化图
+        initializeGraphBuilder(); // "小 segment 不建图"优化（惰性建图），判定"段已经大到值得建图"时（对应前面讲的 expectedVisitedNodes 阈值 ），才
+        replayBufferedVectors();// 回放缓存的数据
       } else if (hnswGraphBuilder != null) {
         // Graph builder is active, add to graph
         hnswGraphBuilder.addGraphNode(node);

@@ -40,15 +40,15 @@ import org.apache.lucene.util.packed.DirectMonotonicWriter;
  * the biggest byte size first.
  *
  * @lucene.experimental
- */
+ */// 存放的字段的配置信息，比如字段是否分词，索引，存储等(在写入，merge的时候都会动态生成)
 public class Lucene90CompressingStoredFieldsFormat extends StoredFieldsFormat {
-
-  private final String formatName;
+  // fdt以chunk为单位， Fdx 文件会在逻辑上切分多个 chunk 为一个 block，一个 block 最多包含1024个 chunk。这样切分便于快速定位一个文档所在的 chunk 位置，准确的解压对应的 chunk 并提取文档的 store fields
+  private final String formatName; // Lucene50StoredFieldsFormat
   private final String segmentSuffix;
   private final CompressionMode compressionMode;
-  private final int chunkSize;
-  private final int maxDocsPerChunk;
-  private final int blockShift;
+  private final int chunkSize;// 一个chunk最大的大小，此种模式，为 16kb ， 8.7.0：60k
+  private final int maxDocsPerChunk;// 每个chunk包含的最多文档数，最多128个文档    8.7.0 4096个文档
+  private final int blockShift;// 一个block最多由多少个chunk组成1024个
 
   /**
    * Create a new {@link Lucene90CompressingStoredFieldsFormat} with an empty segment suffix.
@@ -103,17 +103,17 @@ public class Lucene90CompressingStoredFieldsFormat extends StoredFieldsFormat {
       int chunkSize,
       int maxDocsPerChunk,
       int blockShift) {
-    this.formatName = formatName;
+    this.formatName = formatName;//  Lucene50StoredFieldsFast
     this.segmentSuffix = segmentSuffix;
-    this.compressionMode = compressionMode;
+    this.compressionMode = compressionMode;//FAST
     if (chunkSize < 1) {
       throw new IllegalArgumentException("chunkSize must be >= 1");
     }
-    this.chunkSize = chunkSize;
+    this.chunkSize = chunkSize;// 16k
     if (maxDocsPerChunk < 1) {
       throw new IllegalArgumentException("maxDocsPerChunk must be >= 1");
     }
-    this.maxDocsPerChunk = maxDocsPerChunk;
+    this.maxDocsPerChunk = maxDocsPerChunk;// 128
     if (blockShift < DirectMonotonicWriter.MIN_BLOCK_SHIFT
         || blockShift > DirectMonotonicWriter.MAX_BLOCK_SHIFT) {
       throw new IllegalArgumentException(
@@ -124,20 +124,20 @@ public class Lucene90CompressingStoredFieldsFormat extends StoredFieldsFormat {
               + ", got "
               + blockShift);
     }
-    this.blockShift = blockShift;
+    this.blockShift = blockShift;// 1024
   }
-
+  // 读取包括fdx和fdt文件的数据： The stored fields for documents
   @Override
   public StoredFieldsReader fieldsReader(
       Directory directory, SegmentInfo si, FieldInfos fn, IOContext context) throws IOException {
     return new Lucene90CompressingStoredFieldsReader(
         directory, si, segmentSuffix, fn, context, formatName, compressionMode);
   }
-
+  // 是链级别的粒度
   @Override
   public StoredFieldsWriter fieldsWriter(Directory directory, SegmentInfo si, IOContext context)
       throws IOException {
-    return new Lucene90CompressingStoredFieldsWriter(
+    return new Lucene90CompressingStoredFieldsWriter(// 仅仅把头文件给写了
         directory,
         si,
         segmentSuffix,

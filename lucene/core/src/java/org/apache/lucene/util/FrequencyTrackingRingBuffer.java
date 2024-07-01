@@ -35,7 +35,7 @@ public final class FrequencyTrackingRingBuffer implements Accountable {
 
   private final int maxSize;
   private final int[] buffer;
-  private int position;
+  private int position;// 下一个可用的地方
   private final IntBag frequencies;
 
   /**
@@ -69,11 +69,11 @@ public final class FrequencyTrackingRingBuffer implements Accountable {
    */
   public void add(int i) {
     // remove the previous value
-    final int removed = buffer[position];
+    final int removed = buffer[position];// 最多缓存最近250个查询
     final boolean removedFromBag = frequencies.remove(removed);
     assert removedFromBag;
     // add the new value
-    buffer[position] = i;
+    buffer[position] = i;// 循环装
     frequencies.add(i);
     // increment the position
     position += 1;
@@ -101,8 +101,8 @@ public final class FrequencyTrackingRingBuffer implements Accountable {
     private static final long BASE_RAM_BYTES_USED =
         RamUsageEstimator.shallowSizeOfInstance(IntBag.class);
 
-    private final int[] keys;
-    private final int[] freqs;
+    private final int[] keys;// 装的什么元素
+    private final int[] freqs;// 频率
     private final int mask;
 
     IntBag(int maxSize) {
@@ -122,11 +122,11 @@ public final class FrequencyTrackingRingBuffer implements Accountable {
     }
 
     /** Return the frequency of the give key in the bag. */
-    int frequency(int key) {
+    int frequency(int key) {// 探测法找到最大
       for (int slot = key & mask; ; slot = (slot + 1) & mask) {
         if (keys[slot] == key) {
           return freqs[slot];
-        } else if (freqs[slot] == 0) {
+        } else if (freqs[slot] == 0) {// 若还没用过，直接放上去
           return 0;
         }
       }
@@ -148,15 +148,15 @@ public final class FrequencyTrackingRingBuffer implements Accountable {
      * Decrement the frequency of the given key by one, or do nothing if the key is not present in
      * the bag. Returns true iff the key was contained in the bag.
      */
-    boolean remove(int key) {
+    boolean remove(int key) {// 删除key上的，返回的：是否有key这样的元素
       for (int slot = key & mask; ; slot = (slot + 1) & mask) {
         if (freqs[slot] == 0) {
           // no such key in the bag
           return false;
-        } else if (keys[slot] == key) {
-          final int newFreq = --freqs[slot];
+        } else if (keys[slot] == key) {// 频率-1
+          final int newFreq = --freqs[slot];//是否清了
           if (newFreq == 0) { // removed
-            relocateAdjacentKeys(slot);
+            relocateAdjacentKeys(slot);// rehash剩余的查询。尽量将hash向前移动
           }
           return true;
         }
@@ -164,7 +164,7 @@ public final class FrequencyTrackingRingBuffer implements Accountable {
     }
 
     private void relocateAdjacentKeys(int freeSlot) {
-      for (int slot = (freeSlot + 1) & mask; ; slot = (slot + 1) & mask) {
+      for (int slot = (freeSlot + 1) & mask; ; slot = (slot + 1) & mask) {// rehash剩余的查询。尽量将hash向前移动
         final int freq = freqs[slot];
         if (freq == 0) {
           // end of the collision chain, we're done
@@ -175,7 +175,7 @@ public final class FrequencyTrackingRingBuffer implements Accountable {
         final int expectedSlot = key & mask;
         // if the free slot is between the expected slot and the slot where the
         // key is, then we can relocate there
-        if (between(expectedSlot, slot, freeSlot)) {
+        if (between(expectedSlot, slot, freeSlot)) {//  freeSlot是否在expectedSlot和slot之间。（尽量往前移动的意思）
           keys[freeSlot] = key;
           freqs[freeSlot] = freq;
           // slot is the new free slot

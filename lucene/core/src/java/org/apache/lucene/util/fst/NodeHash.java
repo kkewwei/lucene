@@ -32,7 +32,7 @@ import org.apache.lucene.util.packed.PagedGrowableWriter;
 // unlikely (mostly impossible) such suffixes can be shared?
 
 // Used to dedup states (lookup already-frozen states)
-final class NodeHash<T> {
+final class NodeHash<T> { // 就是个Node的hash表，在共享后缀Node的时候，如果两个Node的hash值一致，那就只写一次到FST。
 
   // primary table -- we add nodes into this until it reaches the requested tableSizeLimit/2, then
   // we move it to fallback
@@ -49,7 +49,7 @@ final class NodeHash<T> {
   private PagedGrowableHash fallbackTable;
 
   private final FSTCompiler<T> fstCompiler;
-  private final FST.Arc<T> scratchArc = new FST.Arc<>();
+  private final FST.Arc<T> scratchArc = new FST.Arc<>(); // 读取这个
   // store the last fallback table node length in getFallback()
   private int lastFallbackNodeLength;
   // store the last fallback table hashtable slot in getFallback()
@@ -205,11 +205,11 @@ final class NodeHash<T> {
     // TODO: maybe if number of arcs is high we can safely subsample?
     for (int arcIdx = 0; arcIdx < node.numArcs; arcIdx++) {
       final FSTCompiler.Arc<T> arc = node.arcs[arcIdx];
-      h = PRIME * h + arc.label;
+      h = PRIME * h + arc.label;// label  i的节点边的lebal决定了i-1边的lebal
       long n = ((FSTCompiler.CompiledNode) arc.target).node;
       h = PRIME * h + (int) (n ^ (n >> 32));
-      h = PRIME * h + arc.output.hashCode();
-      h = PRIME * h + arc.nextFinalOutput.hashCode();
+      h = PRIME * h + arc.output.hashCode();// output相关
+      h = PRIME * h + arc.nextFinalOutput.hashCode();//nextFinalOutput相关
       if (arc.isFinal) {
         h += 17;
       }
@@ -398,10 +398,10 @@ final class NodeHash<T> {
      * <p>The node length will be used to promote the node from the fallback table to the primary
      * table
      */
-    private int nodesEqual(FSTCompiler.UnCompiledNode<T> node, long address, long hashSlot)
+    private int nodesEqual(FSTCompiler.UnCompiledNode<T> node, long address, long hashSlot)// address:node在fst中的终点写入位置
         throws IOException {
       FST.BytesReader in = getBytesReader(address, hashSlot);
-      fstCompiler.fst.readFirstRealTargetArc(address, scratchArc, in);
+      fstCompiler.fst.readFirstRealTargetArc(address, scratchArc, in);// 从这里in读取该地址address指向的那个边，放入scratchArc
 
       // fail fast for a node with fixed length arcs
       if (scratchArc.bytesPerArc() != 0) {

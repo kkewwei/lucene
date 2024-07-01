@@ -32,7 +32,7 @@ class TermMatchesIterator implements MatchesIterator {
   TermMatchesIterator(Query query, PostingsEnum pe) throws IOException {
     this.pe = pe;
     this.query = query;
-    this.upto = pe.freq();
+    this.upto = pe.freq();// 词在当前文档的频率
   }
 
   @Override

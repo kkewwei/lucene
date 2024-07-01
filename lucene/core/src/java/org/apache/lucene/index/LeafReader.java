@@ -46,7 +46,7 @@ import org.apache.lucene.util.LiveDocs;
  * synchronization, you should <b>not</b> synchronize on the <code>IndexReader</code> instance; use
  * your own (non-Lucene) objects instead.
  */
-public abstract non-sealed class LeafReader extends IndexReader {
+public abstract non-sealed class LeafReader extends IndexReader {// 一个shard
 
   private final LeafReaderContext readerContext = new LeafReaderContext(this);
 
@@ -79,7 +79,7 @@ public abstract non-sealed class LeafReader extends IndexReader {
   @Override
   public final int docFreq(Term term) throws IOException {
     final Terms terms = Terms.getTerms(this, term.field());
-    final TermsEnum termsEnum = terms.iterator();
+    final TermsEnum termsEnum = terms.iterator();// 仅仅读取fst第一条边
     if (termsEnum.seekExact(term.bytes())) {
       return termsEnum.docFreq();
     } else {
@@ -131,7 +131,7 @@ public abstract non-sealed class LeafReader extends IndexReader {
   }
 
   /** Returns the {@link Terms} index for this field, or null if it has none. */
-  public abstract Terms terms(String field) throws IOException;
+  public abstract Terms terms(String field) throws IOException;// 就是fst结构
 
   /**
    * Returns {@link PostingsEnum} for the specified term. This will return null if either the field
@@ -163,7 +163,7 @@ public abstract non-sealed class LeafReader extends IndexReader {
    *
    * @see #postings(Term, int)
    */
-  public final PostingsEnum postings(Term term) throws IOException {
+  public final PostingsEnum postings(Term term) throws IOException {//就是
     return postings(term, PostingsEnum.FREQS);
   }
 
@@ -381,7 +381,7 @@ public abstract non-sealed class LeafReader extends IndexReader {
    *
    * @lucene.experimental
    */
-  public abstract FieldInfos getFieldInfos();
+  public abstract FieldInfos getFieldInfos();// 返回的是融合所有配置信息后的fieldInfo
 
   /**
    * Returns the {@link Bits} representing live (not deleted) docs. A set bit indicates the doc ID

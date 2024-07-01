@@ -254,7 +254,7 @@ public class Lucene103PostingsWriter extends PushPostingsWriterBase {
       level0FreqNormAccumulator.clear();
     }
   }
-
+  // 将从 PushPostingsWriterBase.writeTerm() 那里跑进来，若keywrd的话，termDocFreq传递进来就是-1
   @Override
   public void startDoc(int docID, int termDocFreq) throws IOException {
     if (docBufferUpto == BLOCK_SIZE) {

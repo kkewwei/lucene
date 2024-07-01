@@ -42,9 +42,9 @@ final class MultiTermQueryConstantScoreWrapper<Q extends MultiTermQuery>
   public Weight createWeight(IndexSearcher searcher, ScoreMode scoreMode, float boost)
       throws IOException {
     return new RewritingWeight(query, boost, scoreMode, searcher) {
-
+      // 在TermInSetQuery.createWeight()中同样的实现。
       @Override
-      protected WeightOrDocIdSetIterator rewriteInner(
+      protected WeightOrDocIdSetIterator rewriteInner(// multiTerms查询中，是在创建scorerSupplier阶段就会调用。是在leader与follow过滤之前。
           LeafReaderContext context,
           int fieldDocCount,
           Terms terms,
@@ -58,7 +58,7 @@ final class MultiTermQueryConstantScoreWrapper<Q extends MultiTermQuery>
         // Handle the already-collected terms:
         if (collectedTerms.isEmpty() == false) {
           TermsEnum termsEnum2 = terms.iterator();
-          for (TermAndState t : collectedTerms) {
+          for (TermAndState t : collectedTerms) {/// 转化成实际的terms，然后进行should匹配
             termsEnum2.seekExact(t.term, t.state);
             docs = termsEnum2.postings(docs, PostingsEnum.NONE);
             builder.add(docs);
@@ -66,7 +66,7 @@ final class MultiTermQueryConstantScoreWrapper<Q extends MultiTermQuery>
         }
 
         // Then keep filling the bit set with remaining terms:
-        do {
+        do {//剩余词继续构建bitset
           docs = termsEnum.postings(docs, PostingsEnum.NONE);
           // If a term contains all docs with a value for the specified field, we can discard the
           // other terms and just use the dense term's postings:
@@ -81,7 +81,7 @@ final class MultiTermQueryConstantScoreWrapper<Q extends MultiTermQuery>
             Weight weight = searcher.rewrite(q).createWeight(searcher, scoreMode, score());
             return new WeightOrDocIdSetIterator(weight);
           }
-          builder.add(docs);
+          builder.add(docs);// 这里直接将所有文档都收集起来，性能非常差
         } while (termsEnum.next() != null);
 
         return new WeightOrDocIdSetIterator(builder.build().iterator());

@@ -32,7 +32,7 @@ import org.apache.lucene.search.Weight;
 import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.FixedBitSet;
 import org.apache.lucene.util.IOSupplier;
-
+// mergePolicy=ElasticsearchMergePolicy(ShuffleForcedMergePolicy(RecoverySourcePruneMergePolicy(SoftDeletesRetentionMergePolicy(PrunePostingsMergePolicy(EsTieredMergePolicy([TieredMergePolicy: maxMergeAtOnce=10, maxMergeAtOnceExplicit=30, maxMergedSegmentMB=5120.0, floorSegmentMB=2.0, forceMergeDeletesPctAllowed=10.0, segmentsPerTier=10.0, maxCFSSegmentSizeMB=8.796093022207999E12, noCFSRatio=0.1, deletesPctAllowed=33.0))))))， MergeTrigger=FULL_FLUSH
 /**
  * This {@link MergePolicy} allows to carry over soft deleted documents across merges. The policy
  * wraps the merge reader and marks documents as "live" that have a value in the soft delete field
@@ -45,7 +45,7 @@ import org.apache.lucene.util.IOSupplier;
  */
 public final class SoftDeletesRetentionMergePolicy extends OneMergeWrappingMergePolicy {
   private final String field;
-  private final Supplier<Query> retentionQuerySupplier;
+  private final Supplier<Query> retentionQuerySupplier;// 实际是 SoftDeletesPolicy::getRetentionQuery
 
   /**
    * Creates a new {@link SoftDeletesRetentionMergePolicy}
@@ -67,13 +67,13 @@ public final class SoftDeletesRetentionMergePolicy extends OneMergeWrappingMerge
                 if (liveDocs == null) { // no deletes - just keep going
                   return wrapped;
                 }
-                return applyRetentionQuery(field, retentionQuerySupplier.get(), wrapped);
+                return applyRetentionQuery(field, retentionQuerySupplier.get(), wrapped);// 将大于minRetainedSeqNo的文档也放入存活列表
               }
             });
     Objects.requireNonNull(field, "field must not be null");
     Objects.requireNonNull(retentionQuerySupplier, "retentionQuerySupplier must not be null");
     this.field = field;
-    this.retentionQuerySupplier = retentionQuerySupplier;
+    this.retentionQuerySupplier = retentionQuerySupplier;// 是SoftDeletesPolicy.getRetentionQuery()
   }
 
   @Override
@@ -87,8 +87,8 @@ public final class SoftDeletesRetentionMergePolicy extends OneMergeWrappingMerge
             FilterCodecReader.wrapLiveDocs(reader, null, reader.maxDoc()));
     if (scorer != null) {
       DocIdSetIterator iterator = scorer.iterator();
-      boolean atLeastOneHit = iterator.nextDoc() != DocIdSetIterator.NO_MORE_DOCS;
-      return atLeastOneHit;
+      boolean atLeastOneHit = iterator.nextDoc() != DocIdSetIterator.NO_MORE_DOCS;// 只要有一个不需要删除，那么也不能测试删除
+      return atLeastOneHit;// 那么就需要保存
     }
     return super.keepFullyDeletedSegment(readerIOSupplier);
   }
@@ -116,18 +116,18 @@ public final class SoftDeletesRetentionMergePolicy extends OneMergeWrappingMerge
             },
             reader.maxDoc() - reader.numDocs());
     BooleanQuery.Builder builder = new BooleanQuery.Builder();
-    builder.add(new FieldExistsQuery(softDeleteField), BooleanClause.Occur.FILTER);
-    builder.add(retentionQuery, BooleanClause.Occur.FILTER);
+    builder.add(new FieldExistsQuery(softDeleteField), BooleanClause.Occur.FILTER);//查找包含_soft_delete字段
+    builder.add(retentionQuery, BooleanClause.Occur.FILTER);// 查找seqno大于minRetainedSeqNo的文档
     Scorer scorer = getScorer(builder.build(), wrappedReader);
     if (scorer != null) {
-      FixedBitSet cloneLiveDocs = FixedBitSet.copyOf(liveDocs);
+      FixedBitSet cloneLiveDocs = FixedBitSet.copyOf(liveDocs);// 真正存活+（seqno大于minRetainedSeqNo待删除）的文档
       DocIdSetIterator iterator = scorer.iterator();
       int numExtraLiveDocs = 0;
-      while (iterator.nextDoc() != DocIdSetIterator.NO_MORE_DOCS) {
-        if (cloneLiveDocs.getAndSet(iterator.docID()) == false) {
+      while (iterator.nextDoc() != DocIdSetIterator.NO_MORE_DOCS) {// 遍历每个大于Retention的软删除文档，放入live中。
+        if (cloneLiveDocs.getAndSet(iterator.docID()) == false) {//不在存活列表中，那么假装放到存活列表中
           // if we bring one back to live we need to account for it
-          numExtraLiveDocs++;
-        }
+          numExtraLiveDocs++;// 但是不在存活列表中，又在minRetainedSeqNo中的文档，那么就不能删除
+        }// 说明软删除的doc，也被从live中迁移走了
       }
       assert reader.numDocs() + numExtraLiveDocs <= reader.maxDoc()
           : "numDocs: "
@@ -149,31 +149,31 @@ public final class SoftDeletesRetentionMergePolicy extends OneMergeWrappingMerge
     Weight weight = s.createWeight(s.rewrite(query), ScoreMode.COMPLETE_NO_SCORES, 1.0f);
     return weight.scorer(reader.getContext());
   }
-
+  // 这里统计numDeletesToMerge非常耗时间
   @Override
-  public int numDeletesToMerge(
+  public int numDeletesToMerge(// live文件中完全是纯粹活着的。软删除是已经删除的
       SegmentCommitInfo info, int delCount, IOSupplier<CodecReader> readerSupplier)
       throws IOException {
     final int numDeletesToMerge = super.numDeletesToMerge(info, delCount, readerSupplier);
-    if (numDeletesToMerge != 0 && info.getSoftDelCount() > 0) {
-      final CodecReader reader = readerSupplier.get();
-      if (reader.getLiveDocs() != null) {
+    if (numDeletesToMerge != 0 && info.getSoftDelCount() > 0) {//这个标记有软删除SegmentCommitInfo
+      final CodecReader reader = readerSupplier.get();// live文件中的软删除的文件
+      if (reader.getLiveDocs() != null) {// SegmentReader，里面存放的是真正存活的doc(删除了软删除了)
         BooleanQuery.Builder builder = new BooleanQuery.Builder();
-        builder.add(new FieldExistsQuery(field), BooleanClause.Occur.FILTER);
-        builder.add(retentionQuerySupplier.get(), BooleanClause.Occur.FILTER);
+        builder.add(new FieldExistsQuery(field), BooleanClause.Occur.FILTER); //包含__soft_deletes的字段
+        builder.add(retentionQuerySupplier.get(), BooleanClause.Occur.FILTER);//过滤_seq_no大于minRetainedSeqNo的docId
         Scorer scorer =
             getScorer(
-                builder.build(), FilterCodecReader.wrapLiveDocs(reader, null, reader.maxDoc()));
+                builder.build(), FilterCodecReader.wrapLiveDocs(reader, null, reader.maxDoc()));// Segmetn删除认为为null
         if (scorer != null) {
           DocIdSetIterator iterator = scorer.iterator();
-          Bits liveDocs = reader.getLiveDocs();
+          Bits liveDocs = reader.getLiveDocs();//里面存放的是真正存活的doc(删除了软删除了)
           int numDeletedDocs = reader.numDeletedDocs();
           while (iterator.nextDoc() != DocIdSetIterator.NO_MORE_DOCS) {
-            if (liveDocs.get(iterator.docID()) == false) {
+            if (liveDocs.get(iterator.docID()) == false) {//不在存活列表的，但是大于retentionLease列表的，也认为为存活
               numDeletedDocs--;
             }
           }
-          return numDeletedDocs;
+          return numDeletedDocs;// 又要去统计多少不再live中的，也不能删除
         }
       }
     }

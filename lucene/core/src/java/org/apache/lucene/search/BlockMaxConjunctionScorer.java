@@ -27,18 +27,18 @@ import java.util.List;
  * Scorer for conjunctions that checks the maximum scores of each clause in order to potentially
  * skip over blocks that can't have competitive matches.
  */
-final class BlockMaxConjunctionScorer extends Scorer {
+final class BlockMaxConjunctionScorer extends Scorer {//多个must条件，排序，选择一个消耗最低的。把她整合成一个score了
   final Scorer[] scorers;
   final Scorable[] scorables;
-  final DocIdSetIterator[] approximations;
+  final DocIdSetIterator[] approximations; // 已经按照cost()，从大到小顺序了
   final TwoPhaseIterator[] twoPhases;
   float minScore;
-
+  // 若score_mode是top_score，并且must 条件>1。那么将must封装这么一个scorer
   /** Create a new {@link BlockMaxConjunctionScorer} from scoring clauses. */
   BlockMaxConjunctionScorer(Collection<Scorer> scorersList) throws IOException {
     this.scorers = scorersList.toArray(Scorer[]::new);
     // Sort scorer by cost
-    Arrays.sort(this.scorers, Comparator.comparingLong(s -> s.iterator().cost()));
+    Arrays.sort(this.scorers, Comparator.comparingLong(s -> s.iterator().cost()));//排序，找出消耗从小达到的顺序
     this.scorables =
         Arrays.stream(scorers).map(ScorerUtil::likelyTermScorer).toArray(Scorable[]::new);
 
@@ -57,7 +57,7 @@ final class BlockMaxConjunctionScorer extends Scorer {
       scorer.advanceShallow(0);
     }
     this.twoPhases = twoPhaseList.toArray(TwoPhaseIterator[]::new);
-    Arrays.sort(this.twoPhases, Comparator.comparingDouble(TwoPhaseIterator::matchCost));
+    Arrays.sort(this.twoPhases, Comparator.comparingDouble(TwoPhaseIterator::matchCost));// 根据matchCost统计匹配程度
   }
 
   @Override
@@ -67,7 +67,7 @@ final class BlockMaxConjunctionScorer extends Scorer {
     }
     float matchCost =
         (float) Arrays.stream(twoPhases).mapToDouble(TwoPhaseIterator::matchCost).sum();
-    final DocIdSetIterator approx = approximation();
+    final DocIdSetIterator approx = approximation();// 会有lead
     return new TwoPhaseIterator(approx) {
       @Override
       public boolean matches() throws IOException {
@@ -95,7 +95,7 @@ final class BlockMaxConjunctionScorer extends Scorer {
   }
 
   private DocIdSetIterator approximation() {
-    final DocIdSetIterator lead = approximations[0];
+    final DocIdSetIterator lead = approximations[0]; // lead首先分配第一个docId
 
     return new FilterDocIdSetIterator(lead) {
 
@@ -143,7 +143,7 @@ final class BlockMaxConjunctionScorer extends Scorer {
       public int advance(int target) throws IOException {
         return doNext(lead.advance(advanceTarget(target)));
       }
-
+      //在多个算子之间找到一个相同的docID
       private int doNext(int doc) throws IOException {
         advanceHead:
         for (; ; ) {
@@ -168,14 +168,14 @@ final class BlockMaxConjunctionScorer extends Scorer {
           assert doc <= upTo;
 
           // then find agreement with other iterators
-          for (int i = 1; i < approximations.length; ++i) {
+          for (int i = 1; i < approximations.length; ++i) {//确定10个算子全部匹配。从第一个算子开始比较
             final DocIdSetIterator other = approximations[i];
             // other.doc may already be equal to doc if we "continued advanceHead"
             // on the previous iteration and the advance on the lead scorer exactly matched.
             if (other.docID() < doc) {
               final int next = other.advance(doc);
 
-              if (next > doc) {
+              if (next > doc) {// 如果下一个比较器的docId明显比当前docId大，那么就说明当前算子的docID不满足全部算子，需要比较下一个docId
                 // iterator beyond the current doc - advance lead and continue to the new highest
                 // doc.
                 doc = lead.advance(advanceTarget(next));
@@ -187,7 +187,7 @@ final class BlockMaxConjunctionScorer extends Scorer {
           }
 
           // success - all iterators are on the same doc and the score is competitive
-          return doc;
+          return doc; // 找到了一个文档
         }
       }
     };
@@ -195,7 +195,7 @@ final class BlockMaxConjunctionScorer extends Scorer {
 
   @Override
   public int docID() {
-    return scorers[0].docID();
+    return scorers[0].docID();// 始终选择score最低的哪个
   }
 
   @Override

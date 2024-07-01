@@ -36,21 +36,21 @@ import org.apache.lucene.util.PriorityQueue;
 public final class ExactPhraseMatcher extends PhraseMatcher {
 
   private static class PostingsAndPosition {
-    private final PostingsEnum postings;
-    private final int offset;
-    private int freq, upTo, pos;
+    private final PostingsEnum postings;// 倒排链
+    private final int offset; // 短语匹配中定义的term的position
+    private int freq, upTo, pos; // freq：总的匹配位置个数，upTo：当前term的倒排索引，已经找到了几个匹配位置，pos：当前匹配位置在文档中的position
 
     public PostingsAndPosition(PostingsEnum postings, int offset) {
       this.postings = postings;
       this.offset = offset;
     }
   }
-
+  // 短语查询中的每个position对应一个
   private final PostingsAndPosition[] postings;
-  private final DocIdSetIterator approximation;
+  private final DocIdSetIterator approximation;// 所有position的倒排链的交集
   private final ImpactsDISI impactsApproximation;
   private boolean freqsLoaded;
-
+// 这里需要注意的是： postings已经按短语匹配中的position排序了
   /** Expert: Creates ExactPhraseMatcher instance */
   public ExactPhraseMatcher(
       PhraseQuery.PostingsAndFreq[] postings,
@@ -126,17 +126,17 @@ public final class ExactPhraseMatcher extends PhraseMatcher {
       }
     }
   }
-
+  // 查找position 大于等于 target的匹配位置
   /**
    * Advance the given pos enum to the first position on or after {@code target}. Return {@code
    * false} if the enum was exhausted before reaching {@code target} and {@code true} otherwise.
    */
   private static boolean advancePosition(PostingsAndPosition posting, int target)
       throws IOException {
-    while (posting.pos < target) {
+    while (posting.pos < target) {// 往后查找，直到找到 position 大于等于 target的匹配位置
       if (posting.upTo == posting.freq) {
         return false;
-      } else {
+      } else {// 定位下一个匹配位置
         posting.pos = posting.postings.nextPosition();
         posting.upTo += 1;
       }
@@ -147,7 +147,7 @@ public final class ExactPhraseMatcher extends PhraseMatcher {
   @Override
   public boolean nextMatch() throws IOException {
     final PostingsAndPosition lead = postings[0];
-    if (lead.upTo < lead.freq) {
+    if (lead.upTo < lead.freq) { // 短语中第一个term的倒排定位到下一个匹配位置，如果没有下一个匹配位置，则直接返回false。因为肯定没有满足匹配要求的短语。
       lead.pos = lead.postings.nextPosition();
       lead.upTo += 1;
     } else {
@@ -158,13 +158,13 @@ public final class ExactPhraseMatcher extends PhraseMatcher {
       final int phrasePos = lead.pos - lead.offset;
       for (int j = 1; j < postings.length; ++j) {
         final PostingsAndPosition posting = postings[j];
-        final int expectedPos = phrasePos + posting.offset;
-
+        final int expectedPos = phrasePos + posting.offset;// 需要查找在文本中的position
+// 如果没有找到大于等于expectedPos的位置
         // advance up to the same position as the lead
         if (advancePosition(posting, expectedPos) == false) {
           break advanceHead;
         }
-
+// 换下个词，继续找
         if (posting.pos != expectedPos) { // we advanced too far
           if (advancePosition(lead, posting.pos - posting.offset + lead.offset)) {
             continue advanceHead;

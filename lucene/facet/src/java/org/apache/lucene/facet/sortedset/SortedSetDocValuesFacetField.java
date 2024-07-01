@@ -39,7 +39,7 @@ public class SortedSetDocValuesFacetField extends Field {
   }
 
   /** Dimension. */
-  public final String dim;
+  public final String dim;// 纬度
 
   /** Path. */
   public final String[] path;

@@ -238,10 +238,10 @@ public abstract class DirectoryReader extends BaseCompositeReader<LeafReader> {
    * @throws IOException if there is a low-level IO error
    * @return null if there are no changes; else, a new DirectoryReader instance which you must
    *     eventually close
-   */
+   */ // 如果改变了，就产生新的(// es refresh时会进来)
   public static DirectoryReader openIfChanged(DirectoryReader oldReader) throws IOException {
-    final DirectoryReader newReader = oldReader.doOpenIfChanged();
-    assert newReader != oldReader;
+    final DirectoryReader newReader = oldReader.doOpenIfChanged(); // 第一次进来的是：ElasticsearchDirectoryReader。第二次进入的是StandardDirectoryReader
+    assert newReader != oldReader; // 若没有变化，就返回null
     return newReader;
   }
 
@@ -278,7 +278,7 @@ public abstract class DirectoryReader extends BaseCompositeReader<LeafReader> {
    */
   public static DirectoryReader openIfChanged(DirectoryReader oldReader, IndexCommit commit)
       throws IOException {
-    final DirectoryReader newReader = oldReader.doOpenIfChanged(commit);
+    final DirectoryReader newReader = oldReader.doOpenIfChanged(commit);// oldReader = ElasticsearchDirectoryReader
     assert newReader != oldReader;
     return newReader;
   }
@@ -447,9 +447,9 @@ public abstract class DirectoryReader extends BaseCompositeReader<LeafReader> {
 
     List<IndexCommit> commits = new ArrayList<>();
 
-    SegmentInfos latest = SegmentInfos.readLatestCommit(dir, 0);
+    SegmentInfos latest = SegmentInfos.readLatestCommit(dir, 0);//读取最大的那个segments_n
     final long currentGen = latest.getGeneration();
-
+    // 放成了第一个
     commits.add(new StandardDirectoryReader.ReaderCommit(null, latest, dir));
 
     for (int i = 0; i < files.length; i++) {
@@ -457,7 +457,7 @@ public abstract class DirectoryReader extends BaseCompositeReader<LeafReader> {
       final String fileName = files[i];
 
       if (fileName.startsWith(IndexFileNames.SEGMENTS)
-          && SegmentInfos.generationFromSegmentsFileName(fileName) < currentGen) {
+          && SegmentInfos.generationFromSegmentsFileName(fileName) < currentGen) {// 只要小的
 
         SegmentInfos sis = null;
         try {
@@ -481,7 +481,7 @@ public abstract class DirectoryReader extends BaseCompositeReader<LeafReader> {
     }
 
     // Ensure that the commit points are sorted in ascending order.
-    Collections.sort(commits);
+    Collections.sort(commits);// 排序了，确保最大Segments_n放在最后面
 
     return commits;
   }
@@ -551,7 +551,7 @@ public abstract class DirectoryReader extends BaseCompositeReader<LeafReader> {
    *
    * @throws IOException if there is a low-level IO error
    * @return null if there are no changes; else, a new DirectoryReader instance.
-   */
+   */ // 刷新时第一次进来的是：ElasticsearchDirectoryReader。第二次进入的是StandardDirectoryReader
   protected abstract DirectoryReader doOpenIfChanged() throws IOException;
 
   /**

@@ -46,17 +46,17 @@ import org.apache.lucene.store.IndexOutput;
  * uptos(position, payload). 4. start offset.
  */
 final class Lucene90SkipWriter extends MultiLevelSkipListWriter {
-  private int[] lastSkipDoc;
-  private long[] lastSkipDocPointer;
-  private long[] lastSkipPosPointer;
-  private long[] lastSkipPayPointer;
+  private int[] lastSkipDoc;// 该级别上次建立跳表元素的文档id(8*x)一个原始为1级别，最大10级别.
+  private long[] lastSkipDocPointer;// 长度为10   doc的跳表指针
+  private long[] lastSkipPosPointer;// 长度为10  // pos的跳表指针
+  private long[] lastSkipPayPointer;// 长度为10   offset/pay的跳表指针
 
   private final IndexOutput docOut;
   private final IndexOutput posOut;
   private final IndexOutput payOut;
 
-  private int curDoc;
-  private long curDocPointer;
+  private int curDoc;// 当前跳表元素写入时，当前docID
+  private long curDocPointer;// 当前跳表元素写入时，当前doc的位置
   private long curPosPointer;
   private long curPayPointer;
   private int curPosBufferUpto;
@@ -105,7 +105,7 @@ final class Lucene90SkipWriter extends MultiLevelSkipListWriter {
   // this is the vast majority of terms (worst case: ID field or similar).  so in resetSkip() we
   // save
   // away the previous pointers, and lazy-init only if we need to buffer skip data for the term.
-  private boolean initialized;
+  private boolean initialized; // 仅仅对超过128个文档的词建立倒排索引，因为初始化比较慢
   long lastDocFP;
   long lastPosFP;
   long lastPayFP;
@@ -128,7 +128,7 @@ final class Lucene90SkipWriter extends MultiLevelSkipListWriter {
   }
 
   private void initSkip() {
-    if (!initialized) {
+    if (!initialized) { // 懒惰初始化，初始化比较浪费时间
       super.resetSkip();
       Arrays.fill(lastSkipDoc, 0);
       Arrays.fill(lastSkipDocPointer, lastDocFP);
@@ -170,7 +170,7 @@ final class Lucene90SkipWriter extends MultiLevelSkipListWriter {
   }
 
   private final ByteBuffersDataOutput freqNormOut = ByteBuffersDataOutput.newResettableInstance();
-
+  // 写达到一个跳表文档时（128*x个文档）, 在level层建立一个跳表节点放入内存中skipBuffer中。
   @Override
   protected void writeSkipData(int level, DataOutput skipBuffer) throws IOException {
 
@@ -203,13 +203,13 @@ final class Lucene90SkipWriter extends MultiLevelSkipListWriter {
     if (level + 1 < numberOfSkipLevels) {
       curCompetitiveFreqNorms[level + 1].addAll(competitiveFreqNorms);
     }
-    writeImpacts(competitiveFreqNorms, freqNormOut);
+    writeImpacts(competitiveFreqNorms, freqNormOut);// 向freqNormOut中写入影响因子
     skipBuffer.writeVInt(Math.toIntExact(freqNormOut.size()));
-    freqNormOut.copyTo(skipBuffer);
+    freqNormOut.copyTo(skipBuffer); // 把freqNormOut数据向skipBuffer中写入
     freqNormOut.reset();
     competitiveFreqNorms.clear();
   }
-
+  // 写入影响因子
   static void writeImpacts(CompetitiveImpactAccumulator acc, DataOutput out) throws IOException {
     Collection<Impact> impacts = acc.getCompetitiveFreqNormPairs();
     Impact previous = new Impact(0, 0);

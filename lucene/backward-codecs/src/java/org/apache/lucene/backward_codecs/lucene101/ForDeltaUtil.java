@@ -202,10 +202,10 @@ public final class ForDeltaUtil {
     final int primitiveSize;
     if (bitsPerValue <= 3) {
       primitiveSize = 8;
-      collapse8(ints);
+      collapse8(ints);// 编码后，只有32位
     } else if (bitsPerValue <= 10) {
       primitiveSize = 16;
-      collapse16(ints);
+      collapse16(ints);// 编码为16位，只有64位
     } else {
       primitiveSize = 32;
     }

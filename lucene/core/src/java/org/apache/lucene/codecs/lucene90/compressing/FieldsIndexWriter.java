@@ -48,18 +48,18 @@ public final class FieldsIndexWriter implements Closeable {
   static final int VERSION_START = 0;
   static final int VERSION_CURRENT = 0;
 
-  private final Directory dir;
+  private final Directory dir;// dir=TrackingDirectoryWrapper
   private final String name;
   private final String suffix;
   private final String extension;
   private final String codecName;
   private final byte[] id;
-  private final int blockShift;
+  private final int blockShift;// 一个block最多放多少个chunk,一般都是1024个
   private final IOContext ioContext;
-  private IndexOutput docsOut;
-  private IndexOutput filePointersOut;
-  private int totalDocs;
-  private int totalChunks;
+  private IndexOutput docsOut; // _eg7_Lucene85FieldsIndex-doc_ids_0.tmp或者 _eg7_Lucene85TermVectorsIndex-doc_ids_0.tmp
+  private IndexOutput filePointersOut;// _eg7_Lucene85FieldsIndexfile_pointers_1.tmp或者_eg7_Lucene85TermVectorsIndex_pointers_1.tmp
+  private int totalDocs;// 这个segment的storedFields总文档数
+  private int totalChunks; // 这个segment的storedFields总chunk数
   private long previousFP;
 
   FieldsIndexWriter(
@@ -80,12 +80,12 @@ public final class FieldsIndexWriter implements Closeable {
     this.id = id;
     this.blockShift = blockShift;
     this.ioContext = ioContext;
-    this.docsOut = dir.createTempOutput(name, codecName + "-doc_ids", ioContext);
+    this.docsOut = dir.createTempOutput(name, codecName + "-doc_ids", ioContext); // _eg7_Lucene85FieldsIndex-doc_ids_0.tmp
     boolean success = false;
     try {
       CodecUtil.writeHeader(docsOut, codecName + "Docs", VERSION_CURRENT);
       filePointersOut = dir.createTempOutput(name, codecName + "file_pointers", ioContext);
-      CodecUtil.writeHeader(filePointersOut, codecName + "FilePointers", VERSION_CURRENT);
+      CodecUtil.writeHeader(filePointersOut, codecName + "FilePointers", VERSION_CURRENT);// _eg7_Lucene85FieldsIndexfile_pointers_1.tmp
       success = true;
     } finally {
       if (success == false) {
@@ -93,47 +93,47 @@ public final class FieldsIndexWriter implements Closeable {
       }
     }
   }
-
+  // 达到16k或者128个文档了，会触发一次(StoredField或者termVector都会跑到这里)，，产生一个chunk
   void writeIndex(int numDocs, long startPointer) throws IOException {
     assert startPointer >= previousFP;
-    docsOut.writeVInt(numDocs);
-    filePointersOut.writeVLong(startPointer - previousFP);
+    docsOut.writeVInt(numDocs);// docsOut = "_3_Lucene85FieldsIndex-doc_ids_0.tmp" 文档数
+    filePointersOut.writeVLong(startPointer - previousFP);// _3_Lucene85FieldsIndexfile_pointers_1.tmp // 第一个文档开始写入时候的位置
     previousFP = startPointer;
     totalDocs += numDocs;
     totalChunks++;
   }
-
+  // 完成一个segment写入了
   void finish(int numDocs, long maxPointer, IndexOutput metaOut) throws IOException {
     if (numDocs != totalDocs) {
       throw new IllegalStateException("Expected " + numDocs + " docs, but got " + totalDocs);
     }
-    CodecUtil.writeFooter(docsOut);
-    CodecUtil.writeFooter(filePointersOut);
+    CodecUtil.writeFooter(docsOut);// docsOut= _n_Lucene85FieldsIndexfile-doc_ids_0.tmp
+    CodecUtil.writeFooter(filePointersOut);// filePointersOut= _n_Lucene85FieldsIndexfile_pointers_1.tmp
     IOUtils.close(docsOut, filePointersOut);
-
-    try (IndexOutput dataOut =
+//metaOut和dataOut都是RateLimitedIndexOutput()
+    try (IndexOutput dataOut =// 构建.fdm文件， 存放byte[]的元数据
         dir.createOutput(IndexFileNames.segmentFileName(name, suffix, extension), ioContext)) {
       CodecUtil.writeIndexHeader(dataOut, codecName + "Idx", VERSION_CURRENT, id, suffix);
 
       metaOut.writeInt(numDocs);
-      metaOut.writeInt(blockShift);
+      metaOut.writeInt(blockShift);// 一般10=1024>>2
       metaOut.writeInt(totalChunks + 1);
       metaOut.writeLong(dataOut.getFilePointer());
 
-      try (ChecksumIndexInput docsIn = dir.openChecksumInput(docsOut.getName())) {
+      try (ChecksumIndexInput docsIn = dir.openChecksumInput(docsOut.getName())) {// 通过mmap方式打开
         CodecUtil.checkHeader(docsIn, codecName + "Docs", VERSION_CURRENT, VERSION_CURRENT);
         Throwable priorE = null;
-        try {
+        try {// 使用fdm和fdx存储递增数组
           final DirectMonotonicWriter docs =
               DirectMonotonicWriter.getInstance(metaOut, dataOut, totalChunks + 1, blockShift);
-          long doc = 0;
+          long doc = 0; // 保存第一个数，始终从0开始开头
           docs.add(doc);
           for (int i = 0; i < totalChunks; ++i) {
-            doc += docsIn.readVInt();
+            doc += docsIn.readVInt();// 每次读取出来的都每个chunk包含的文档数（文档）
             docs.add(doc);
           }
           docs.finish();
-          if (doc != totalDocs) {
+          if (doc != totalDocs) {// 总文档数
             throw new CorruptIndexException("Docs don't add up", docsIn);
           }
         } catch (Throwable e) {
@@ -142,7 +142,7 @@ public final class FieldsIndexWriter implements Closeable {
           CodecUtil.checkFooter(docsIn, priorE);
         }
       }
-      dir.deleteFile(docsOut.getName());
+      dir.deleteFile(docsOut.getName()); // 删除_eg7_Lucene85FieldsIndex-doc_ids_0.tmp文件
       docsOut = null;
 
       metaOut.writeLong(dataOut.getFilePointer());
@@ -161,7 +161,7 @@ public final class FieldsIndexWriter implements Closeable {
           if (maxPointer < fp) {
             throw new CorruptIndexException("File pointers don't add up", filePointersIn);
           }
-          filePointers.add(maxPointer);
+          filePointers.add(maxPointer); // 尾部加了maxPointer
           filePointers.finish();
         } catch (Throwable e) {
           priorE = e;
@@ -169,13 +169,13 @@ public final class FieldsIndexWriter implements Closeable {
           CodecUtil.checkFooter(filePointersIn, priorE);
         }
       }
-      dir.deleteFile(filePointersOut.getName());
+      dir.deleteFile(filePointersOut.getName());// 删除_eg7_Lucene85FieldsIndexfile_pointers_1.tmp文件
       filePointersOut = null;
 
       metaOut.writeLong(dataOut.getFilePointer());
       metaOut.writeLong(maxPointer);
 
-      CodecUtil.writeFooter(dataOut);
+      CodecUtil.writeFooter(dataOut);// fdx
     }
   }
 

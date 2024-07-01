@@ -39,7 +39,7 @@ public abstract class FilteredTermsEnum extends TermsEnum {
   protected BytesRef actualTerm;
 
   /** The delegate {@link TermsEnum}. */
-  protected final TermsEnum tenum;
+  protected final TermsEnum tenum; // 这个field对应的所有的terms
 
   /**
    * Return value, if term should be accepted or the iteration should {@code END}. The {@code
@@ -223,17 +223,17 @@ public abstract class FilteredTermsEnum extends TermsEnum {
   public BytesRef next() throws IOException {
     // System.out.println("FTE.next doSeek=" + doSeek);
     // new Throwable().printStackTrace(System.out);
-    for (; ; ) {
+    for (; ; ) {// 循环遍历匹配的fst列表
       // Seek or forward the iterator
       if (doSeek) {
         doSeek = false;
-        final BytesRef t = nextSeekTerm(actualTerm);
+        final BytesRef t = nextSeekTerm(actualTerm);// 获取用户输入的每个term
         // System.out.println("  seek to t=" + (t == null ? "null" : t.utf8ToString()) + " tenum=" +
         // tenum);
         // Make sure we always seek forward:
         assert actualTerm == null || t == null || t.compareTo(actualTerm) > 0
             : "curTerm=" + actualTerm + " seekTerm=" + t;
-        if (t == null || tenum.seekCeil(t) == SeekStatus.END) {
+        if (t == null || tenum.seekCeil(t) == SeekStatus.END) {/// 找到
           // no more terms to seek to or enum exhausted
           // System.out.println("  return null");
           return null;
@@ -249,7 +249,7 @@ public abstract class FilteredTermsEnum extends TermsEnum {
       }
 
       // check if term is accepted
-      switch (accept(actualTerm)) {
+      switch (accept(actualTerm)) {// 将跑到 TermInSetQuery$SetEnum.accept()
         case YES_AND_SEEK:
           doSeek = true;
         // term accepted, but we need to seek so fall-through

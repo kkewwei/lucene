@@ -135,14 +135,14 @@ final class NumericDocValuesFieldUpdates extends DocValuesFieldUpdates {
 
   static class SingleValueNumericDocValuesFieldUpdates extends DocValuesFieldUpdates {
 
-    private final long value;
+    private final long value;// _soft_deletes的value： 1
     private final BitSet bitSet;
     private BitSet hasNoValue;
     private boolean hasAtLeastOneValue;
 
     SingleValueNumericDocValuesFieldUpdates(long delGen, String field, int maxDoc, long value) {
       super(maxDoc, delGen, field, DocValuesType.NUMERIC);
-      this.bitSet = new SparseFixedBitSet(maxDoc);
+      this.bitSet = new SparseFixedBitSet(maxDoc);// 稀疏矩阵
       this.value = value;
     }
 

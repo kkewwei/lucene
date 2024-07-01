@@ -57,8 +57,8 @@ class Packed64 extends PackedInts.MutableImpl {
   public Packed64(int valueCount, int bitsPerValue) {
     super(valueCount, bitsPerValue);
     final PackedInts.Format format = PackedInts.Format.PACKED;
-    final int longCount = format.longCount(PackedInts.VERSION_CURRENT, valueCount, bitsPerValue);
-    this.blocks = new long[longCount];
+    final int longCount = format.longCount(PackedInts.VERSION_CURRENT, valueCount, bitsPerValue);// 需要 多少个long来存储
+    this.blocks = new long[longCount];//将这些termId以long存储，需要多少个logn来存储
     maskRight = ~0L << (BLOCK_SIZE - bitsPerValue) >>> (BLOCK_SIZE - bitsPerValue);
     bpvMinusBlockSize = bitsPerValue - BLOCK_SIZE;
   }
@@ -147,24 +147,24 @@ class Packed64 extends PackedInts.MutableImpl {
   }
 
   @Override
-  public int set(int index, long[] arr, int off, int len) {
+  public int set(int index, long[] arr, int off, int len) {// index: 开始存第几个词。
     assert len > 0 : "len must be > 0 (got " + len + ")";
     assert index >= 0 && index < valueCount;
     len = Math.min(len, valueCount - index);
     assert off + len <= arr.length;
 
     final int originalIndex = index;
-    final PackedInts.Encoder encoder = BulkOperation.of(PackedInts.Format.PACKED, bitsPerValue);
+    final PackedInts.Encoder encoder = BulkOperation.of(PackedInts.Format.PACKED, bitsPerValue); // BulkOperationPacked11
 
     // go to the next block where the value does not span across two blocks
-    final int offsetInBlocks = index % encoder.longValueCount();
-    if (offsetInBlocks != 0) {
+    final int offsetInBlocks = index % encoder.longValueCount(); //这个block内第几个value
+    if (offsetInBlocks != 0) {//
       for (int i = offsetInBlocks; i < encoder.longValueCount() && len > 0; ++i) {
         set(index++, arr[off++]);
         --len;
       }
       if (len == 0) {
-        return index - originalIndex;
+        return index - originalIndex;// kw_bug
       }
     }
 
@@ -172,16 +172,16 @@ class Packed64 extends PackedInts.MutableImpl {
     assert index % encoder.longValueCount() == 0;
     int blockIndex = (int) (((long) index * bitsPerValue) >>> BLOCK_BITS);
     assert (((long) index * bitsPerValue) & MOD_MASK) == 0;
-    final int iterations = len / encoder.longValueCount();
-    encoder.encode(arr, off, blocks, blockIndex, iterations);
-    final int setValues = iterations * encoder.longValueCount();
-    index += setValues;
-    len -= setValues;
+    final int iterations = len / encoder.longValueCount();// 先存储整体部分，需要几个block
+    encoder.encode(arr, off, blocks, blockIndex, iterations);// 先存储整数个block
+    final int setValues = iterations * encoder.longValueCount();// 目前存储了多少个数了
+    index += setValues;// 当前arr已经存储的下标
+    len -= setValues;// 还有多少没有存储
     assert len >= 0;
 
-    if (index > originalIndex) {
+    if (index > originalIndex) { // 还剩余多少
       // stay at the block boundary
-      return index - originalIndex;
+      return index - originalIndex;// 这次存储了多少
     } else {
       // no progress so far => already at a block boundary but no full block to get
       assert index == originalIndex;

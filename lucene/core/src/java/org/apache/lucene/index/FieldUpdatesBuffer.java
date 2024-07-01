@@ -40,7 +40,7 @@ import org.apache.lucene.util.RamUsageEstimator;
  * updates have a value. Lastly, if all updates share the same value for a numeric field we only
  * store the value once.
  */
-final class FieldUpdatesBuffer {
+final class FieldUpdatesBuffer {// 对es来说，soft_delete将作为key, FieldUpdatesBuffer作为value，属于BufferedUpdates中fieldUpdates（map）中的
   private static final long SELF_SHALLOW_SIZE =
       RamUsageEstimator.shallowSizeOfInstance(FieldUpdatesBuffer.class);
   private static final long STRING_SHALLOW_SIZE =
@@ -52,15 +52,15 @@ final class FieldUpdatesBuffer {
   // we might pay a higher price in terms of memory in certain cases but will gain
   // on CPU for those. We also use a stable sort to sort in order to apply the terms in order
   // since by definition we store them in order.
-  private final BytesRefArray termValues;
-  private BytesRefArray.SortState termSortState;
+  private final BytesRefArray termValues;// 记录的是要更新的主键值：_id：1， _id:2 _id:3等等
+  private BytesRefArray.SortState termSortState;// 对待更新的主键值进行排序
   private final BytesRefArray byteValues; // this will be null if we are buffering numerics
-  private int[] docsUpTo;
-  private long[] numericValues; // this will be null if we are buffering binaries
+  private int[] docsUpTo; // 更新segment的上限。全局Max，
+  private long[] numericValues; // this will be null if we are buffering binaries， 记录的是 __soft_delete的value=1
   private FixedBitSet hasValues;
   private long maxNumeric = Long.MIN_VALUE;
   private long minNumeric = Long.MAX_VALUE;
-  private String[] fields;
+  private String[] fields;// 要更新的字段
   private final boolean isNumeric;
   private boolean finished = false;
 
@@ -88,7 +88,7 @@ final class FieldUpdatesBuffer {
   FieldUpdatesBuffer(
       Counter bytesUsed, DocValuesUpdate.NumericDocValuesUpdate initialValue, int docUpTo) {
     this(bytesUsed, initialValue, docUpTo, true);
-    if (initialValue.hasValue()) {
+    if (initialValue.hasValue()) { // 要更新的主键值
       numericValues = new long[] {initialValue.getValue()};
       maxNumeric = minNumeric = initialValue.getValue();
     } else {
@@ -123,8 +123,8 @@ final class FieldUpdatesBuffer {
 
   void add(String field, int docUpTo, int ord, boolean hasValue) {
     assert finished == false : "buffer was finished already";
-    if (fields[0].equals(field) == false || fields.length != 1) {
-      if (fields.length <= ord) {
+    if (fields[0].equals(field) == false || fields.length != 1) { // 一般忽略了。
+      if (fields.length <= ord) {// 除了_id，有别的字段
         String[] array = ArrayUtil.grow(fields, ord + 1);
         if (fields.length == 1) {
           Arrays.fill(array, 1, ord, fields[0]);
@@ -139,8 +139,8 @@ final class FieldUpdatesBuffer {
       fields[ord] = field;
     }
 
-    if (docsUpTo[0] != docUpTo || docsUpTo.length != 1) {
-      if (docsUpTo.length <= ord) {
+    if (docsUpTo[0] != docUpTo || docsUpTo.length != 1) {// 上限不一样。那么展开，然后每个DeleteNode存储各自的上限
+      if (docsUpTo.length <= ord) {//   扩容
         int[] array = ArrayUtil.grow(docsUpTo, ord + 1);
         if (docsUpTo.length == 1) {
           Arrays.fill(array, 1, ord, docsUpTo[0]);
@@ -172,7 +172,7 @@ final class FieldUpdatesBuffer {
     assert isNumeric;
     final int ord = append(term);
     String field = term.field;
-    add(field, docUpTo, ord, true);
+    add(field, docUpTo, ord, true);// 没啥用
     minNumeric = Math.min(minNumeric, value);
     maxNumeric = Math.max(maxNumeric, value);
     if (numericValues[0] != value || numericValues.length != 1) {
@@ -211,8 +211,8 @@ final class FieldUpdatesBuffer {
     }
     finished = true;
     final boolean sortedTerms = hasSingleValue() && hasValues == null && fields.length == 1;
-    if (sortedTerms) {
-      termSortState = termValues.sort(BytesRefComparator.NATURAL, true);
+    if (sortedTerms) {// term实际是__soft_deletes里面的1
+      termSortState = termValues.sort(BytesRefComparator.NATURAL, true);//1.首先按照从大到小进行排序。_id: 1 , _id: 2等term。2.其次再按照docId排序，文档id倒序排序
       assert assertTermAndDocInOrder();
       bytesUsed.addAndGet(termSortState.ramBytesUsed());
     }
@@ -256,7 +256,7 @@ final class FieldUpdatesBuffer {
 
   boolean hasSingleValue() {
     // we only do this optimization for numerics so far.
-    return isNumeric && numericValues.length == 1;
+    return isNumeric && numericValues.length == 1;//  __soft_delete的value=1
   }
 
   long getNumericValue(int idx) {
@@ -275,7 +275,7 @@ final class FieldUpdatesBuffer {
     int docUpTo;
 
     /** a numeric value or 0 if this buffer holds binary updates */
-    long numericValue;
+    long numericValue;// __soft_deletes 对应的 1
 
     /** a binary value or null if this buffer holds numeric updates */
     BytesRef binaryValue;
@@ -304,14 +304,14 @@ final class FieldUpdatesBuffer {
 
   /** An iterator that iterates over all updates in insertion order */
   class BufferedUpdateIterator {
-    private final BytesRefArray.IndexedBytesRefIterator termValuesIterator;
+    private final BytesRefArray.IndexedBytesRefIterator termValuesIterator;// 为啥两个遍历呢
     private final BytesRefArray.IndexedBytesRefIterator lookAheadTermIterator;
     private final BytesRefIterator byteValuesIterator;
     private final BufferedUpdate bufferedUpdate = new BufferedUpdate();
     private final Bits updatesWithValue;
 
     BufferedUpdateIterator() {
-      this.termValuesIterator = termValues.iterator(termSortState);
+      this.termValuesIterator = termValues.iterator(termSortState);// 为啥赋值两个
       this.lookAheadTermIterator =
           termSortState != null ? termValues.iterator(termSortState) : null;
       this.byteValuesIterator = isNumeric ? null : byteValues.iterator();
@@ -331,14 +331,14 @@ final class FieldUpdatesBuffer {
      * Moves to the next BufferedUpdate or return null if all updates are consumed. The returned
      * instance is a shared instance and must be fully consumed before the next call to this method.
      */
-    BufferedUpdate next() throws IOException {
+    BufferedUpdate next() throws IOException {// __soft_deletes 对应的 1
       BytesRef next = nextTerm();
       if (next != null) {
-        final int idx = termValuesIterator.ord();
+        final int idx = termValuesIterator.ord();// 对_id来说，更新是第几个词
         bufferedUpdate.termValue = next;
         bufferedUpdate.hasValue = updatesWithValue.get(idx);
-        bufferedUpdate.termField = fields[getArrayIndex(fields.length, idx)];
-        bufferedUpdate.docUpTo = docsUpTo[getArrayIndex(docsUpTo.length, idx)];
+        bufferedUpdate.termField = fields[getArrayIndex(fields.length, idx)];// 哪个字段: _id字段
+        bufferedUpdate.docUpTo = docsUpTo[getArrayIndex(docsUpTo.length, idx)];// 文档id
         if (bufferedUpdate.hasValue) {
           if (isNumeric) {
             bufferedUpdate.numericValue = numericValues[getArrayIndex(numericValues.length, idx)];
@@ -356,7 +356,7 @@ final class FieldUpdatesBuffer {
       }
     }
 
-    private BytesRef nextTerm() throws IOException {
+    private BytesRef nextTerm() throws IOException {// 这段没太看懂
       if (lookAheadTermIterator != null) {
         if (bufferedUpdate.termValue == null) {
           lookAheadTermIterator.next();

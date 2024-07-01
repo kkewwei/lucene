@@ -80,8 +80,8 @@ public final class NumericUtils {
   }
 
   /** Converts IEEE 754 representation of a double to sortable order (or back to the original) */
-  public static long sortableDoubleBits(long bits) {
-    return bits ^ (bits >> 63) & 0x7fffffffffffffffL;
+  public static long sortableDoubleBits(long bits) { // 若bit为正数，返回值为0，若为负数，返回值为。若bits为负数，负数更小更在前面
+    return bits ^ (bits >> 63) & 0x7fffffffffffffffL;// &优先级更高
   }
 
   /** Converts IEEE 754 representation of a float to sortable order (or back to the original) */
@@ -90,18 +90,18 @@ public final class NumericUtils {
   }
 
   /** Result = a - b, where a &gt;= b, else {@code IllegalArgumentException} is thrown. */
-  public static void subtract(int bytesPerDim, int dim, byte[] a, byte[] b, byte[] result) {
+  public static void subtract(int bytesPerDim, int dim, byte[] a, byte[] b, byte[] result) {// 减法
     int start = dim * bytesPerDim;
     int end = start + bytesPerDim;
 
-    int borrow = 0;
+    int borrow = 0;//借位
     int i;
 
     int limit = start + (bytesPerDim & ~3);
-    for (i = end - 1; i >= limit; i--) {
+    for (i = end - 1; i >= limit; i--) {// 从低位开始进行减法运算
       int diff = Byte.toUnsignedInt(a[i]) - Byte.toUnsignedInt(b[i]) - borrow;
       if (diff < 0) {
-        borrow = 1;
+        borrow = 1;// 借一位
       } else {
         borrow = 0;
       }
@@ -177,7 +177,7 @@ public final class NumericUtils {
   public static void intToSortableBytes(int value, byte[] result, int offset) {
     // Flip the sign bit, so negative ints sort before positive ints correctly:
     value ^= 0x80000000;
-    BitUtil.VH_BE_INT.set(result, offset, value);
+    BitUtil.VH_BE_INT.set(result, offset, value);// 大的在前面
   }
 
   /**

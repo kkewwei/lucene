@@ -240,7 +240,7 @@ abstract class DocValuesFieldUpdates implements Accountable {
     };
   }
 
-  final String field;
+  final String field;// 就是__soft_deletes
   final DocValuesType type;
   final long delGen;
   private final int bitsPerValue;
@@ -250,7 +250,7 @@ abstract class DocValuesFieldUpdates implements Accountable {
   protected int size;
 
   protected DocValuesFieldUpdates(int maxDoc, long delGen, String field, DocValuesType type) {
-    this.maxDoc = maxDoc;
+    this.maxDoc = maxDoc;// 这个semgent最大的文档个数
     this.delGen = delGen;
     this.field = field;
     if (type == null) {

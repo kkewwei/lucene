@@ -35,7 +35,7 @@ abstract class FSTEnum<T> {
 
   // outputs are cumulative
   @SuppressWarnings({"rawtypes", "unchecked"})
-  protected T[] output = (T[]) new Object[10];
+  protected T[] output = (T[]) new Object[10];// 和arcs对应的output
 
   protected final T NO_OUTPUT;
   protected final FST.BytesReader fstReader;
@@ -49,9 +49,9 @@ abstract class FSTEnum<T> {
    */
   FSTEnum(FST<T> fst) {
     this.fst = fst;
-    fstReader = fst.getBytesReader();
+    fstReader = fst.getBytesReader();// 这里是倒排读取，因为是从尾像头存储的，那么读取时候就从尾向头读取
     NO_OUTPUT = fst.outputs.getNoOutput();
-    fst.getFirstArc(getArc(0));
+    fst.getFirstArc(getArc(0));// 先读取自己的第一条边
     output[0] = NO_OUTPUT;
   }
 
@@ -92,10 +92,10 @@ abstract class FSTEnum<T> {
     }
     // System.out.println("  fall through upto=" + upto);
   }
-
+  //
   protected void doNext() throws IOException {
     // System.out.println("FE: next upto=" + upto);
-    if (upto == 0) {
+    if (upto == 0) {// 第一条边
       // System.out.println("  init");
       upto = 1;
       fst.readFirstTargetArc(getArc(0), getArc(1), fstReader);
@@ -103,14 +103,14 @@ abstract class FSTEnum<T> {
       // pop
       // System.out.println("  check pop curArc target=" + arcs[upto].target + " label=" +
       // arcs[upto].label + " isLast?=" + arcs[upto].isLast());
-      while (arcs[upto].isLast()) {
+      while (arcs[upto].isLast()) {// 这个边是这个节点最后一条边，就退出这个节点查询，回到上个节点再查找下一个term
         upto--;
         if (upto == 0) {
           // System.out.println("  eof");
           return;
         }
       }
-      fst.readNextArc(arcs[upto], fstReader);
+      fst.readNextArc(arcs[upto], fstReader);// 再读取第二条边。
     }
 
     pushFirst();
@@ -710,14 +710,14 @@ abstract class FSTEnum<T> {
     assert arc != null;
 
     while (true) {
-      output[upto] = fst.outputs.add(output[upto - 1], arc.output());
+      output[upto] = fst.outputs.add(output[upto - 1], arc.output());//粗暴的将二进制组合起来
       if (arc.label() == FST.END_LABEL) {
         // Final node
         break;
       }
       // System.out.println("  pushFirst label=" + (char) arc.label + " upto=" + upto + " output=" +
       // fst.outputs.outputToString(output[upto]));
-      setCurrentLabel(arc.label());
+      setCurrentLabel(arc.label());// 记录下整条边的前缀
       incr();
 
       final FST.Arc<T> nextArc = getArc(upto);

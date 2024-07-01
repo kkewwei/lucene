@@ -46,7 +46,7 @@ import org.apache.lucene.store.DataOutput;
  *   <li>Ints: If the number of bits per value is <code>0</code>, then there is nothing to decode
  *       and all ints are equal to MinValue. Otherwise: BlockSize {@link PackedInts packed ints}
  *       encoded on exactly <code>bitsPerValue</code> bits per value. They are the subtraction of
- *       the original values and MinValue
+ *       the original values and MinValue将编码，通过当前值-最小值优化长度
  * </ul>
  *
  * @see BlockPackedReaderIterator
@@ -59,7 +59,7 @@ public final class BlockPackedWriter extends AbstractBlockPackedWriter {
    *
    * @param blockSize the number of values of a single block, must be a power of 2
    */
-  public BlockPackedWriter(DataOutput out, int blockSize) {
+  public BlockPackedWriter(DataOutput out, int blockSize) { // blockSize:64
     super(out, blockSize);
   }
 
@@ -74,7 +74,7 @@ public final class BlockPackedWriter extends AbstractBlockPackedWriter {
 
     final long delta = max - min;
     int bitsRequired = delta == 0 ? 0 : PackedInts.unsignedBitsRequired(delta);
-    if (bitsRequired == 64) {
+    if (bitsRequired == 64) { // 若需要64位，则没必要压缩
       // no need to delta-encode
       min = 0L;
     } else if (min > 0L) {
@@ -82,20 +82,20 @@ public final class BlockPackedWriter extends AbstractBlockPackedWriter {
       min = Math.max(0L, max - PackedInts.maxValue(bitsRequired));
     }
 
-    final int token = (bitsRequired << BPV_SHIFT) | (min == 0 ? MIN_VALUE_EQUALS_0 : 0);
-    out.writeByte((byte) token);
+    final int token = (bitsRequired << BPV_SHIFT) | (min == 0 ? MIN_VALUE_EQUALS_0 : 0); // 两组，前7位代表需要的byte, 第8位不为0， 则min也需要解码
+    out.writeByte((byte) token);  // FSIndexOutput
 
-    if (min != 0) {
+    if (min != 0) { // 若最小值不为0
       writeVLong(out, zigZagEncode(min) - 1);
     }
 
     if (bitsRequired > 0) {
       if (min != 0) {
-        for (int i = 0; i < off; ++i) {
-          values[i] -= min;
+        for (int i = 0; i < off; ++i) { // 精简长度
+          values[i] -= min; // 实际保存的是域的当前值-最小值，也是为了精简字段长度
         }
       }
-      writeValues(bitsRequired);
+      writeValues(bitsRequired); // 会去真正
     }
 
     off = 0;

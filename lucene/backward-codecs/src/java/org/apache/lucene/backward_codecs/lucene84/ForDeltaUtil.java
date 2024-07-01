@@ -61,7 +61,7 @@ public class ForDeltaUtil {
       }
       assert or != 0;
       final int bitsPerValue = PackedInts.bitsRequired(or);
-      out.writeByte((byte) bitsPerValue);
+      out.writeByte((byte) bitsPerValue); // 仅用一位存储
       forUtil.encode(longs, bitsPerValue, out);
     }
   }

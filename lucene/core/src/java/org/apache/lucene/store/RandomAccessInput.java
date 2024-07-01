@@ -77,7 +77,7 @@ public interface RandomAccessInput {
    *
    * @see IndexInput#prefetch
    */
-  default void prefetch(long offset, long length) throws IOException {}
+  default void prefetch(long offset, long length) throws IOException {}// 将跑到MemorySegmentIndexInput.prefetch
 
   /**
    * Returns a hint whether all the contents of this input are resident in physical memory.

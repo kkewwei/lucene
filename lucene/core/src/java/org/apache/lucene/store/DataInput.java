@@ -230,7 +230,7 @@ public abstract class DataInput implements Cloneable {
   public String readString() throws IOException {
     int length = readVInt();
     final byte[] bytes = new byte[length];
-    readBytes(bytes, 0, length);
+    readBytes(bytes, 0, length);// 若是DirectByteBuffer的话，则使用UNSAFE直接读取堆外内存实现的
     return new String(bytes, 0, length, StandardCharsets.UTF_8);
   }
 

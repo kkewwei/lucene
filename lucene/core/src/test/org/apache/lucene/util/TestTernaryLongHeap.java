@@ -37,7 +37,7 @@ public class TestTernaryLongHeap extends LuceneTestCase {
   }
 
   public void testPQ() {
-    testPQ(atLeast(10000), random());
+    testPQ(atLeast(10000), );
   }
 
   public static void testPQ(int count, Random gen) {

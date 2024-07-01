@@ -34,12 +34,12 @@ import org.apache.lucene.util.LongsRef;
  * @lucene.internal
  */
 public final class TermScorer extends Scorer {
-  private final PostingsEnum postingsEnum;
+  private final PostingsEnum postingsEnum;// SlowImpactsEnum
   private final DocIdSetIterator iterator;
   private final SimScorer scorer;
   private final BulkSimScorer bulkScorer;
   private final NumericDocValues norms;
-  private final ImpactsDISI impactsDisi;
+  private final ImpactsDISI impactsDisi;//impactsDisi和 impactsEnum和postingsEnum可以逐个遍历匹配的文档
   private final MaxScoreCache maxScoreCache;
   private long[] normValues = LongsRef.EMPTY_LONGS;
 
@@ -66,7 +66,7 @@ public final class TermScorer extends Scorer {
     postingsEnum = impactsEnum;
     maxScoreCache = new MaxScoreCache(impactsEnum, scorer);
     if (topLevelScoringClause) {
-      impactsDisi = new ImpactsDISI(impactsEnum, maxScoreCache);
+      impactsDisi = new ImpactsDISI(impactsEnum, maxScoreCache);//DocIdSetIterator
       iterator = impactsDisi;
     } else {
       impactsDisi = null;
@@ -101,7 +101,7 @@ public final class TermScorer extends Scorer {
     if (norms != null && norms.advanceExact(postingsEnum.docID())) {
       norm = norms.longValue();
     }
-    return scorer.score(postingsEnum.freq(), norm);
+    return scorer.score(postingsEnum.freq(), norm);// 对单个文档进行打分。使用了词频
   }
 
   @Override

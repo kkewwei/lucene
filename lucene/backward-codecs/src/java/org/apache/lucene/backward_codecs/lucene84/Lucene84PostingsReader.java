@@ -72,12 +72,12 @@ public final class Lucene84PostingsReader extends PostingsReaderBase {
     // but for now we at least verify proper structure of the checksum footer: which looks
     // for FOOTER_MAGIC + algorithmID. This is cheap and can detect some forms of corruption
     // such as file truncation.
-
+//  读取doc文件
     String docName =
         IndexFileNames.segmentFileName(
             state.segmentInfo.name, state.segmentSuffix, Lucene84PostingsFormat.DOC_EXTENSION);
-    try {
-      docIn = EndiannessReverserUtil.openInput(state.directory, docName, state.context);
+    try {// directory = Lucene50CompoundReader，会直接跳到handle.slice切分
+      docIn = EndiannessReverserUtil.openInput(state.directory, docName, state.context);// 在读取集群元数据时候，使用的NIO方式。
       version =
           CodecUtil.checkIndexHeader(
               docIn,
@@ -87,7 +87,7 @@ public final class Lucene84PostingsReader extends PostingsReaderBase {
               state.segmentInfo.getId(),
               state.segmentSuffix);
       CodecUtil.retrieveChecksum(docIn);
-
+      // 读取pos文件
       if (state.fieldInfos.hasProx()) {
         String proxName =
             IndexFileNames.segmentFileName(
@@ -96,8 +96,8 @@ public final class Lucene84PostingsReader extends PostingsReaderBase {
         CodecUtil.checkIndexHeader(
             posIn, POS_CODEC, version, version, state.segmentInfo.getId(), state.segmentSuffix);
         CodecUtil.retrieveChecksum(posIn);
-
-        if (state.fieldInfos.hasPayloads() || state.fieldInfos.hasOffsets()) {
+// 读取.pay文件
+        if (state.fieldInfos.hasPayloads() || state.fieldInfos.hasOffsets()) { // 有的话，需要分别读取。可以看出，offset和payload是放在一起的
           String payName =
               IndexFileNames.segmentFileName(
                   state.segmentInfo.name,
@@ -121,7 +121,7 @@ public final class Lucene84PostingsReader extends PostingsReaderBase {
     }
   }
 
-  @Override
+  @Override // tim文件
   public void init(IndexInput termsIn, SegmentReadState state) throws IOException {
     // Make sure we are talking to the matching postings writer
     CodecUtil.checkIndexHeader(
@@ -131,7 +131,7 @@ public final class Lucene84PostingsReader extends PostingsReaderBase {
         VERSION_CURRENT,
         state.segmentInfo.getId(),
         state.segmentSuffix);
-    final int indexBlockSize = termsIn.readVInt();
+    final int indexBlockSize = termsIn.readVInt();//128
     if (indexBlockSize != ForUtil.BLOCK_SIZE) {
       throw new IllegalStateException(
           "index-time BLOCK_SIZE ("
@@ -188,7 +188,7 @@ public final class Lucene84PostingsReader extends PostingsReaderBase {
   public void close() throws IOException {
     IOUtils.close(docIn, posIn, payIn);
   }
-
+  // 可参考 Lucene84PostingsReader.encodeTerm()
   @Override
   public void decodeTerm(
       DataInput in, FieldInfo fieldInfo, BlockTermState _termState, boolean absolute)
@@ -210,7 +210,7 @@ public final class Lucene84PostingsReader extends PostingsReaderBase {
     if (version >= VERSION_COMPRESSED_TERMS_DICT_IDS) {
       final long l = in.readVLong();
       if ((l & 0x01) == 0) {
-        termState.docStartFP += l >>> 1;
+        termState.docStartFP += l >>> 1;// 先解析出该词在写入doc时，doc的起始位置
         if (termState.docFreq == 1) {
           termState.singletonDocID = in.readVInt();
         } else {
@@ -289,7 +289,7 @@ public final class Lucene84PostingsReader extends PostingsReaderBase {
   @Override
   public ImpactsEnum impacts(FieldInfo fieldInfo, BlockTermState state, int flags)
       throws IOException {
-    if (state.docFreq <= BLOCK_SIZE) {
+    if (state.docFreq <= BLOCK_SIZE) {// 若文档数小于1个block
       // no skip data
       return new SlowImpactsEnum(postings(fieldInfo, state, null, flags));
     }
@@ -332,7 +332,7 @@ public final class Lucene84PostingsReader extends PostingsReaderBase {
     private Lucene84SkipReader skipper;
     private boolean skipped;
 
-    final IndexInput startDocIn;
+    final IndexInput startDocIn;// 读取.doc文件
 
     IndexInput docIn;
     final boolean indexHasFreq;
@@ -395,7 +395,7 @@ public final class Lucene84PostingsReader extends PostingsReaderBase {
     public PostingsEnum reset(IntBlockTermState termState, int flags) throws IOException {
       docFreq = termState.docFreq;
       totalTermFreq = indexHasFreq ? termState.totalTermFreq : docFreq;
-      docTermStartFP = termState.docStartFP;
+      docTermStartFP = termState.docStartFP;// 这个doc的起始位置
       skipOffset = termState.skipOffset;
       singletonDocID = termState.singletonDocID;
       if (docFreq > 1) {
@@ -411,7 +411,7 @@ public final class Lucene84PostingsReader extends PostingsReaderBase {
       this.isFreqsRead = true;
       if (indexHasFreq == false || needsFreq == false) {
         for (int i = 0; i < BLOCK_SIZE; ++i) {
-          freqBuffer[i] = 1;
+          freqBuffer[i] = 1;// 使用System.copy是不是可以快点
         }
       }
       accum = 0;
@@ -497,7 +497,7 @@ public final class Lucene84PostingsReader extends PostingsReaderBase {
 
     @Override
     public int nextDoc() throws IOException {
-      if (docBufferUpto == BLOCK_SIZE) {
+      if (docBufferUpto == BLOCK_SIZE) {//128个词
         refillDocs(); // we don't need to load freqBuffer for now (will be loaded later if
         // necessary)
       }
@@ -572,7 +572,7 @@ public final class Lucene84PostingsReader extends PostingsReaderBase {
 
     @Override
     public long cost() {
-      return docFreq;
+      return docFreq;// docId后多少文档在这个term下
     }
   }
 
@@ -1069,8 +1069,8 @@ public final class Lucene84PostingsReader extends PostingsReaderBase {
     final ForDeltaUtil forDeltaUtil = new ForDeltaUtil(forUtil);
     final PForUtil pforUtil = new PForUtil(forUtil);
 
-    private final long[] docBuffer = new long[BLOCK_SIZE + 1];
-    private final long[] freqBuffer = new long[BLOCK_SIZE];
+    private final long[] docBuffer = new long[BLOCK_SIZE + 1];// 文档id
+    private final long[] freqBuffer = new long[BLOCK_SIZE];// 词频
 
     private int docBufferUpto;
 
@@ -1118,7 +1118,7 @@ public final class Lucene84PostingsReader extends PostingsReaderBase {
 
       skipper =
           new Lucene84ScoreSkipReader(
-              docIn.clone(), MAX_SKIP_LEVELS, indexHasPositions, indexHasOffsets, indexHasPayloads);
+              docIn.clone(), MAX_SKIP_LEVELS, indexHasPositions, indexHasOffsets, indexHasPayloads);// termState中如下参数的含义可参考：Lucene84PostingsWriter.finishTerm()最后定义的
       skipper.init(
           termState.docStartFP + termState.skipOffset,
           termState.docStartFP,
@@ -1176,13 +1176,13 @@ public final class Lucene84PostingsReader extends PostingsReaderBase {
       docBufferUpto = 0;
       assert docBuffer[BLOCK_SIZE] == NO_MORE_DOCS;
     }
-
+    // target是文档号
     @Override
     public void advanceShallow(int target) throws IOException {
       if (target > nextSkipDoc) {
         // always plus one to fix the result, since skip position in Lucene84SkipReader
         // is a little different from MultiLevelSkipListReader
-        final int newDocUpto = skipper.skipTo(target) + 1;
+        final int newDocUpto = skipper.skipTo(target) + 1; // Lucene84ScoreSkipReader
 
         if (newDocUpto >= blockUpto) {
           // Skipper moved
@@ -1212,12 +1212,12 @@ public final class Lucene84PostingsReader extends PostingsReaderBase {
       return advance(doc + 1);
     }
 
-    @Override
+    @Override // target是文档Id
     public int advance(int target) throws IOException {
       if (target > nextSkipDoc) {
-        advanceShallow(target);
+        advanceShallow(target);// target是文档号
       }
-      if (docBufferUpto == BLOCK_SIZE) {
+      if (docBufferUpto == BLOCK_SIZE) {// 128
         if (seekTo >= 0) {
           docIn.seek(seekTo);
           isFreqsRead = true; // reset isFreqsRead

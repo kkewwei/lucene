@@ -39,7 +39,7 @@ class TermsEnumIndex {
    */
   static long prefix8ToComparableUnsignedLong(BytesRef term) {
     // Use Big Endian so that longs are comparable
-    if (term.length >= Long.BYTES) {
+    if (term.length >= Long.BYTES) {/// 若长度>8
       return (long) BitUtil.VH_BE_LONG.get(term.bytes, term.offset);
     } else {
       long l;
@@ -66,13 +66,13 @@ class TermsEnumIndex {
     }
   }
 
-  final int subIndex;
-  TermsEnum termsEnum;
-  private BytesRef currentTerm;
+  final int subIndex;// 从小到大读取排序，是第几个segment
+  TermsEnum termsEnum;// Lucene80DocValuesProducer$TermsDict
+  private BytesRef currentTerm;// 当前TermsEnumIndex维持的这个docValue的哪个值
   private long currentTermPrefix8;
 
   TermsEnumIndex(TermsEnum termsEnum, int subIndex) {
-    this.termsEnum = termsEnum;
+    this.termsEnum = termsEnum;// 真是的那个semgment排序
     this.subIndex = subIndex;
   }
 
@@ -88,9 +88,9 @@ class TermsEnumIndex {
       currentTermPrefix8 = prefix8ToComparableUnsignedLong(currentTerm);
     }
   }
-
+  // 会依次读取每个docValue中词的内容
   BytesRef next() throws IOException {
-    BytesRef term = termsEnum.next();
+    BytesRef term = termsEnum.next();// 将跑到 Lucene80DocValuesProducer$TermsDict.next()
     setTerm(term);
     return term;
   }
@@ -100,7 +100,7 @@ class TermsEnumIndex {
     if (status == SeekStatus.END) {
       setTerm(null);
     } else {
-      setTerm(termsEnum.term());
+      setTerm(termsEnum.term());// 看起来只要不是END，都会去赋值
     }
     return status;
   }

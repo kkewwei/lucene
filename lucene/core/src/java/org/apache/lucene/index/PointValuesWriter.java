@@ -28,19 +28,19 @@ import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.Counter;
 import org.apache.lucene.util.PagedBytes;
 import org.apache.lucene.util.bkd.BKDConfig;
-
+// 一个段相同域名只拥有一个
 /** Buffers up pending byte[][] value(s) per doc, then flushes when segment flushes. */
 class PointValuesWriter {
   private final FieldInfo fieldInfo;
-  private final PagedBytes bytes;
-  private final DataOutput bytesOut;
+  private final PagedBytes bytes; // 每个字段point值长度一样，没统计每个字段的范围
+  private final DataOutput bytesOut;// 内存结构的
   private final Counter iwBytesUsed;
   private final SharedIndexingScratch sharedScratch;
-  private int[] docIDs;
-  private int numPoints;
-  private int numDocs;
-  private int lastDocID = -1;
-  private final int packedBytesLength;
+  private int[] docIDs;// 按序累加，docIDs[i]表示：第i个point个值属于第几个文档。第0位存放20，第1位存放5，value按照大小排序。表示第0小value文档id=20
+  private int numPoints; // 这个segment该字段包含的总value个数（相同value算两个）
+  private int numDocs; //这个segment该字段已经写入了多少个文档。（point是经过distinct过后的）// 是一个从0开始递增的值，可以理解为是每一个点数据的一个唯一编号，并且通过这个编号能映射出该点数据属于哪一个文档(document)。映射关系则是通过docIDs[ ]数组实现。
+  private int lastDocID = -1;// 最大文档编号
+  private final int packedBytesLength; // 一个intPoint占用的空间
 
   private static final int POINTS_BUFFER_INT_VALUES =
       SharedIndexingScratch.BYTES_SCRATCH_SIZE / Integer.BYTES;
@@ -64,13 +64,13 @@ class PointValuesWriter {
     this.sharedScratch = sharedScratch;
     this.bytes = new PagedBytes(12);
     bytesOut = bytes.getDataOutput();
-    docIDs = new int[16];
+    docIDs = new int[16];// 某个point是属于第几个文档，要和ords结合用，ords记录的是第几个point跑到第几位了
     iwBytesUsed.addAndGet(16 * Integer.BYTES);
     packedBytesLength = fieldInfo.getPointDimensionCount() * fieldInfo.getPointNumBytes();
   }
 
   // TODO: if exactly the same value is added to exactly the same doc, should we dedup?
-  public void addPackedValue(int docID, BytesRef value) throws IOException {
+  public void addPackedValue(int docID, BytesRef value) throws IOException {// Point有多个值的话，都会堆砌到一个BytesRef中
     if (value == null) {
       throw new IllegalArgumentException(
           "field=" + fieldInfo.name + ": point value must not be null");
@@ -85,14 +85,14 @@ class PointValuesWriter {
               + (fieldInfo.getPointDimensionCount() * fieldInfo.getPointNumBytes()));
     }
 
-    if (docIDs.length == numPoints) {
+    if (docIDs.length == numPoints) { // 文档数超了的话，就扩容
       docIDs = ArrayUtil.grow(docIDs, numPoints + 1);
       iwBytesUsed.addAndGet((docIDs.length - numPoints) * (long) Integer.BYTES);
     }
     final long bytesRamBytesUsedBefore = bytes.ramBytesUsed();
-    bytesOut.writeBytes(value.bytes, value.offset, value.length);
+    bytesOut.writeBytes(value.bytes, value.offset, value.length); // 每个
     iwBytesUsed.addAndGet(bytes.ramBytesUsed() - bytesRamBytesUsedBefore);
-    docIDs[numPoints] = docID;
+    docIDs[numPoints] = docID;// 这个value属于哪个term
     if (docID != lastDocID) {
       numDocs++;
       lastDocID = docID;
@@ -205,12 +205,12 @@ class PointValuesWriter {
     final PagedBytes.Reader bytesReader = bytes.freeze(false);
     MutablePointTree points =
         new MutablePointTree() {
-          final int[] ords = new int[numPoints];
+          final int[] ords = new int[numPoints]; // 给每个包含point的域都赋值一个。若之后文档排序（桶交换快排），仅仅是对这个号排序
           int[] temp;
 
           {
             for (int i = 0; i < numPoints; ++i) {
-              ords[i] = i;
+              ords[i] = i; // 每个Point都会排个序
             }
           }
 
@@ -223,8 +223,8 @@ class PointValuesWriter {
           public void visitDocValues(PointValues.IntersectVisitor visitor) throws IOException {
             final BytesRef scratch = new BytesRef();
             final byte[] packedValue = new byte[packedBytesLength];
-            for (int i = 0; i < numPoints; i++) {
-              getValue(i, scratch);
+            for (int i = 0; i < numPoints; i++) {// 遍历每个元素的值
+              getValue(i, scratch);// 从bytePool中读取第几个value
               assert scratch.length == packedValue.length;
               System.arraycopy(scratch.bytes, scratch.offset, packedValue, 0, packedBytesLength);
               visitor.visit(getDocID(i), packedValue);
@@ -237,22 +237,22 @@ class PointValuesWriter {
             ords[i] = ords[j];
             ords[j] = tmp;
           }
-
+          // 第0位存放20，第1位存放5，value按照大小排序，第0小value文档id=20
           @Override
-          public int getDocID(int i) {
-            return docIDs[ords[i]];
+          public int getDocID(int i) { // 返回文档ID, i是第几个写入的
+            return docIDs[ords[i]];//ords记录的是第几个point跑到第几位了，docIDs某个point是属于第几个文档，要和ords结合用，
           }
 
           @Override
-          public void getValue(int i, BytesRef packedValue) {
-            final long offset = (long) packedBytesLength * ords[i];
+          public void getValue(int i, BytesRef packedValue) { // 读取第i个point的值
+            final long offset = (long) packedBytesLength * ords[i]; // 这个文档的偏移量
             bytesReader.fillSlice(packedValue, offset, packedBytesLength);
           }
 
           @Override
-          public byte getByteAt(int i, int k) {
+          public byte getByteAt(int i, int k) {// 第i个元素的第k位
             final long offset = (long) packedBytesLength * ords[i] + k;
-            return bytesReader.getByte(offset);
+            return bytesReader.getByte(offset);// 从BytePool中读取offset
           }
 
           @Override
@@ -272,7 +272,7 @@ class PointValuesWriter {
         };
 
     final PointValues.PointTree values;
-    if (sortMap == null) {
+    if (sortMap == null) {// 跑到这里
       values = points;
     } else {
       values = new MutableSortingPointValues(points, sortMap);
@@ -335,7 +335,7 @@ class PointValuesWriter {
           @Override
           public void close() {}
         };
-    writer.writeField(fieldInfo, reader);
+    writer.writeField(fieldInfo, reader);// 进来，writer=Lucene86PointsWriter,flush时才初始化
   }
 
   static final class MutableSortingPointValues extends MutablePointTree {

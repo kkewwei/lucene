@@ -252,10 +252,10 @@ public class TermInSetQuery extends MultiTermQuery implements Accountable {
     private final TermIterator iterator;
     private BytesRef seekTerm;
 
-    SetEnum(TermsEnum termsEnum) {
+    SetEnum(TermsEnum termsEnum) {// termsEnum：这位是这个field的所有terms
       super(termsEnum);
-      iterator = termData.iterator();
-      seekTerm = iterator.next();
+      iterator = termData.iterator();// 用户端输入的terms列表
+      seekTerm = iterator.next(); // 用户输入的第一个term
     }
 
     @Override
@@ -264,7 +264,7 @@ public class TermInSetQuery extends MultiTermQuery implements Accountable {
       // if it matches exactly, it's a hit, otherwise it's a miss
       int cmp = 0;
       while (seekTerm != null && (cmp = seekTerm.compareTo(term)) < 0) {
-        seekTerm = iterator.next();
+        seekTerm = iterator.next();// 这位是用户输入的terms来遍历
       }
       if (seekTerm == null) {
         return AcceptStatus.END;

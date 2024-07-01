@@ -120,7 +120,7 @@ public final class ByteSequenceOutputs extends Outputs<BytesRef> {
 
   @Override
   public BytesRef read(DataInput in) throws IOException {
-    final int len = in.readVInt();
+    final int len = in.readVInt();// 长度
     if (len == 0) {
       return NO_OUTPUT;
     } else {

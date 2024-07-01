@@ -38,7 +38,7 @@ public abstract class CodecReader extends LeafReader {
    * Expert: retrieve underlying StoredFieldsReader
    *
    * @lucene.internal
-   */
+   */// 为啥是线程私有的,将跑到SegmentReader.getFieldsReader()
   public abstract StoredFieldsReader getFieldsReader();
 
   /**
@@ -114,14 +114,14 @@ public abstract class CodecReader extends LeafReader {
   }
 
   @Override
-  public final Terms terms(String field) throws IOException {
+  public final Terms terms(String field) throws IOException {// 返回FieldReader
     ensureOpen();
     FieldInfo fi = getFieldInfos().fieldInfo(field);
     if (fi == null || fi.getIndexOptions() == IndexOptions.NONE) {
       // Field does not exist or does not index postings
       return null;
     }
-    return getPostingsReader().terms(field);
+    return getPostingsReader().terms(field);// 将进入SetmentReader.terms()函数，返回的是PerFieldPostingsFormat$FieldsReader
   }
 
   // returns the FieldInfo that corresponds to the given field and type, or
@@ -185,7 +185,7 @@ public abstract class CodecReader extends LeafReader {
     }
     return getDocValuesReader().getSortedNumeric(fi);
   }
-
+  // 跑到这里加载
   @Override
   public final SortedSetDocValues getSortedSetDocValues(String field) throws IOException {
     ensureOpen();
@@ -193,7 +193,7 @@ public abstract class CodecReader extends LeafReader {
     if (fi == null) {
       return null;
     }
-    return getDocValuesReader().getSortedSet(fi);
+    return getDocValuesReader().getSortedSet(fi);// 将进入 PerFieldDocValuesFormat$FieldsReader.getSortedSet()
   }
 
   @Override
@@ -222,12 +222,12 @@ public abstract class CodecReader extends LeafReader {
   public final PointValues getPointValues(String field) throws IOException {
     ensureOpen();
     FieldInfo fi = getFieldInfos().fieldInfo(field);
-    if (fi == null || fi.getPointDimensionCount() == 0) {
+    if (fi == null || fi.getPointDimensionCount() == 0) {// 检查这个字段是否有问题
       // Field does not exist or does not index points
       return null;
     }
 
-    return getPointsReader().getValues(field);
+    return getPointsReader().getValues(field);// 跑到SegmentReader.getPointsReader(),最终进入Lucene86PointsReader.getValues()
   }
 
   @Override
@@ -243,7 +243,7 @@ public abstract class CodecReader extends LeafReader {
 
     return getVectorReader().getFloatVectorValues(field);
   }
-
+  // 这个函数在多个地方被加载进来
   @Override
   public final ByteVectorValues getByteVectorValues(String field) throws IOException {
     ensureOpen();

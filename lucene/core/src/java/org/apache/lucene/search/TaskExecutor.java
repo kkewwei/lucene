@@ -106,7 +106,7 @@ public final class TaskExecutor {
     // switching in case of long running concurrent
     // tasks as well as dead-locking if the current thread is part of #executor for executors that
     // have limited or no parallelism
-    int id;
+    int id;// 本线程也尽力帮着executor执行，总不能闲着吧
     while ((id = taskId.getAndIncrement()) < count) {
       futures.get(id).run();
       if (id >= count - 1) {
@@ -122,7 +122,7 @@ public final class TaskExecutor {
     List<T> results = new ArrayList<>(futures.size());
     for (Future<T> future : futures) {
       try {
-        results.add(future.get());
+        results.add(future.get());// 一起在这里等着
       } catch (InterruptedException e) {
         exc = IOUtils.useOrSuppress(exc, new ThreadInterruptedException(e));
       } catch (ExecutionException e) {

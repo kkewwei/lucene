@@ -30,7 +30,7 @@ public abstract sealed class IndexReaderContext permits CompositeReaderContext, 
    * {@code true} if this context struct represents the top level reader within the hierarchical
    * context
    */
-  public final boolean isTopLevel;
+  public final boolean isTopLevel; // 顶级level
 
   /** the doc base for this reader in the parent, {@code 0} if parent is null */
   public final int docBaseInParent;

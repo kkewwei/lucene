@@ -26,7 +26,7 @@ import java.util.Arrays;
  *
  * @lucene.internal
  */
-public abstract class MSBRadixSorter extends Sorter {
+public abstract class MSBRadixSorter extends Sorter {// 基数排序算法
 
   // after that many levels of recursion we fall back to introsort anyway
   // this is used as a protection against the fact that radix sort performs
@@ -66,7 +66,7 @@ public abstract class MSBRadixSorter extends Sorter {
    * Get a fall-back sorter which may assume that the first k bytes of all compared strings are
    * equal.
    */
-  protected Sorter getFallbackSorter(int k) {
+  protected Sorter getFallbackSorter(int k) {// 前k个byte是相等的
     return new IntroSorter() {
       @Override
       protected void swap(int i, int j) {
@@ -131,9 +131,9 @@ public abstract class MSBRadixSorter extends Sorter {
 
   protected void sort(int from, int to, int k, int l) {
     if (shouldFallback(from, to, l)) {
-      getFallbackSorter(k).sort(from, to);
+      getFallbackSorter(k).sort(from, to);// 还会退化成快排
     } else {
-      radixSort(from, to, k, l);
+      radixSort(from, to, k, l);// 基数排序
     }
   }
 

@@ -281,7 +281,7 @@ public final class BitUtil {
 
   /** Same as {@link #zigZagEncode(long)} but on integers. */
   public static int zigZagEncode(int i) {
-    return (i >> 31) ^ (i << 1);
+    return (i >> 31) ^ (i << 1); //  ZigZag是将有符号数统一映射到无符号数的一种编码方案，对于无符号数0 1 2 3 4，映射前的有符号数分别为0 -1 1 -2 2，负数以及对应的正数来回映射到从0变大的数字序列里，这也是”zig-zag”的名字来源。
   }
 
   /**
@@ -291,7 +291,7 @@ public final class BitUtil {
    * n+1</code> bits.
    */
   public static long zigZagEncode(long l) {
-    return (l >> 63) ^ (l << 1);
+    return (l >> 63) ^ (l << 1);// int编码方式
   }
 
   /** Decode an int previously encoded with {@link #zigZagEncode(int)}. */
@@ -301,7 +301,7 @@ public final class BitUtil {
 
   /** Decode a long previously encoded with {@link #zigZagEncode(long)}. */
   public static long zigZagDecode(long l) {
-    return ((l >>> 1) ^ -(l & 1));
+    return ((l >>> 1) ^ -(l & 1));// int解码方式
   }
 
   /**

@@ -17,10 +17,17 @@
 package org.apache.lucene.codecs.lucene90.compressing;
 
 import java.io.IOException;
+import java.util.HashSet;
+import java.util.Random;
+import java.util.Set;
+
 import org.apache.lucene.codecs.Codec;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.FieldType;
+import org.apache.lucene.document.NumericDocValuesField;
+import org.apache.lucene.document.StoredField;
+import org.apache.lucene.document.StringField;
 import org.apache.lucene.document.TextField;
 import org.apache.lucene.index.CodecReader;
 import org.apache.lucene.index.DirectoryReader;
@@ -29,6 +36,8 @@ import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.index.LeafReader;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.NoMergePolicy;
+import org.apache.lucene.index.StoredFields;
+import org.apache.lucene.index.Term;
 import org.apache.lucene.index.Terms;
 import org.apache.lucene.index.TermsEnum;
 import org.apache.lucene.index.TermsEnum.SeekStatus;
@@ -49,6 +58,84 @@ public class TestCompressingTermVectorsFormat extends BaseTermVectorsFormatTestC
       return CompressingCodec.reasonableInstance(random());
     }
   }
+
+  private static Document makeDoc(int id) {
+    Document doc = new Document();
+    doc.add(new StringField("id", Integer.toString(id), Field.Store.NO));
+    doc.add(new StoredField("payload", "doc-payload-" + id));
+    return doc;
+  }
+
+  private void indexInOneSegment(IndexWriter iw, int numDocs) throws IOException {
+    for (int i = 0; i < numDocs; i++) {
+      iw.addDocument(makeDoc(i));
+    }
+    iw.commit();
+  }
+  public static final String SOFT_DELETES_FIELD = "__soft_deletes";
+  protected final NumericDocValuesField softDeletesField = new NumericDocValuesField(SOFT_DELETES_FIELD, 1);
+  private static final int CHUNK_SIZE = 4 * 1024;
+  /** force chunk boundaries every 4 docs so we can pinpoint deletions */
+  private static final int MAX_DOCS_PER_CHUNK = 4;
+
+  private static final int BLOCK_SHIFT = 8;
+  private Codec deterministicCompressingCodec(Random r) {
+    return CompressingCodec.randomInstance(
+      r, CHUNK_SIZE, MAX_DOCS_PER_CHUNK, false, BLOCK_SHIFT);
+  }
+
+  public void testDeleteFirstDocOfChunk() throws Exception {
+    try (Directory dir = newDirectory()) {
+      IndexWriterConfig iwc = newIndexWriterConfig(new MockAnalyzer(random()));
+      iwc.setMergePolicy(NoMergePolicy.INSTANCE);
+      iwc.setCodec(deterministicCompressingCodec(random()));
+      iwc.setSoftDeletesField("SOFT_DELETES_FIELD");
+
+      try (IndexWriter iw = new IndexWriter(dir, iwc)) {
+        indexInOneSegment(iw, 16);
+        // first doc of chunk #2
+        iw.deleteDocuments(new Term("id", "8"));
+
+        Document v2 = new Document();
+        v2.add(new StringField("id", "7", Field.Store.YES));
+        v2.add(softDeletesField);
+        iw.softUpdateDocument(new Term("id", "7"), v2, softDeletesField);
+        iw.commit();
+      }
+
+      iwc = newIndexWriterConfig(new MockAnalyzer(random()));
+      iwc.setCodec(deterministicCompressingCodec(random()));
+      iwc.setMergePolicy(newLogMergePolicy());
+      try (IndexWriter iw = new IndexWriter(dir, iwc)) {
+        iw.forceMerge(1);
+      }
+
+      try (DirectoryReader reader = DirectoryReader.open(dir)) {
+        assertEquals(15, reader.numDocs());
+        Set<Integer> deleted = new HashSet<>();
+        deleted.add(8);
+        assertPayloadsMatch(reader, deleted);
+      }
+    }
+  }
+
+  private void assertPayloadsMatch(DirectoryReader reader, Set<Integer> deletedIds)
+    throws IOException {
+    Set<Integer> seen = new HashSet<>();
+    for (LeafReaderContext leaf : reader.leaves()) {
+      StoredFields sf = leaf.reader().storedFields();
+      for (int i = 0; i < leaf.reader().maxDoc(); i++) {
+        Document d = sf.document(i);
+        String payload = d.get("payload");
+        assertNotNull("missing payload at leaf doc " + i, payload);
+        assertTrue("unexpected payload prefix: " + payload, payload.startsWith("doc-payload-"));
+        int id = Integer.parseInt(payload.substring("doc-payload-".length()));
+        assertFalse("payload for deleted id=" + id + " resurfaced", deletedIds.contains(id));
+        assertTrue("duplicate payload for id=" + id, seen.add(id));
+      }
+    }
+  }
+
 
   // https://issues.apache.org/jira/browse/LUCENE-5156
   public void testNoOrds() throws Exception {

@@ -35,7 +35,7 @@ final class BooleanScorerSupplier extends ScorerSupplier {
   private final ScoreMode scoreMode;
   private final int minShouldMatch;
   private final int maxDoc;
-  private long cost = -1;
+  private long cost = -1;// 当前是否打过分
   private boolean topLevelScoringClause;
 
   BooleanScorerSupplier(
@@ -70,23 +70,23 @@ final class BooleanScorerSupplier extends ScorerSupplier {
   }
 
   private long computeShouldCost() {
-    final Collection<ScorerSupplier> optionalScorers = subs.get(Occur.SHOULD);
+    final Collection<ScorerSupplier> optionalScorers = subs.get(Occur.SHOULD); // 找should
     return ScorerUtil.costWithMinShouldMatch(
-        optionalScorers.stream().mapToLong(ScorerSupplier::cost),
+        optionalScorers.stream().mapToLong(ScorerSupplier::cost),//通过cost将stream转化成以一个long的stream
         optionalScorers.size(),
         minShouldMatch);
   }
 
   private long computeCost() {
-    OptionalLong minRequiredCost =
+    OptionalLong minRequiredCost =// 是否有must和filter
         Stream.concat(subs.get(Occur.MUST).stream(), subs.get(Occur.FILTER).stream())
             .mapToLong(ScorerSupplier::cost)
             .min();
     if (minRequiredCost.isPresent() && minShouldMatch == 0) {
       return minRequiredCost.getAsLong();
-    } else {
+    } else {// 有minShouldMatch
       final long shouldCost = computeShouldCost();
-      return Math.min(minRequiredCost.orElse(Long.MAX_VALUE), shouldCost);
+      return Math.min(minRequiredCost.orElse(Long.MAX_VALUE), shouldCost);// 求消耗最小的
     }
   }
 
@@ -107,14 +107,14 @@ final class BooleanScorerSupplier extends ScorerSupplier {
   @Override
   public long cost() {
     if (cost == -1) {
-      cost = computeCost();
+      cost = computeCost(); // 打分
     }
     return cost;
   }
 
   @Override
   public Scorer get(long leadCost) throws IOException {
-    Scorer scorer = getInternal(leadCost);
+    Scorer scorer = getInternal(leadCost);// 打分进来，可以是DisjunctionSumScorer。
     if (scoreMode == ScoreMode.TOP_SCORES
         && subs.get(Occur.SHOULD).isEmpty()
         && subs.get(Occur.MUST).isEmpty()) {
@@ -129,24 +129,24 @@ final class BooleanScorerSupplier extends ScorerSupplier {
 
   private Scorer getInternal(long leadCost) throws IOException {
     // three cases: conjunction, disjunction, or mix
-    leadCost = Math.min(leadCost, cost());
+    leadCost = Math.min(leadCost, cost()); // cost打分，获取最小的那个积分
 
     // pure conjunction
-    if (subs.get(Occur.SHOULD).isEmpty()) {
+    if (subs.get(Occur.SHOULD).isEmpty()) {  // 若没有should，纯与
       return excl(
           req(subs.get(Occur.FILTER), subs.get(Occur.MUST), leadCost, topLevelScoringClause),
           subs.get(Occur.MUST_NOT),
           leadCost);
     }
 
-    // pure disjunction
+    // pure disjunction  // 没有must+filter，纯或
     if (subs.get(Occur.FILTER).isEmpty() && subs.get(Occur.MUST).isEmpty()) {
       return excl(
           opt(subs.get(Occur.SHOULD), minShouldMatch, scoreMode, leadCost, topLevelScoringClause),
           subs.get(Occur.MUST_NOT),
           leadCost);
     }
-
+    // 既有(must or filter)，又有should
     // conjunction-disjunction mix:
     // we create the required and optional pieces, and then
     // combine the two: if minNrShouldMatch > 0, then it's a conjunction: because the
@@ -159,9 +159,9 @@ final class BooleanScorerSupplier extends ScorerSupplier {
               subs.get(Occur.MUST_NOT),
               leadCost);
       Scorer opt = opt(subs.get(Occur.SHOULD), minShouldMatch, scoreMode, leadCost, false);
-      return new ConjunctionScorer(Arrays.asList(req, opt), Arrays.asList(req, opt));
+      return new ConjunctionScorer(Arrays.asList(req, opt), Arrays.asList(req, opt));// 是否有must和filter
     } else {
-      assert scoreMode.needsScores();
+      assert scoreMode.needsScores();// 必须打分
       return new ReqOptSumScorer(
           excl(
               req(subs.get(Occur.FILTER), subs.get(Occur.MUST), leadCost, false),
@@ -174,7 +174,7 @@ final class BooleanScorerSupplier extends ScorerSupplier {
 
   @Override
   public BulkScorer bulkScorer() throws IOException {
-    final BulkScorer bulkScorer = booleanScorer();
+    final BulkScorer bulkScorer = booleanScorer();//
     if (bulkScorer != null) {
       // bulk scoring is applicable, use it
       return bulkScorer;
@@ -184,21 +184,21 @@ final class BooleanScorerSupplier extends ScorerSupplier {
     }
   }
 
-  BulkScorer booleanScorer() throws IOException {
+  BulkScorer booleanScorer() throws IOException {// 如果有合适的话，就不走默认的了
     final int numOptionalClauses = subs.get(Occur.SHOULD).size();
     final int numMustClauses = subs.get(Occur.MUST).size();
-    final int numRequiredClauses = numMustClauses + subs.get(Occur.FILTER).size();
+    final int numRequiredClauses = numMustClauses + subs.get(Occur.FILTER).size();//必须的次数
 
     BulkScorer positiveScorer;
-    if (numRequiredClauses == 0) {
+    if (numRequiredClauses == 0) {// 没有must/filter, 只有should
       // TODO: what is the right heuristic here?
       final long costThreshold;
-      if (minShouldMatch <= 1) {
+      if (minShouldMatch <= 1) {// 全部都是可选的，使用BooleanScorer更好
         // when all clauses are optional, use BooleanScorer aggressively
         // TODO: is there actually a threshold under which we should rather
         // use the regular scorer?
-        costThreshold = -1;
-      } else {
+        costThreshold = -1; // 一定返回null
+      } else {// 有多个满足，且是稀疏的，还不如逐个遍历更好
         // when a minimum number of clauses should match, BooleanScorer is
         // going to score all windows that have at least minNrShouldMatch
         // matches in the window. But there is no way to know if there is
@@ -208,14 +208,14 @@ final class BooleanScorerSupplier extends ScorerSupplier {
         costThreshold = maxDoc / 3;
       }
 
-      if (cost() < costThreshold) {
+      if (cost() < costThreshold) {//若cost比较稀疏，就一个个文档遍历的了
         return null;
       }
 
       positiveScorer = optionalBulkScorer();
-    } else if (numMustClauses == 0 && numOptionalClauses > 1 && minShouldMatch >= 1) {
+    } else if (numMustClauses == 0 && numOptionalClauses > 1 && minShouldMatch >= 1) { // 只有filter + should
       positiveScorer = filteredOptionalBulkScorer();
-    } else if (numRequiredClauses > 0 && numOptionalClauses == 0 && minShouldMatch == 0) {
+    } else if (numRequiredClauses > 0 && numOptionalClauses == 0 && minShouldMatch == 0) {// 只有must/filter，没有should
       positiveScorer = requiredBulkScorer();
     } else {
       // TODO: there are some cases where BooleanScorer
@@ -288,11 +288,11 @@ final class BooleanScorerSupplier extends ScorerSupplier {
   BulkScorer optionalBulkScorer() throws IOException {
     if (subs.get(Occur.SHOULD).size() == 0) {
       return null;
-    } else if (subs.get(Occur.SHOULD).size() == 1 && minShouldMatch <= 1) {
+    } else if (subs.get(Occur.SHOULD).size() == 1 && minShouldMatch <= 1) { // 避免过度包装
       return subs.get(Occur.SHOULD).iterator().next().bulkScorer();
     }
 
-    if (scoreMode == ScoreMode.TOP_SCORES) {
+    if (scoreMode == ScoreMode.TOP_SCORES) {// 若是topScore，进来了
       if (minShouldMatch > 1) {
         // Fall back to BS2/WANDScorer: it supports both block-max impact
         // pruning and minShouldMatch > 1. BooleanScorer (the fall-through
@@ -316,7 +316,7 @@ final class BooleanScorerSupplier extends ScorerSupplier {
 
     return new BooleanScorer(optional, Math.max(1, minShouldMatch), scoreMode.needsScores());
   }
-
+  //只有filter+should>=1，没有must
   BulkScorer filteredOptionalBulkScorer() throws IOException {
     if (subs.get(Occur.MUST).isEmpty() == false
         || subs.get(Occur.FILTER).isEmpty()
@@ -336,7 +336,7 @@ final class BooleanScorerSupplier extends ScorerSupplier {
     }
     if (scoreMode == ScoreMode.TOP_SCORES) {
       Scorer filterScorer;
-      if (filters.size() == 1) {
+      if (filters.size() == 1) {// filter有一个
         filterScorer = filters.iterator().next();
       } else {
         filterScorer = new ConjunctionScorer(filters, Collections.emptySet());
@@ -358,17 +358,17 @@ final class BooleanScorerSupplier extends ScorerSupplier {
   }
 
   // Return a BulkScorer for the required clauses only
-  private BulkScorer requiredBulkScorer() throws IOException {
+  private BulkScorer requiredBulkScorer() throws IOException {// 只有must/filter，没有should
     if (subs.get(Occur.MUST).size() + subs.get(Occur.FILTER).size() == 0) {
       // No required clauses at all.
       return null;
     } else if (subs.get(Occur.MUST).size() + subs.get(Occur.FILTER).size() == 1) {
       BulkScorer scorer;
-      if (subs.get(Occur.MUST).isEmpty() == false) {
+      if (subs.get(Occur.MUST).isEmpty() == false) {// 只有must
         scorer = subs.get(Occur.MUST).iterator().next().bulkScorer();
-      } else {
+      } else {// 只有filter
         scorer = subs.get(Occur.FILTER).iterator().next().bulkScorer();
-        if (scoreMode.needsScores()) {
+        if (scoreMode.needsScores()) {// 需要打分
           scorer = disableScoring(scorer);
         }
       }
@@ -400,13 +400,13 @@ final class BooleanScorerSupplier extends ScorerSupplier {
         && requiredScoring.size() > 1
         // Only specialize top-level conjunctions for clauses that don't have a two-phase iterator.
         && requiredNoScoring.stream().map(Scorer::twoPhaseIterator).allMatch(Objects::isNull)
-        && requiredScoring.stream().map(Scorer::twoPhaseIterator).allMatch(Objects::isNull)) {
+        && requiredScoring.stream().map(Scorer::twoPhaseIterator).allMatch(Objects::isNull)) { // 没有二阶段的
       // Turn all filters into scoring clauses with a score of zero, so that
       // BlockMaxConjunctionBulkScorer is applicable.
       for (Scorer filter : requiredNoScoring) {
         requiredScoring.add(new ConstantScoreScorer(0f, ScoreMode.COMPLETE, filter.iterator()));
       }
-      return new BlockMaxConjunctionBulkScorer(maxDoc, requiredScoring);
+      return new BlockMaxConjunctionBulkScorer(maxDoc, requiredScoring); // 多个and
     }
     if (scoreMode != ScoreMode.TOP_SCORES
         && requiredScoring.size() + requiredNoScoring.size() >= 2
@@ -466,7 +466,7 @@ final class BooleanScorerSupplier extends ScorerSupplier {
    * Create a new scorer for the given required clauses. Note that {@code requiredScoring} is a
    * subset of {@code required} containing required clauses that should participate in scoring.
    */
-  private Scorer req(
+  private Scorer req(// 若没有should，纯与
       Collection<ScorerSupplier> requiredNoScoring,
       Collection<ScorerSupplier> requiredScoring,
       long leadCost,
@@ -501,19 +501,19 @@ final class BooleanScorerSupplier extends ScorerSupplier {
       }
 
       return req;
-    } else {
+    } else {// must和filter，总共加起来不只一个
       List<Scorer> requiredScorers = new ArrayList<>();
       List<Scorer> scoringScorers = new ArrayList<>();
       for (ScorerSupplier s : requiredNoScoring) {
         requiredScorers.add(s.get(leadCost));
       }
-      for (ScorerSupplier s : requiredScoring) {
+      for (ScorerSupplier s : requiredScoring) {// must
         Scorer scorer = s.get(leadCost);
         scoringScorers.add(scorer);
       }
-      if (scoreMode == ScoreMode.TOP_SCORES && scoringScorers.size() > 1 && topLevelScoringClause) {
-        Scorer blockMaxScorer = new BlockMaxConjunctionScorer(scoringScorers);
-        if (requiredScorers.isEmpty()) {
+      if (scoreMode == ScoreMode.TOP_SCORES && scoringScorers.size() > 1 && topLevelScoringClause) {// top_score， must个数>1
+        Scorer blockMaxScorer = new BlockMaxConjunctionScorer(scoringScorers);//排序，选择一个消耗最低的。把她整合成一个score了
+        if (requiredScorers.isEmpty()) {// 若没有filter
           return blockMaxScorer;
         }
         scoringScorers = Collections.singletonList(blockMaxScorer);
@@ -525,14 +525,14 @@ final class BooleanScorerSupplier extends ScorerSupplier {
 
   private Scorer excl(Scorer main, Collection<ScorerSupplier> prohibited, long leadCost)
       throws IOException {
-    if (prohibited.isEmpty()) {
-      return main;
+    if (prohibited.isEmpty()) {//若没有must_not的话
+      return main;// 就直接返回
     } else {
       return new ReqExclScorer(
           main, opt(prohibited, 1, ScoreMode.COMPLETE_NO_SCORES, leadCost, false));
     }
   }
-
+// 只有多个should，没有must和filter的情况。纯或
   /** Create a new score for the given optional clauses. */
   private Scorer opt(
       Collection<ScorerSupplier> optional,
@@ -546,7 +546,7 @@ final class BooleanScorerSupplier extends ScorerSupplier {
     } else {
       final List<Scorer> optionalScorers = new ArrayList<>();
       for (ScorerSupplier scorer : optional) {
-        optionalScorers.add(scorer.get(leadCost));
+        optionalScorers.add(scorer.get(leadCost)); // 这里scorer.get又会去计算一次预估匹配的数据量
       }
 
       // Technically speaking, WANDScorer should be able to handle the following 3 conditions now
@@ -557,8 +557,8 @@ final class BooleanScorerSupplier extends ScorerSupplier {
       // However, as WANDScorer uses more complex algorithm and data structure, we would like to
       // still use DisjunctionSumScorer to handle exhaustive pure disjunctions, which may be faster
       if ((scoreMode == ScoreMode.TOP_SCORES && topLevelScoringClause) || minShouldMatch > 1) {
-        return new WANDScorer(optionalScorers, minShouldMatch, scoreMode, leadCost);
-      } else {
+        return new WANDScorer(optionalScorers, minShouldMatch, scoreMode, leadCost);// weak and。 完全or
+      } else {// 比如terms查询小于16个，就会进来。不加minShouldMatch的纯或会进来；match也会进来
         return new DisjunctionSumScorer(optionalScorers, scoreMode, leadCost);
       }
     }

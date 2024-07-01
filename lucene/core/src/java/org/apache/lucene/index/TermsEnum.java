@@ -47,11 +47,11 @@ public abstract class TermsEnum implements BytesRefIterator {
   /** Represents returned result from {@link #seekCeil}. */
   public enum SeekStatus {
     /** The term was not found, and the end of iteration was hit. */
-    END,
+    END, // 没找到，找到最大值也没找到。告诉后面的别进来找了
     /** The precise term was found. */
     FOUND,
     /** A different term was found after the requested term */
-    NOT_FOUND
+    NOT_FOUND// 没找到，只是返回一个最靠近的
   };
 
   /**

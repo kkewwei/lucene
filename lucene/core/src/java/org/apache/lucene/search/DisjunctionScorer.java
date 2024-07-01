@@ -23,23 +23,23 @@ import java.util.List;
 import org.apache.lucene.util.PriorityQueue;
 
 /** Base class for Scorers that score disjunctions. */
-abstract class DisjunctionScorer extends Scorer {
+abstract class DisjunctionScorer extends Scorer {// 或
 
   private final int numClauses;
   private final boolean needsScores;
 
   private final DisjunctionDISIApproximation approximation;
   private final TwoPhase twoPhase;
-
+  // 联合score
   protected DisjunctionScorer(List<Scorer> subScorers, ScoreMode scoreMode, long leadCost)
       throws IOException {
     if (subScorers.size() <= 1) {
       throw new IllegalArgumentException("There must be at least 2 subScorers");
     }
     this.numClauses = subScorers.size();
-    this.needsScores = scoreMode != ScoreMode.COMPLETE_NO_SCORES;
+    this.needsScores = scoreMode != ScoreMode.COMPLETE_NO_SCORES; // 只有COMPLETE_NO_SCORES不需要打分
     boolean hasApproximation = false;
-    float sumMatchCost = 0;
+    float sumMatchCost = 0; // 总和sum，匹配的文档数
     long sumApproxCost = 0;
     List<DisiWrapper> wrappers = new ArrayList<>();
     for (Scorer scorer : subScorers) {

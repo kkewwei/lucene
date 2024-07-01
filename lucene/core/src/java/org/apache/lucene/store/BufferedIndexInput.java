@@ -28,7 +28,7 @@ public abstract class BufferedIndexInput extends IndexInput implements RandomAcc
       ByteBuffer.allocate(0).order(ByteOrder.LITTLE_ENDIAN);
 
   /** Default buffer size set to {@value #BUFFER_SIZE}. */
-  public static final int BUFFER_SIZE = 1024;
+  public static final int BUFFER_SIZE = 1024; // 一次最多读取的长度
 
   /** Minimum buffer size allowed */
   public static final int MIN_BUFFER_SIZE = 8;
@@ -42,15 +42,15 @@ public abstract class BufferedIndexInput extends IndexInput implements RandomAcc
   /** A buffer size for merges set to {@value #MERGE_BUFFER_SIZE}. */
   public static final int MERGE_BUFFER_SIZE = 4096;
 
-  private final int bufferSize;
-
-  private ByteBuffer buffer = EMPTY_BYTEBUFFER;
-
+  private final int bufferSize;//1024
+  // NIO读取时是：HeapByteBuffer
+  private ByteBuffer buffer = EMPTY_BYTEBUFFER;// 一批批地读取，一批最多读取16KB数据，读取出来放入buffer中
+  // 这个buffer在文件中的绝对起始位置
   private long bufferStart = 0; // position in file of buffer
 
   @Override
-  public final byte readByte() throws IOException {
-    if (buffer.hasRemaining() == false) {
+  public final byte readByte() throws IOException {// 一批批地读取，一批最多读取16KB数据，读取出来放入buffer中
+    if (buffer.hasRemaining() == false) { // 若没有了，那么就再次读取
       refill();
     }
     return buffer.get();
@@ -90,17 +90,17 @@ public abstract class BufferedIndexInput extends IndexInput implements RandomAcc
   @Override
   public final void readBytes(byte[] b, int offset, int len, boolean useBuffer) throws IOException {
     int available = buffer.remaining();
-    if (len <= available) {
+    if (len <= available) {//若当前缓存超过需要读取的个数
       // the buffer contains enough data to satisfy this request
       if (len > 0) // to allow b to be null if len is 0...
       buffer.get(b, offset, len);
-    } else {
+    } else {// 当前缓存数据不够
       // the buffer does not have enough data. First serve all we've got.
       if (available > 0) {
         buffer.get(b, offset, available);
         offset += available;
         len -= available;
-      }
+      } // 先将buffer拿完
       // and now, read the remaining 'len' bytes:
       if (useBuffer && len < bufferSize) {
         // If the amount left to read is small enough, and
@@ -114,7 +114,7 @@ public abstract class BufferedIndexInput extends IndexInput implements RandomAcc
         } else {
           buffer.get(b, offset, len);
         }
-      } else {
+      } else { // 缓存空间不够大
         // The amount left to read is larger than the buffer
         // or we've been asked to not use our buffer -
         // there's no performance reason not to read it all
@@ -123,7 +123,7 @@ public abstract class BufferedIndexInput extends IndexInput implements RandomAcc
         // here, because there's no need to reread what we
         // had in the buffer.
         long after = bufferStart + buffer.position() + len;
-        if (after > length()) throw new EOFException("read past EOF: " + this);
+        if (after > length()) throw new EOFException("read past EOF: " + this); // 超过文件长度
         readInternal(ByteBuffer.wrap(b, offset, len));
         bufferStart = after;
         buffer.limit(0); // trigger refill() on read
@@ -285,29 +285,29 @@ public abstract class BufferedIndexInput extends IndexInput implements RandomAcc
     long index = resolvePositionInBuffer(pos, Long.BYTES);
     return buffer.getLong((int) index);
   }
-
+  // 重新拉数据
   private void refill() throws IOException {
     long start = bufferStart + buffer.position();
     long end = start + bufferSize;
     if (end > length()) // don't read past EOF
-    end = length();
+    end = length();// 不能超过文件的长度
     int newLength = (int) (end - start);
     if (newLength <= 0) throw new EOFException("read past EOF: " + this);
 
-    if (buffer == EMPTY_BYTEBUFFER) {
+    if (buffer == EMPTY_BYTEBUFFER) { // 默认空字符串
       buffer =
-          ByteBuffer.allocate(bufferSize).order(ByteOrder.LITTLE_ENDIAN); // allocate buffer lazily
-      seekInternal(bufferStart);
+          ByteBuffer.allocate(bufferSize).order(ByteOrder.LITTLE_ENDIAN); // allocate buffer lazily   lazily分配byte[1024]
+      seekInternal(bufferStart);// 检查bufferStart没有超过文件最大值
     }
     buffer.position(0);
     buffer.limit(newLength);
     bufferStart = start;
-    readInternal(buffer);
+    readInternal(buffer); // 将数据读取出来放入HeapByteBuffer
     // Make sure sub classes don't mess up with the buffer.
     assert buffer.order() == ByteOrder.LITTLE_ENDIAN : buffer.order();
     assert buffer.remaining() == 0 : "should have thrown EOFException";
     assert buffer.position() == newLength;
-    buffer.flip();
+    buffer.flip(); // 从写模式变成可读模式。position是下一个要读取或写入的元素的索引
   }
 
   /**

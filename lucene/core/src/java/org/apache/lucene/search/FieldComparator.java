@@ -158,7 +158,7 @@ public abstract class FieldComparator<T> {
     public int compareBottom(int doc) throws IOException {
       float score = scorer.score();
       assert !Float.isNaN(score);
-      return Float.compare(score, bottom);
+      return Float.compare(score, bottom);// bottom放在后面
     }
 
     @Override

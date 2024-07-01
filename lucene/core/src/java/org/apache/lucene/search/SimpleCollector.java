@@ -24,12 +24,12 @@ import org.apache.lucene.index.LeafReaderContext;
  *
  * @lucene.experimental
  */
-public abstract class SimpleCollector implements Collector, LeafCollector {
+public abstract class SimpleCollector implements Collector, LeafCollector {// 同时继承了两个，有点牛逼
 
   @Override
   public final LeafCollector getLeafCollector(LeafReaderContext context) throws IOException {
     doSetNextReader(context);
-    return this;
+    return this;// 又返回本身，这里才是绝，既可以当全局collector，又可以当segment的LeafCollector
   }
 
   /** This method is called before collecting <code>context</code>. */

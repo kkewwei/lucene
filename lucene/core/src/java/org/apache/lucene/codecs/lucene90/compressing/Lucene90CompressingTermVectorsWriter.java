@@ -59,8 +59,8 @@ import org.apache.lucene.util.packed.PackedInts;
 /**
  * {@link TermVectorsWriter} for {@link Lucene90CompressingTermVectorsFormat}.
  *
- * @lucene.experimental
- */
+ * @lucene.experimental// 单个文档形式的，tvd和fdt都是一样存储方式
+ */// 对应Term vector索引的Writer，底层是压缩Block格式。每次刷新一次就清空一次，下次再写入时，再重新生成
 public final class Lucene90CompressingTermVectorsWriter extends TermVectorsWriter {
 
   static final String VECTORS_EXTENSION = "tvd";
@@ -80,12 +80,12 @@ public final class Lucene90CompressingTermVectorsWriter extends TermVectorsWrite
   static final int FLAGS_BITS = DirectWriter.bitsRequired(POSITIONS | OFFSETS | PAYLOADS);
 
   private final String segment;
-  private FieldsIndexWriter indexWriter;
-  private IndexOutput metaStream, vectorsStream;
+  private FieldsIndexWriter indexWriter;// 就是FieldsIndexWriter
+  private IndexOutput metaStream, vectorsStream;// _0.tvd
 
   private final CompressionMode compressionMode;
   private final Compressor compressor;
-  private final int chunkSize;
+  private final int chunkSize;// 4096
 
   private long numChunks; // number of chunks
   private long numDirtyChunks; // number of incomplete compressed blocks written
@@ -93,16 +93,16 @@ public final class Lucene90CompressingTermVectorsWriter extends TermVectorsWrite
 
   /** a pending doc */
   private class DocData {
-    final int numFields;
-    final Deque<FieldData> fields;
+    final int numFields;// 每个文档的域个数
+    final Deque<FieldData> fields; // 每个域都有一个
     final int posStart, offStart, payStart;
 
     DocData(int numFields, int posStart, int offStart, int payStart) {
       this.numFields = numFields;
       this.fields = new ArrayDeque<>(numFields);
-      this.posStart = posStart;
-      this.offStart = offStart;
-      this.payStart = payStart;
+      this.posStart = posStart;// 文档最开始全部为0, 所有文档拉开，上个域的结束位置，自然也是本域的开始位置
+      this.offStart = offStart;// 文档最开始全部为0
+      this.payStart = payStart;// 文档最开始全部为0
     }
 
     FieldData addField(
@@ -113,10 +113,10 @@ public final class Lucene90CompressingTermVectorsWriter extends TermVectorsWrite
             new FieldData(
                 fieldNum, numTerms, positions, offsets, payloads, posStart, offStart, payStart);
       } else {
-        final FieldData last = fields.getLast();
-        final int posStart = last.posStart + (last.hasPositions ? last.totalPositions : 0);
+        final FieldData last = fields.getLast(); // 该文档上个域
+        final int posStart = last.posStart + (last.hasPositions ? last.totalPositions : 0);// 该文档上一个域
         final int offStart = last.offStart + (last.hasOffsets ? last.totalPositions : 0);
-        final int payStart = last.payStart + (last.hasPayloads ? last.totalPositions : 0);
+        final int payStart = last.payStart + (last.hasPayloads ? last.totalPositions : 0);// 为0
         field =
             new FieldData(
                 fieldNum, numTerms, positions, offsets, payloads, posStart, offStart, payStart);
@@ -126,12 +126,12 @@ public final class Lucene90CompressingTermVectorsWriter extends TermVectorsWrite
     }
   }
 
-  private DocData addDocData(int numVectorFields) {
+  private DocData addDocData(int numVectorFields) {// 把文档加入到了pendingDocs中
     FieldData last = null;
     for (Iterator<DocData> it = pendingDocs.descendingIterator(); it.hasNext(); ) {
       final DocData doc = it.next();
       if (!doc.fields.isEmpty()) {
-        last = doc.fields.getLast();
+        last = doc.fields.getLast();// 最后一个文档最后一个域
         break;
       }
     }
@@ -139,23 +139,23 @@ public final class Lucene90CompressingTermVectorsWriter extends TermVectorsWrite
     if (last == null) {
       doc = new DocData(numVectorFields, 0, 0, 0);
     } else {
-      final int posStart = last.posStart + (last.hasPositions ? last.totalPositions : 0);
+      final int posStart = last.posStart + (last.hasPositions ? last.totalPositions : 0);// 当前position最开始是在上个存储的最低+上个的词个数
       final int offStart = last.offStart + (last.hasOffsets ? last.totalPositions : 0);
       final int payStart = last.payStart + (last.hasPayloads ? last.totalPositions : 0);
       doc = new DocData(numVectorFields, posStart, offStart, payStart);
     }
-    pendingDocs.add(doc);
+    pendingDocs.add(doc);// 尾插法，仅仅放的是空壳
     return doc;
   }
 
   /** a pending field */
-  private class FieldData {
+  private class FieldData { // 每个文档每个域都有一个
     final boolean hasPositions, hasOffsets, hasPayloads;
-    final int fieldNum, flags, numTerms;
-    final int[] freqs, prefixLengths, suffixLengths;
-    final int posStart, offStart, payStart;
-    int totalPositions;
-    int ord;
+    final int fieldNum, flags, numTerms;// 字段编号， 该域的标志位（POSITIONS|OFFSETS|PAYLOADS），域里面distinct字段个数
+    final int[] freqs, prefixLengths, suffixLengths;// segment打通后所有单词（相同词算两个的长度。每个单独的词都对应一个元素，相同的前缀长度，不同的后缀长度
+    final int posStart, offStart, payStart; //  segment打通后所有文档所有域所有单词（相同词算两个）总个数，实际posStart、offStart值都是相等的
+    int totalPositions; // 当前文档当前域所有词（相同词算两个）编号。每处理一个position就+1
+    int ord; // 第几个词
 
     FieldData(
         int fieldNum,
@@ -166,7 +166,7 @@ public final class Lucene90CompressingTermVectorsWriter extends TermVectorsWrite
         int posStart,
         int offStart,
         int payStart) {
-      this.fieldNum = fieldNum;
+      this.fieldNum = fieldNum;// 域编号
       this.numTerms = numTerms;
       this.hasPositions = positions;
       this.hasOffsets = offsets;
@@ -180,13 +180,13 @@ public final class Lucene90CompressingTermVectorsWriter extends TermVectorsWrite
       this.offStart = offStart;
       this.payStart = payStart;
       totalPositions = 0;
-      ord = 0;
+      ord = 0;// 排序后好的第几个词
     }
-
+    // 存储字段内容， 在finish阶段
     void addTerm(int freq, int prefixLength, int suffixLength) {
       freqs[ord] = freq;
-      prefixLengths[ord] = prefixLength;
-      suffixLengths[ord] = suffixLength;
+      prefixLengths[ord] = prefixLength;// 相同的前缀长度
+      suffixLengths[ord] = suffixLength;// 不同的后缀长度
       ++ord;
     }
 
@@ -216,19 +216,19 @@ public final class Lucene90CompressingTermVectorsWriter extends TermVectorsWrite
     }
   }
 
-  private int numDocs; // total number of docs seen
-  private final Deque<DocData> pendingDocs; // pending docs
-  private DocData curDoc; // current document
-  private FieldData curField; // current field
-  private final BytesRef lastTerm;
-  private int[] positionsBuf, startOffsetsBuf, lengthsBuf, payloadLengthsBuf;
-  private final ByteBuffersDataOutput termSuffixes; // buffered term suffixes
+  private int numDocs; // total number of docs seen目前总共写入的文档数
+  private final Deque<DocData> pendingDocs; // pending docs  将tv写入别的对象中了的个数，每128个文档会清空一次
+  private DocData curDoc; // current document, 能放很多FieldData。
+  private FieldData curField; // current field, 每个文档每个域都会生成一个
+  private final BytesRef lastTerm;// 当前文档当前域的上一个词，写完了这个域就清空了
+  private int[] positionsBuf, startOffsetsBuf, lengthsBuf, payloadLengthsBuf;  // 存放所有词（相同词算两次）的位置信息，起始位置offset、词的长度，。。。。。。一个segment共享一个
+  private final ByteBuffersDataOutput termSuffixes; // buffered term suffixes  // 只存储这个词不相同的后缀，一个链共享一个，每128个文档会清空一次
   private final ByteBuffersDataOutput payloadBytes; // buffered term payloads
-  private final BlockPackedWriter writer;
+  private final BlockPackedWriter writer; // BlockPackedWriter
   private final int maxDocsPerChunk; // hard limit on number of docs per chunk
   private final ByteBuffersDataOutput scratchBuffer = ByteBuffersDataOutput.newResettableInstance();
-
-  /** Sole constructor. */
+//是在写入完成时，还没有调用commit时调该函数
+  /** Sole constructor. */// 对应Term vector索引的Writer，底层是压缩Block格式。
   Lucene90CompressingTermVectorsWriter(
       Directory directory,
       SegmentInfo si,
@@ -244,7 +244,7 @@ public final class Lucene90CompressingTermVectorsWriter extends TermVectorsWrite
     this.segment = si.name;
     this.compressionMode = compressionMode;
     this.compressor = compressionMode.newCompressor();
-    this.chunkSize = chunkSize;
+    this.chunkSize = chunkSize; // 4096
     this.maxDocsPerChunk = maxDocsPerChunk;
 
     numDocs = 0;
@@ -254,7 +254,7 @@ public final class Lucene90CompressingTermVectorsWriter extends TermVectorsWrite
     lastTerm = new BytesRef(ArrayUtil.oversize(30, 1));
 
     boolean success = false;
-    try {
+    try {//  产生 _0.tvd文件
       metaStream =
           directory.createOutput(
               IndexFileNames.segmentFileName(segment, segmentSuffix, VECTORS_META_EXTENSION),
@@ -275,7 +275,7 @@ public final class Lucene90CompressingTermVectorsWriter extends TermVectorsWrite
           vectorsStream, formatName, VERSION_CURRENT, si.getId(), segmentSuffix);
       assert CodecUtil.indexHeaderLength(formatName, segmentSuffix)
           == vectorsStream.getFilePointer();
-
+      //blockSize 1024
       indexWriter =
           new FieldsIndexWriter(
               directory,
@@ -319,14 +319,14 @@ public final class Lucene90CompressingTermVectorsWriter extends TermVectorsWrite
   public void startDocument(int numVectorFields) throws IOException {
     curDoc = addDocData(numVectorFields);
   }
-
+  // 在将每个词的nextField的每个stream0/1都解析完了只有
   @Override
   public void finishDocument() throws IOException {
     // append the payload bytes of the doc after its terms
     payloadBytes.copyTo(termSuffixes);
     payloadBytes.reset();
     ++numDocs;
-    if (triggerFlush()) {
+    if (triggerFlush()) {//触发的标准是大小4K和128个文档
       flush(false);
     }
     curDoc = null;
@@ -337,28 +337,28 @@ public final class Lucene90CompressingTermVectorsWriter extends TermVectorsWrite
       FieldInfo info, int numTerms, boolean positions, boolean offsets, boolean payloads)
       throws IOException {
     curField = curDoc.addField(info.number, numTerms, positions, offsets, payloads);
-    lastTerm.length = 0;
+    lastTerm.length = 0;//新开始的一个域都会清空
   }
 
   @Override
   public void finishField() throws IOException {
     curField = null;
   }
-
+  // finish时，使用了压缩阀，路径始终减少了。主要是存储词字符。每个域每个distinct词在finish时都会进来。
   @Override
   public void startTerm(BytesRef term, int freq) throws IOException {
     assert freq >= 1;
     final int prefix;
-    if (lastTerm.length == 0) {
+    if (lastTerm.length == 0) {// 最开始，每个域都是重新开始时，都会长度置为0
       // no previous term: no bytes to write
-      prefix = 0;
-    } else {
+      prefix = 0; // 与上个词相同的前缀长度  ，仅仅是当前域所有字段的压缩
+    } else { // 获取两个term相同的前缀长度
       prefix = StringHelper.bytesDifference(lastTerm, term);
-    }
-    curField.addTerm(freq, prefix, term.length - prefix);
-    termSuffixes.writeBytes(term.bytes, term.offset + prefix, term.length - prefix);
-    // copy last term
-    if (lastTerm.bytes.length < term.length) {
+    }// 两个结合就能找到词的内容了
+    curField.addTerm(freq, prefix, term.length - prefix); // 存储词频
+    termSuffixes.writeBytes(term.bytes, term.offset + prefix, term.length - prefix);// 存储这个词到termSuffixes，后缀存储。相当于已经压缩。。
+    // copy last term ， 替换旧词
+    if (lastTerm.bytes.length < term.length) { //后面的词长的话，申请大点的位置来存放当前词
       lastTerm.bytes = new byte[ArrayUtil.oversize(term.length, 1)];
     }
     lastTerm.offset = 0;
@@ -377,10 +377,10 @@ public final class Lucene90CompressingTermVectorsWriter extends TermVectorsWrite
     }
   }
 
-  private boolean triggerFlush() {
+  private boolean triggerFlush() {// 不相同的尾长累加>4k ｜｜  // 每个term个数达到128个
     return termSuffixes.size() >= chunkSize || pendingDocs.size() >= maxDocsPerChunk;
   }
-
+  // 如果一个chunk满了(128个分片或者16kb)，会向磁盘中刷, 刷新的东西还是蛮多的，很重要的函数
   private void flush(boolean force) throws IOException {
     assert force != triggerFlush();
     final int chunkDocs = pendingDocs.size();
@@ -390,32 +390,32 @@ public final class Lucene90CompressingTermVectorsWriter extends TermVectorsWrite
       numDirtyChunks++; // incomplete: we had to force this flush
       numDirtyDocs += pendingDocs.size();
     }
-    // write the index file
+    // write the index file   写入_ids_0.tmp  _pointers_1.tmp中
     indexWriter.writeIndex(chunkDocs, vectorsStream.getFilePointer());
 
     final int docBase = numDocs - chunkDocs;
-    vectorsStream.writeVInt(docBase);
+    vectorsStream.writeVInt(docBase); // 写入tvd
     final int dirtyBit = force ? 1 : 0;
     vectorsStream.writeVInt((chunkDocs << 1) | dirtyBit);
 
     // total number of fields of the chunk
-    final int totalFields = flushNumFields(chunkDocs);
+    final int totalFields = flushNumFields(chunkDocs);// 该chunk所有文档域个数的累加。一个chunk内所有域累加值
 
     if (totalFields > 0) {
       // unique field numbers (sorted)
-      final int[] fieldNums = flushFieldNums();
+      final int[] fieldNums = flushFieldNums(); //存储该chunk的distinct的域编号，并返回这些distinct
       // offsets in the array of unique field numbers
-      flushFields(totalFields, fieldNums);
+      flushFields(totalFields, fieldNums);// 存储每个文档每个域在distinct中的序号
       // flags (does the field have positions, offsets, payloads?)
-      flushFlags(totalFields, fieldNums);
+      flushFlags(totalFields, fieldNums);      // 写入一个block每个的字段标志位，该域的标志位（POSITIONS|OFFSETS|PAYLOADS）。若字段标志位相同，只用写一次的
       // number of terms of each field
-      flushNumTerms(totalFields);
+      flushNumTerms(totalFields); // 写入每个文档每个域distinct(term)个数
       // prefix and suffix lengths for each field
-      flushTermLengths();
+      flushTermLengths();// 写入每个文档每个域每个distinct(term)的相同前缀，后缀
       // term freqs - 1 (because termFreq is always >=1) for each term
-      flushTermFreqs();
+      flushTermFreqs();// 每个文档每个域每个distinct(term)出现的频次
       // positions for all terms, when enabled
-      flushPositions();
+      flushPositions();// 每个文档每个域每个词(相同次算两次)的位置信息
       // offsets for all terms, when enabled
       flushOffsets(fieldNums);
       // payload lengths for all terms, when enabled
@@ -435,50 +435,50 @@ public final class Lucene90CompressingTermVectorsWriter extends TermVectorsWrite
   }
 
   private int flushNumFields(int chunkDocs) throws IOException {
-    if (chunkDocs == 1) {
+    if (chunkDocs == 1) {//该chunk只有一个文档
       final int numFields = pendingDocs.getFirst().numFields;
       vectorsStream.writeVInt(numFields);
       return numFields;
     } else {
-      writer.reset(vectorsStream);
-      int totalFields = 0;
+      writer.reset(vectorsStream);// 从头开始统计
+      int totalFields = 0; // 该chunk所有文档域个数的累加
       for (DocData dd : pendingDocs) {
         writer.add(dd.numFields);
         totalFields += dd.numFields;
       }
-      writer.finish();
-      return totalFields;
+      writer.finish();// 本次将内存中的一个chunk写入_0.tvd
+      return totalFields;// 该chunk所有文档域个数的累加
     }
   }
 
   /** Returns a sorted array containing unique field numbers */
   private int[] flushFieldNums() throws IOException {
-    IntHashSet fieldNumsSet = new IntHashSet();
+    IntHashSet fieldNumsSet = new IntHashSet(); // 所有文档，所有涉及到的域num全部弄出来
     for (DocData dd : pendingDocs) {
       for (FieldData fd : dd.fields) {
-        fieldNumsSet.add(fd.fieldNum);
+        fieldNumsSet.add(fd.fieldNum); // 每个文档域的编号，按照红黑树存储distint的节点
       }
     }
     int[] fieldNums = fieldNumsSet.toArray();
     Arrays.sort(fieldNums);
 
-    final int numDistinctFields = fieldNums.length;
+    final int numDistinctFields = fieldNums.length;// 这一堆文档中，distinct域的个数
     assert numDistinctFields > 0;
-    final int bitsRequired = PackedInts.bitsRequired(fieldNums[numDistinctFields - 1]);
+    final int bitsRequired = PackedInts.bitsRequired(fieldNums[numDistinctFields - 1]);// 获取的是这个chunk中最大的那个域的编号
     final int token = (Math.min(numDistinctFields - 1, 0x07) << 5) | bitsRequired;
     vectorsStream.writeByte((byte) token);
-    if (numDistinctFields - 1 >= 0x07) {
+    if (numDistinctFields - 1 >= 0x07) { // 如果大了，还得重新写入
       vectorsStream.writeVInt(numDistinctFields - 1 - 0x07);
     }
     final PackedInts.Writer writer =
         PackedInts.getWriterNoHeader(
             vectorsStream, PackedInts.Format.PACKED, numDistinctFields, bitsRequired, 1);
     for (Integer fieldNum : fieldNums) {
-      writer.add(fieldNum);
+      writer.add(fieldNum); // 将distinct域的编号也写入tvd中
     }
-    writer.finish();
+    writer.finish();// 完成了这批数据的写入
 
-    return fieldNums;
+    return fieldNums;// 返回所有distinct的域编码
   }
 
   private void flushFields(int totalFields, int[] fieldNums) throws IOException {
@@ -486,21 +486,21 @@ public final class Lucene90CompressingTermVectorsWriter extends TermVectorsWrite
     final DirectWriter writer =
         DirectWriter.getInstance(
             scratchBuffer, totalFields, DirectWriter.bitsRequired(fieldNums.length - 1));
-    for (DocData dd : pendingDocs) {
-      for (FieldData fd : dd.fields) {
-        final int fieldNumIndex = Arrays.binarySearch(fieldNums, fd.fieldNum);
+    for (DocData dd : pendingDocs) {// 遍历每个文档
+      for (FieldData fd : dd.fields) {// 遍历每个域
+        final int fieldNumIndex = Arrays.binarySearch(fieldNums, fd.fieldNum);// 二叉搜索这个第几个数，fieldNums从小到大排序
         assert fieldNumIndex >= 0;
         writer.add(fieldNumIndex);
       }
     }
-    writer.finish();
+    writer.finish(); // 这里才真正写向tvd文件
     vectorsStream.writeVLong(scratchBuffer.size());
     scratchBuffer.copyTo(vectorsStream);
   }
 
   private void flushFlags(int totalFields, int[] fieldNums) throws IOException {
     // check if fields always have the same flags
-    boolean nonChangingFlags = true;
+    boolean nonChangingFlags = true; // 检查所有相同的域是否有相同的字段配置，
     int[] fieldFlags = new int[fieldNums.length];
     Arrays.fill(fieldFlags, -1);
     outer:
@@ -510,7 +510,7 @@ public final class Lucene90CompressingTermVectorsWriter extends TermVectorsWrite
         assert fieldNumOff >= 0;
         if (fieldFlags[fieldNumOff] == -1) {
           fieldFlags[fieldNumOff] = fd.flags;
-        } else if (fieldFlags[fieldNumOff] != fd.flags) {
+        } else if (fieldFlags[fieldNumOff] != fd.flags) {// 若flags不一样，说明有问题了
           nonChangingFlags = false;
           break outer;
         }
@@ -519,25 +519,25 @@ public final class Lucene90CompressingTermVectorsWriter extends TermVectorsWrite
 
     if (nonChangingFlags) {
       // write one flag per field num
-      vectorsStream.writeVInt(0);
+      vectorsStream.writeVInt(0);// 标志一样
       scratchBuffer.reset();
       final DirectWriter writer =
           DirectWriter.getInstance(scratchBuffer, fieldFlags.length, FLAGS_BITS);
       for (int flags : fieldFlags) {
         assert flags >= 0;
-        writer.add(flags);
+        writer.add(flags);// 只用写一次
       }
       writer.finish();
       vectorsStream.writeVInt(Math.toIntExact(scratchBuffer.size()));
       scratchBuffer.copyTo(vectorsStream);
-    } else {
+    } else {// 若一个域有不同的字段配置的话
       // write one flag for every field instance
-      vectorsStream.writeVInt(1);
+      vectorsStream.writeVInt(1);// 标志不一样
       scratchBuffer.reset();
       final DirectWriter writer = DirectWriter.getInstance(scratchBuffer, totalFields, FLAGS_BITS);
       for (DocData dd : pendingDocs) {
         for (FieldData fd : dd.fields) {
-          writer.add(fd.flags);
+          writer.add(fd.flags);// 需要单独写入每个字段配置
         }
       }
       writer.finish();
@@ -545,7 +545,7 @@ public final class Lucene90CompressingTermVectorsWriter extends TermVectorsWrite
       scratchBuffer.copyTo(vectorsStream);
     }
   }
-
+  // 写入每个文档每个字段独立term的个数
   private void flushNumTerms(int totalFields) throws IOException {
     int maxNumTerms = 0;
     for (DocData dd : pendingDocs) {
@@ -566,28 +566,28 @@ public final class Lucene90CompressingTermVectorsWriter extends TermVectorsWrite
     vectorsStream.writeVInt(Math.toIntExact(scratchBuffer.size()));
     scratchBuffer.copyTo(vectorsStream);
   }
-
+  // 写入每个文档每个域里面distinct词的前缀长度，后缀长度
   private void flushTermLengths() throws IOException {
     writer.reset(vectorsStream);
     for (DocData dd : pendingDocs) {
       for (FieldData fd : dd.fields) {
-        for (int i = 0; i < fd.numTerms; ++i) {
+        for (int i = 0; i < fd.numTerms; ++i) {// 该域有几个单独的词
           writer.add(fd.prefixLengths[i]);
         }
       }
     }
     writer.finish();
-    writer.reset(vectorsStream);
+    writer.reset(vectorsStream); // 重置
     for (DocData dd : pendingDocs) {
       for (FieldData fd : dd.fields) {
-        for (int i = 0; i < fd.numTerms; ++i) {
+        for (int i = 0; i < fd.numTerms; ++i) {// 该域有几个单独的词
           writer.add(fd.suffixLengths[i]);
         }
       }
     }
     writer.finish();
   }
-
+  // 每个文档每个域每个distinct(term)出现的次数
   private void flushTermFreqs() throws IOException {
     writer.reset(vectorsStream);
     for (DocData dd : pendingDocs) {
@@ -599,18 +599,18 @@ public final class Lucene90CompressingTermVectorsWriter extends TermVectorsWrite
     }
     writer.finish();
   }
-
+  // 在写满一个chunk时候就会刷新， 存放每个词的position相对信息
   private void flushPositions() throws IOException {
     writer.reset(vectorsStream);
     for (DocData dd : pendingDocs) {
       for (FieldData fd : dd.fields) {
         if (fd.hasPositions) {
           int pos = 0;
-          for (int i = 0; i < fd.numTerms; ++i) {
+          for (int i = 0; i < fd.numTerms; ++i) {// 有几个词
             int previousPosition = 0;
-            for (int j = 0; j < fd.freqs[i]; ++j) {
+            for (int j = 0; j < fd.freqs[i]; ++j) { // 每个词都扫描下
               final int position = positionsBuf[fd.posStart + pos++];
-              writer.add(position - previousPosition);
+              writer.add(position - previousPosition);// 按顺序把所有的词都存储起来了
               previousPosition = position;
             }
           }
@@ -620,20 +620,20 @@ public final class Lucene90CompressingTermVectorsWriter extends TermVectorsWrite
     }
     writer.finish();
   }
-
+  // 刷新所有词的offset延迟信息
   private void flushOffsets(int[] fieldNums) throws IOException {
     boolean hasOffsets = false;
-    long[] sumPos = new long[fieldNums.length];
-    long[] sumOffsets = new long[fieldNums.length];
+    long[] sumPos = new long[fieldNums.length];// 所有字段的个数
+    long[] sumOffsets = new long[fieldNums.length]; // 某个域的
     for (DocData dd : pendingDocs) {
-      for (FieldData fd : dd.fields) {
+      for (FieldData fd : dd.fields) {// 遍历每个词
         hasOffsets |= fd.hasOffsets;
-        if (fd.hasOffsets && fd.hasPositions) {
-          final int fieldNumOff = Arrays.binarySearch(fieldNums, fd.fieldNum);
+        if (fd.hasOffsets && fd.hasPositions) {// 有offset或者position的话
+          final int fieldNumOff = Arrays.binarySearch(fieldNums, fd.fieldNum);// 每个域的编号偏移量
           int pos = 0;
           for (int i = 0; i < fd.numTerms; ++i) {
-            sumPos[fieldNumOff] += positionsBuf[fd.posStart + fd.freqs[i] - 1 + pos];
-            sumOffsets[fieldNumOff] += startOffsetsBuf[fd.offStart + fd.freqs[i] - 1 + pos];
+            sumPos[fieldNumOff] += positionsBuf[fd.posStart + fd.freqs[i] - 1 + pos];// 每个文档每个域 distin(term)的最大的起始position相加
+            sumOffsets[fieldNumOff] += startOffsetsBuf[fd.offStart + fd.freqs[i] - 1 + pos];// 每个文档每个域 distin(term)的最大的起始offset相加
             pos += fd.freqs[i];
           }
           assert pos == fd.totalPositions;
@@ -645,7 +645,7 @@ public final class Lucene90CompressingTermVectorsWriter extends TermVectorsWrite
       // nothing to do
       return;
     }
-
+    // 估算每个域每个词的平均长度
     final float[] charsPerTerm = new float[fieldNums.length];
     for (int i = 0; i < fieldNums.length; ++i) {
       charsPerTerm[i] =
@@ -654,23 +654,23 @@ public final class Lucene90CompressingTermVectorsWriter extends TermVectorsWrite
 
     // start offsets
     for (int i = 0; i < fieldNums.length; ++i) {
-      vectorsStream.writeInt(Float.floatToRawIntBits(charsPerTerm[i]));
+      vectorsStream.writeInt(Float.floatToRawIntBits(charsPerTerm[i]));// 写入平均每个域的浮点型表现形式
     }
 
-    writer.reset(vectorsStream);
+    writer.reset(vectorsStream); // 确定writer里面写入是本身
     for (DocData dd : pendingDocs) {
-      for (FieldData fd : dd.fields) {
+      for (FieldData fd : dd.fields) {// 每个域
         if ((fd.flags & OFFSETS) != 0) {
           final int fieldNumOff = Arrays.binarySearch(fieldNums, fd.fieldNum);
           final float cpt = charsPerTerm[fieldNumOff];
           int pos = 0;
-          for (int i = 0; i < fd.numTerms; ++i) {
+          for (int i = 0; i < fd.numTerms; ++i) { // 每个域有几个distinct(term)
             int previousPos = 0;
             int previousOff = 0;
             for (int j = 0; j < fd.freqs[i]; ++j) {
               final int position = fd.hasPositions ? positionsBuf[fd.posStart + pos] : 0;
               final int startOffset = startOffsetsBuf[fd.offStart + pos];
-              writer.add(startOffset - previousOff - (int) (cpt * (position - previousPos)));
+              writer.add(startOffset - previousOff - (int) (cpt * (position - previousPos))); // 统计词的长度-所有词的平均长度*位置
               previousPos = position;
               previousOff = startOffset;
               ++pos;
@@ -688,10 +688,10 @@ public final class Lucene90CompressingTermVectorsWriter extends TermVectorsWrite
         if ((fd.flags & OFFSETS) != 0) {
           int pos = 0;
           for (int i = 0; i < fd.numTerms; ++i) {
-            for (int j = 0; j < fd.freqs[i]; ++j) {
+            for (int j = 0; j < fd.freqs[i]; ++j) { // 每个域的每个distinct(词)
               writer.add(
                   lengthsBuf[fd.offStart + pos++] - fd.prefixLengths[i] - fd.suffixLengths[i]);
-            }
+            }// 每个词的长度-前缀-后缀
           }
           assert pos == fd.totalPositions;
         }
@@ -699,7 +699,7 @@ public final class Lucene90CompressingTermVectorsWriter extends TermVectorsWrite
     }
     writer.finish();
   }
-
+  // 没有取值，直接略过
   private void flushPayloadLengths() throws IOException {
     writer.reset(vectorsStream);
     for (DocData dd : pendingDocs) {
@@ -713,11 +713,11 @@ public final class Lucene90CompressingTermVectorsWriter extends TermVectorsWrite
     }
     writer.finish();
   }
-
+  // 在flush时候会调用
   @Override
   public void finish(int numDocs) throws IOException {
     if (!pendingDocs.isEmpty()) {
-      flush(true);
+      flush(true);// 很重要，刷新一些列termvector相关的文件
     }
     if (numDocs != this.numDocs) {
       throw new RuntimeException(
@@ -730,24 +730,24 @@ public final class Lucene90CompressingTermVectorsWriter extends TermVectorsWrite
     CodecUtil.writeFooter(metaStream);
     CodecUtil.writeFooter(vectorsStream);
   }
-
-  @Override
+  // numProx:该域该文档的词频
+  @Override  // finish时，处理的是一个词的所有词频, numProx：相同词的词频   将一个词的tv读取出来。相同词的频次：numProx，positions:stream0, offsets:stream1
   public void addProx(int numProx, DataInput positions, DataInput offsets) throws IOException {
     assert (curField.hasPositions) == (positions != null);
     assert (curField.hasOffsets) == (offsets != null);
 
-    if (curField.hasPositions) {
-      final int posStart = curField.posStart + curField.totalPositions;
-      if (posStart + numProx > positionsBuf.length) {
-        positionsBuf = ArrayUtil.grow(positionsBuf, posStart + numProx);
+    if (curField.hasPositions) {// 有这个position
+      final int posStart = curField.posStart + curField.totalPositions;      // 前部词是从第几个开始(相同的词算2个)，为了统计该segment上顺序所有文档所有词的position
+      if (posStart + numProx > positionsBuf.length) { // position是否能否装得下全部的
+        positionsBuf = ArrayUtil.grow(positionsBuf, posStart + numProx);// 每次扩容1/8
       }
       int position = 0;
-      if (curField.hasPayloads) {
+      if (curField.hasPayloads) {// 为false
         final int payStart = curField.payStart + curField.totalPositions;
         if (payStart + numProx > payloadLengthsBuf.length) {
           payloadLengthsBuf = ArrayUtil.grow(payloadLengthsBuf, payStart + numProx);
         }
-        for (int i = 0; i < numProx; ++i) {
+        for (int i = 0; i < numProx; ++i) { // 词频个数，每个词都过一遍
           final int code = positions.readVInt();
           if ((code & 1) != 0) {
             // This position has a payload
@@ -758,29 +758,29 @@ public final class Lucene90CompressingTermVectorsWriter extends TermVectorsWrite
             payloadLengthsBuf[payStart + i] = 0;
           }
           position += code >>> 1;
-          positionsBuf[posStart + i] = position;
+          positionsBuf[posStart + i] = position; // 每个词的position只是根据相同的上一个position来确认
         }
       } else {
-        for (int i = 0; i < numProx; ++i) {
-          position += (positions.readVInt() >>> 1);
+        for (int i = 0; i < numProx; ++i) {// 词频
+          position += (positions.readVInt() >>> 1); // 获取该词的位置，见TermVectorsConsumerPerField P218
           positionsBuf[posStart + i] = position;
         }
       }
     }
 
-    if (curField.hasOffsets) {
+    if (curField.hasOffsets) {// 也有
       final int offStart = curField.offStart + curField.totalPositions;
-      if (offStart + numProx > startOffsetsBuf.length) {
+      if (offStart + numProx > startOffsetsBuf.length) {// 放不下
         final int newLength = ArrayUtil.oversize(offStart + numProx, 4);
         startOffsetsBuf = ArrayUtil.growExact(startOffsetsBuf, newLength);
         lengthsBuf = ArrayUtil.growExact(lengthsBuf, newLength);
       }
       int lastOffset = 0, startOffset, endOffset;
       for (int i = 0; i < numProx; ++i) {
-        startOffset = lastOffset + offsets.readVInt();
-        endOffset = startOffset + offsets.readVInt();
+        startOffset = lastOffset + offsets.readVInt();// 获取该词offset，见TermVectorsConsumerPerField P198
+        endOffset = startOffset + offsets.readVInt(); // 也是解压缩
         lastOffset = endOffset;
-        startOffsetsBuf[offStart + i] = startOffset;
+        startOffsetsBuf[offStart + i] = startOffset;// 词的offset请求
         lengthsBuf[offStart + i] = endOffset - startOffset;
       }
     }

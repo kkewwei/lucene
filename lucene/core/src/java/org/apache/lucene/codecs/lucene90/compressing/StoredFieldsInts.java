@@ -36,19 +36,19 @@ class StoredFieldsInts {
         break;
       }
     }
-    if (allEqual) {
+    if (allEqual) {// 所有的storefield都是一样的
       out.writeByte((byte) 0);
-      out.writeVInt(values[0]);
+      out.writeVInt(values[0]);// 存储storefield个数
     } else {
       long max = 0;
       for (int i = 0; i < count; ++i) {
         max |= Integer.toUnsignedLong(values[start + i]);
-      }
-      if (max <= 0xff) {
-        out.writeByte((byte) 8);
+      }// 使用无符号转换和位或操作，快速找到所有数值中的最大“位覆盖范围”
+      if (max <= 0xff) {//8位之类可以搞懂
+        out.writeByte((byte) 8);// 先存储8的编码
         writeInts8(out, count, values, start);
       } else if (max <= 0xffff) {
-        out.writeByte((byte) 16);
+        out.writeByte((byte) 16);// 使用16位存储
         writeInts16(out, count, values, start);
       } else {
         out.writeByte((byte) 32);
@@ -60,9 +60,9 @@ class StoredFieldsInts {
   private static void writeInts8(DataOutput out, int count, int[] values, int offset)
       throws IOException {
     int k = 0;
-    for (; k < count - BLOCK_SIZE_MINUS_ONE; k += BLOCK_SIZE) {
+    for (; k < count - BLOCK_SIZE_MINUS_ONE; k += BLOCK_SIZE) {// 循环8次，每次处理128个long
       int step = offset + k;
-      for (int i = 0; i < 16; ++i) {
+      for (int i = 0; i < 16; ++i) {// 每隔16个value
         long l =
             ((long) values[step + i] << 56)
                 | ((long) values[step + 16 + i] << 48)
@@ -79,11 +79,11 @@ class StoredFieldsInts {
       out.writeByte((byte) values[offset + k]);
     }
   }
-
+  // 一个long可以存储4个data
   private static void writeInts16(DataOutput out, int count, int[] values, int offset)
       throws IOException {
     int k = 0;
-    for (; k < count - BLOCK_SIZE_MINUS_ONE; k += BLOCK_SIZE) {
+    for (; k < count - BLOCK_SIZE_MINUS_ONE; k += BLOCK_SIZE) { // 这样间隔32位存储主要是为了原地读取，与cpu优化无关
       int step = offset + k;
       for (int i = 0; i < 32; ++i) {
         long l =
@@ -102,7 +102,7 @@ class StoredFieldsInts {
   private static void writeInts32(DataOutput out, int count, int[] values, int offset)
       throws IOException {
     int k = 0;
-    for (; k < count - BLOCK_SIZE_MINUS_ONE; k += BLOCK_SIZE) {
+    for (; k < count - BLOCK_SIZE_MINUS_ONE; k += BLOCK_SIZE) {// 每批128个存储
       int step = offset + k;
       for (int i = 0; i < 64; ++i) {
         long l = ((long) values[step + i] << 32) | (long) values[step + 64 + i];
@@ -116,7 +116,7 @@ class StoredFieldsInts {
 
   /** Read {@code count} integers into {@code values}. */
   static void readInts(IndexInput in, int count, long[] values, int offset) throws IOException {
-    final int bpv = in.readByte();
+    final int bpv = in.readByte();//每一位的长度
     switch (bpv) {
       case 0:
         Arrays.fill(values, offset, offset + count, in.readVInt());
@@ -163,7 +163,7 @@ class StoredFieldsInts {
     int k = 0;
     for (; k < count - BLOCK_SIZE_MINUS_ONE; k += BLOCK_SIZE) {
       int step = offset + k;
-      in.readLongs(values, step, 32);
+      in.readLongs(values, step, 32);// 不用申请额外的空间
       for (int i = 0; i < 32; ++i) {
         final long l = values[step + i];
         values[step + i] = (l >>> 48) & 0xFFFFL;

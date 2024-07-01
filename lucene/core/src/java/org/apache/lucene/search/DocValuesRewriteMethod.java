@@ -39,7 +39,7 @@ public final class DocValuesRewriteMethod extends MultiTermQuery.RewriteMethod {
     return new ConstantScoreQuery(new MultiTermQueryDocValuesWrapper(query));
   }
 
-  static class MultiTermQueryDocValuesWrapper extends Query {
+  static class MultiTermQueryDocValuesWrapper extends Query {// 仅仅针对terms的进行了优化
 
     protected final MultiTermQuery query;
 
@@ -101,7 +101,7 @@ public final class DocValuesRewriteMethod extends MultiTermQuery.RewriteMethod {
 
                 @Override
                 public TermsEnum iterator() throws IOException {
-                  return values.termsEnum();
+                  return values.termsEnum();// 这个field所有的词的遍历
                 }
 
                 @Override
@@ -178,7 +178,7 @@ public final class DocValuesRewriteMethod extends MultiTermQuery.RewriteMethod {
             public long cost() {
               // We have no prior knowledge of how many docs might match for any given query term,
               // so we assume that all docs with a value could be a match:
-              return values.cost();
+              return values.cost();// 总的次数
             }
           };
         }

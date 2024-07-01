@@ -61,7 +61,7 @@ public class MultiCollectorManager implements CollectorManager<Collector, Object
     final Object[] results = new Object[collectorManagers.length];
     for (int i = 0; i < collectorManagers.length; i++) {
       final List<Collector> reducableCollector = new ArrayList<>(size);
-      for (Collector collector : reducableCollectors) {
+      for (Collector collector : reducableCollectors) {//每个维度每个shard结果
         // MultiCollector will not actually wrap the collector if only one is provided, so we
         // check the instance type here:
         if (collector instanceof MultiCollector) {
@@ -69,8 +69,8 @@ public class MultiCollectorManager implements CollectorManager<Collector, Object
         } else {
           reducableCollector.add(collector);
         }
-      }
-      results[i] = collectorManagers[i].reduce(reducableCollector);
+      } // terms的话，会跑到AggregationCollectorManager.reduce()中
+      results[i] = collectorManagers[i].reduce(reducableCollector);// 手机完成后合并
     }
     return results;
   }

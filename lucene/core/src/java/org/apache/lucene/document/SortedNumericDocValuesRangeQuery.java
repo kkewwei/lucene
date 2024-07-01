@@ -90,8 +90,8 @@ final class SortedNumericDocValuesRangeQuery extends NumericDocValuesRangeQuery 
 
   @Override
   public Query rewrite(IndexSearcher indexSearcher) throws IOException {
-    if (lowerValue == Long.MIN_VALUE && upperValue == Long.MAX_VALUE) {
-      return new FieldExistsQuery(field);
+    if (lowerValue == Long.MIN_VALUE && upperValue == Long.MAX_VALUE) {//若从小到大，就变成了字段存在了
+      return new FieldExistsQuery(field);// 变成字段是否存在了
     }
     if (lowerValue > upperValue) {
       return MatchNoDocsQuery.INSTANCE;
@@ -109,7 +109,7 @@ final class SortedNumericDocValuesRangeQuery extends NumericDocValuesRangeQuery 
     }
     return super.rewrite(indexSearcher);
   }
-
+  // 也是个常量Weight
   @Override
   public Weight createWeight(IndexSearcher searcher, ScoreMode scoreMode, float boost)
       throws IOException {
@@ -117,7 +117,7 @@ final class SortedNumericDocValuesRangeQuery extends NumericDocValuesRangeQuery 
 
       @Override
       public boolean isCacheable(LeafReaderContext ctx) {
-        return DocValues.isCacheable(ctx, field);
+        return DocValues.isCacheable(ctx, field);// 如果docvalue有过更新
       }
 
       @Override
@@ -133,21 +133,21 @@ final class SortedNumericDocValuesRangeQuery extends NumericDocValuesRangeQuery 
         } else if (count == maxDoc) {
           return ConstantScoreScorerSupplier.matchAll(score(), scoreMode, maxDoc);
         }
-
-        SortedNumericDocValues values = DocValues.getSortedNumeric(context.reader(), field);
-        final NumericDocValues singleton = DocValues.unwrapSingleton(values);
+        // 有交集
+        SortedNumericDocValues values = DocValues.getSortedNumeric(context.reader(), field);// 这个字段的docValue全部拿出来了
+        final NumericDocValues singleton = DocValues.unwrapSingleton(values);// 若SingletonSortedNumericDocValues
         final DocValuesSkipper skipper = context.reader().getDocValuesSkipper(field);
 
         final SortField primarySortField;
-        if (singleton != null) {
-          if (skipper != null
+        if (singleton != null) {// 该字段对应的值都只有一个value
+          if (skipper != null// 若包含skipper
               && (primarySortField = densePrimarySort(context.reader(), skipper)) != null) {
             return getScorerSupplierFromDensePrimarySort(singleton, skipper, primarySortField);
           }
           // A single two-phase iterator covers every density: its approximation rides the skipper
           // (no over-scan), its intoBitSet bulk-evaluates dense blocks, and YES runs collect as
           // ranges. The bulk scorer unwraps it and picks the right strategy from there.
-          return ConstantScoreScorerSupplier.fromIterator(
+          return ConstantScoreScorerSupplier.fromIterator(// 不包含该字段的sort
               TwoPhaseIterator.asDocIdSetIterator(
                   DocValuesRangeIterator.forRange(singleton, skipper, lowerValue, upperValue)),
               score(),
@@ -178,13 +178,13 @@ final class SortedNumericDocValuesRangeQuery extends NumericDocValuesRangeQuery 
        * -1 if # docs cannot be determined efficiently
        */
       private int docCountIgnoringDeletes(LeafReaderContext context) throws IOException {
-        final DocValuesSkipper skipper = context.reader().getDocValuesSkipper(field);
+        final DocValuesSkipper skipper = context.reader().getDocValuesSkipper(field);// 这里回构建DocValuesSkipper
         if (skipper != null) {
           if (skipper.minValue() > upperValue || skipper.maxValue() < lowerValue) {
             return 0;
           }
-          if (skipper.docCount() == context.reader().maxDoc()
-              && skipper.minValue() >= lowerValue
+          if (skipper.docCount() == context.reader().maxDoc()// 文档全匹配
+              && skipper.minValue() >= lowerValue// 全部在内
               && skipper.maxValue() <= upperValue) {
             return context.reader().maxDoc();
           }
@@ -228,10 +228,10 @@ final class SortedNumericDocValuesRangeQuery extends NumericDocValuesRangeQuery 
     if (skipper.docCount() != reader.maxDoc()) {
       return null;
     }
-    final Sort indexSort = reader.getMetaData().sort();
+    final Sort indexSort = reader.getMetaData().sort();// 看是否有indexSorted
     if (indexSort == null
         || indexSort.getSort().length == 0
-        || indexSort.getSort()[0].getField().equals(field) == false) {
+        || indexSort.getSort()[0].getField().equals(field) == false) {// 不是针对该字段进行排序
       return null;
     }
     return indexSort.getSort()[0];

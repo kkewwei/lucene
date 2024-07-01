@@ -101,10 +101,10 @@ import org.apache.lucene.util.bkd.BKDConfig;
  *
  * @lucene.experimental
  */
-public abstract class PointValues {
+public abstract class PointValues { // 为了访问数字型value
 
   /** Maximum number of bytes for each dimension */
-  public static final int MAX_NUM_BYTES = 16;
+  public static final int MAX_NUM_BYTES = 16; // 每个维度最多16byte
 
   /** Maximum number of dimensions */
   public static final int MAX_DIMENSIONS = BKDConfig.MAX_DIMS;
@@ -222,11 +222,11 @@ public abstract class PointValues {
   /** Used by {@link #intersect} to check how each recursive cell corresponds to the query. */
   public enum Relation {
     /** Return this if the cell is fully contained by the query */
-    CELL_INSIDE_QUERY,
+    CELL_INSIDE_QUERY, // 查询在数据范围之内
     /** Return this if the cell and query do not overlap */
-    CELL_OUTSIDE_QUERY,
+    CELL_OUTSIDE_QUERY, // 查询不在数据范围之内
     /** Return this if the cell partially overlaps the query */
-    CELL_CROSSES_QUERY
+    CELL_CROSSES_QUERY // 查询与数据范围较叉
   };
 
   /** Create a new {@link PointTree} to navigate the index */
@@ -252,7 +252,7 @@ public abstract class PointValues {
      * Move to the next sibling node and return {@code true} upon success. Returns {@code false} if
      * the current node has no more siblings.
      */
-    boolean moveToSibling() throws IOException;
+    boolean moveToSibling() throws IOException;// 移动到兄弟节点
 
     /**
      * Move to the parent node and return {@code true} upon success. Returns {@code false} for the
@@ -261,14 +261,14 @@ public abstract class PointValues {
     boolean moveToParent() throws IOException;
 
     /** Return the minimum packed value of the current node. */
-    byte[] getMinPackedValue();
+    byte[] getMinPackedValue();// 存储的这个point node的最小值
 
     /** Return the maximum packed value of the current node. */
     byte[] getMaxPackedValue();
 
     /** Return the number of points below the current node. */
     long size();
-
+// visitDocIDs和visitDocValues的区别：visitDocValues会比较value确定是否匹配；而visitDocIDs一定是匹配的
     /** Visit all the docs below the current node. */
     void visitDocIDs(IntersectVisitor visitor) throws IOException;
 
@@ -281,7 +281,7 @@ public abstract class PointValues {
    *
    * @lucene.experimental
    */
-  public interface IntersectVisitor {
+  public interface IntersectVisitor { // 使用该实例来指导遍历
     /**
      * Called for all documents in a leaf cell that's fully contained by the query. The consumer
      * should blindly accept the docID.
@@ -317,18 +317,18 @@ public abstract class PointValues {
      * scrutinize the packedValue to decide whether to accept it. In the 1D case, values are visited
      * in increasing order, and in the case of ties, in increasing docID order.
      */
-    void visit(int docID, byte[] packedValue) throws IOException;
+    void visit(int docID, byte[] packedValue) throws IOException;//会跑到ExitableDirectoryReader$ExitableIntersectVisitor。// 边界节点会进来。
 
     /**
      * Similar to {@link IntersectVisitor#visit(int, byte[])} but in this case the packedValue can
      * have more than one docID associated to it. The provided iterator should not escape the scope
      * of this method so that implementations of PointValues are free to reuse it,
      */
-    default void visit(DocIdSetIterator iterator, byte[] packedValue) throws IOException {
+    default void visit(DocIdSetIterator iterator, byte[] packedValue) throws IOException {// 遍历每个数据，明显有多余的计算
       int docID;
-      while ((docID = iterator.nextDoc()) != DocIdSetIterator.NO_MORE_DOCS) {
-        visit(docID, packedValue);
-      }
+      while ((docID = iterator.nextDoc()) != DocIdSetIterator.NO_MORE_DOCS) { // 这里明显有多余的比较工作在里面
+        visit(docID, packedValue); // 会跑到ExitableDirectoryReader$ExitableIntersectVisitor
+      } // 检查是否匹配，对于匹配的docId会暂存起来
     }
 
     /**
@@ -350,7 +350,7 @@ public abstract class PointValues {
     intersect(visitor, pointTree);
     assert pointTree.moveToParent() == false;
   }
-
+  // 真正对比每条数据，判断是否是在范围内的
   private static void intersect(IntersectVisitor visitor, PointTree pointTree) throws IOException {
     while (true) {
       Relation compare =
@@ -362,7 +362,7 @@ public abstract class PointValues {
       } else if (compare == Relation.CELL_CROSSES_QUERY) {
         // The cell crosses the shape boundary, or the cell fully contains the query, so we fall
         // through and do full filtering:
-        if (pointTree.moveToChild()) {
+        if (pointTree.moveToChild()) {// 一直往子节点跑
           continue;
         }
         // TODO: we can assert that the first value here in fact matches what the pointTree
@@ -370,8 +370,8 @@ public abstract class PointValues {
         // Leaf node; scan and filter all points in this block:
         pointTree.visitDocValues(visitor);
       }
-      while (pointTree.moveToSibling() == false) {
-        if (pointTree.moveToParent() == false) {
+      while (pointTree.moveToSibling() == false) {// 不能移动到兄弟节点
+        if (pointTree.moveToParent() == false) {// 也不能移动到父亲节点。若能移动到父亲节点，那么再次进入兄弟节点，再次大循环
           return;
         }
       }
@@ -445,7 +445,7 @@ public abstract class PointValues {
    * #intersect(IntersectVisitor)}.
    *
    * @see DocIdSetIterator#cost
-   */
+   *///会去遍历bkd索引，预计匹配的分片树：在bkd数中若叶子节点有一个满足，那么就认为预估节点为512/2个数据符合要求。
   public final long estimateDocCount(IntersectVisitor visitor) {
     long estimatedPointCount = estimatePointCount(visitor);
     int docCount = getDocCount();
@@ -453,7 +453,7 @@ public abstract class PointValues {
     if (estimatedPointCount >= size) {
       // math all docs
       return docCount;
-    } else if (size == docCount || estimatedPointCount == 0L) {
+    } else if (size == docCount || estimatedPointCount == 0L) { // 一般都跑到这里了
       // if the point count estimate is 0 or we have only single values
       // return this estimate
       return estimatedPointCount;
@@ -490,8 +490,8 @@ public abstract class PointValues {
   public abstract int getBytesPerDimension() throws IOException;
 
   /** Returns the total number of indexed points across all documents. */
-  public abstract long size();
+  public abstract long size(); // 多少个point，可能一个文档有两个point
 
   /** Returns the total number of documents that have indexed at least one point. */
-  public abstract int getDocCount();
+  public abstract int getDocCount(); // 返回至少有一个point的文档个数
 }

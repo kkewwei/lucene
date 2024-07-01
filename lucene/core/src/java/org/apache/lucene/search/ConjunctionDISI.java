@@ -33,7 +33,7 @@ import org.apache.lucene.util.CollectionUtil;
  *
  * @lucene.internal
  */
-final class ConjunctionDISI extends FilterDocIdSetIterator {
+final class ConjunctionDISI extends FilterDocIdSetIterator {// 要全部匹配
 
   /**
    * Adds the scorer, possibly splitting up into two phases or collapsing if it is another
@@ -72,7 +72,7 @@ final class ConjunctionDISI extends FilterDocIdSetIterator {
       allIterators.add(conjunction.lead);
       Collections.addAll(allIterators, conjunction.bitSetIterators);
     } else {
-      allIterators.add(disi);
+      allIterators.add(disi);// 可以是SlowImpactsEnum
     }
   }
 
@@ -90,9 +90,9 @@ final class ConjunctionDISI extends FilterDocIdSetIterator {
     }
   }
 
-  static DocIdSetIterator createConjunction(
+  static DocIdSetIterator createConjunction(// 必须全部满足
       List<DocIdSetIterator> allIterators, List<TwoPhaseIterator> twoPhaseIterators) {
-
+// 是不是都读取到这个词上了
     // check that all sub-iterators are on the same doc ID
     int curDoc =
         allIterators.size() > 0
@@ -111,14 +111,14 @@ final class ConjunctionDISI extends FilterDocIdSetIterator {
       }
     }
     List<BitSetIterator> bitSetIterators = new ArrayList<>();
-    List<DocIdSetIterator> iterators = new ArrayList<>();
+    List<DocIdSetIterator> iterators = new ArrayList<>();// 拿cost最小的那个DocIdSetIterator
     for (DocIdSetIterator iterator : allIterators) {
       if (iterator instanceof BitSetIterator bitSetIterator && bitSetIterator.cost() > minCost) {
         // we put all bitset iterators into bitSetIterators
         // except if they have the minimum cost, since we need
         // them to lead the iteration in that case
         bitSetIterators.add(bitSetIterator);
-      } else {
+      } else {//是领头羊
         iterators.add(iterator);
       }
     }
@@ -150,7 +150,7 @@ final class ConjunctionDISI extends FilterDocIdSetIterator {
         "Sub-iterators of ConjunctionDISI are not on the same document!");
   }
 
-  final DocIdSetIterator lead1, lead2;
+  final DocIdSetIterator lead1, lead2; // 多个term倒排索引时，根据docID统计cost最小的前1，前2， 以及others
   final DocIdSetIterator[] others;
 
   private ConjunctionDISI(List<? extends DocIdSetIterator> iterators) {
@@ -170,14 +170,14 @@ final class ConjunctionDISI extends FilterDocIdSetIterator {
       // find agreement between the two iterators with the lower costs
       // we special case them because they do not need the
       // 'other.docID() < doc' check that the 'others' iterators need
-      final int next2 = lead2.advance(doc);
+      final int next2 = lead2.advance(doc); // 从第二cost中获取>=doc的文档id
       if (next2 != doc) {
-        doc = lead1.advance(next2);
+        doc = lead1.advance(next2);// 再找下一个
         if (next2 != doc) {
           continue;
         }
       }
-
+      // 直到lead1和lead2 都找到相同的文档
       // then find agreement with other iterators
       for (DocIdSetIterator other : others) {
         // other.doc may already be equal to doc if we "continued advanceHead"
@@ -194,7 +194,7 @@ final class ConjunctionDISI extends FilterDocIdSetIterator {
       }
 
       // success - all iterators are on the same doc
-      return doc;
+      return doc;// 所有term都有的docId
     }
   }
 
@@ -223,7 +223,7 @@ final class ConjunctionDISI extends FilterDocIdSetIterator {
   }
 
   /** Conjunction between a {@link DocIdSetIterator} and one or more {@link BitSetIterator}s. */
-  private static class BitSetConjunctionDISI extends FilterDocIdSetIterator {
+  private static class BitSetConjunctionDISI extends FilterDocIdSetIterator {// 领头羊+others
 
     private final DocIdSetIterator lead;
     private final BitSetIterator[] bitSetIterators;
@@ -307,7 +307,7 @@ final class ConjunctionDISI extends FilterDocIdSetIterator {
 
       CollectionUtil.timSort(
           twoPhaseIterators, (o1, o2) -> Float.compare(o1.matchCost(), o2.matchCost()));
-
+      // 两阶段matchCost进行了排序
       this.twoPhaseIterators = twoPhaseIterators.toArray(TwoPhaseIterator[]::new);
 
       // Compute the matchCost as the total matchCost of the sub iterators.

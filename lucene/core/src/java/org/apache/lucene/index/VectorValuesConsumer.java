@@ -51,7 +51,7 @@ class VectorValuesConsumer {
 
   private void initKnnVectorsWriter(String fieldName) throws IOException {
     if (writer == null) {
-      KnnVectorsFormat fmt = codec.knnVectorsFormat();
+      KnnVectorsFormat fmt = codec.knnVectorsFormat();/// 默认 Lucene99HnswVectorsFormat
       if (fmt == null) {
         throw new IllegalStateException(
             "field=\""

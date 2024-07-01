@@ -27,13 +27,13 @@ import org.apache.lucene.index.TermState;
  */
 public class BlockTermState extends OrdTermState {
   /** how many docs have this term */
-  public int docFreq;
+  public int docFreq;// 这个term在多少个文件中存在
 
   /** total number of occurrences of this term */
-  public long totalTermFreq;
+  public long totalTermFreq; // 该词在所有文档中出现的总次数， 若keyword字段，不保存词频，则为-1
 
   /** the term's ord in the current block */
-  public int termBlockOrd;
+  public int termBlockOrd; // 当前block的总个数
 
   /** fp into the terms dict primary file (_X.tim) that holds this term */
   // TODO: update BTR to nuke this

@@ -105,10 +105,10 @@ public final class IntPoint extends Field {
     if (point.length == 0) {
       throw new IllegalArgumentException("point must not be 0 dimensions");
     }
-    byte[] packed = new byte[point.length * Integer.BYTES];
+    byte[] packed = new byte[point.length * Integer.BYTES];//一个int需要4位
 
-    for (int dim = 0; dim < point.length; dim++) {
-      encodeDimension(point[dim], packed, dim * Integer.BYTES);
+    for (int dim = 0; dim < point.length; dim++) { // 几位数据
+      encodeDimension(point[dim], packed, dim * Integer.BYTES);// 把int转变为byte，放入packed中
     }
 
     return new BytesRef(packed);
@@ -149,7 +149,7 @@ public final class IntPoint extends Field {
 
   /** Encode single integer dimension */
   public static void encodeDimension(int value, byte[] dest, int offset) {
-    NumericUtils.intToSortableBytes(value, dest, offset);
+    NumericUtils.intToSortableBytes(value, dest, offset);// 把int转变为byte[]
   }
 
   /** Decode single integer dimension */
@@ -234,7 +234,7 @@ public final class IntPoint extends Field {
 
     // Don't unexpectedly change the user's incoming values array:
     int[] sortedValues = values.clone();
-    Arrays.sort(sortedValues);
+    Arrays.sort(sortedValues); // 这里会对values进行排序
 
     final BytesRef encoded = new BytesRef(new byte[Integer.BYTES]);
 

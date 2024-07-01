@@ -315,7 +315,7 @@ public class DirectIODirectory extends FilterDirectory {
      */
     public DirectIOIndexInput(Path path, int blockSize, int bufferSize) throws IOException {
       super("DirectIOIndexInput(path=\"" + path + "\")");
-      this.channel = FileChannel.open(path, StandardOpenOption.READ, getDirectOpenOption());
+      this.channel = FileChannel.open(path, StandardOpenOption.READ, getDirectOpenOption());// 传统方式打开
       this.blockSize = blockSize;
       this.buffer = allocateBuffer(bufferSize, blockSize);
       this.isOpen = true;

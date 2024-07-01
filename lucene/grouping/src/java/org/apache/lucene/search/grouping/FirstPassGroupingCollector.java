@@ -42,16 +42,16 @@ import org.apache.lucene.search.SortField;
  */
 public class FirstPassGroupingCollector<T> extends SimpleCollector {
 
-  private final GroupSelector<T> groupSelector;
+  private final GroupSelector<T> groupSelector;// Numeric, keyword
   private final boolean ignoreDocsWithoutGroupField;
 
-  private final FieldComparator<?>[] comparators;
+  private final FieldComparator<?>[] comparators;// 结果都会暂时保存在这里
   private final LeafFieldComparator[] leafComparators;
   private final int[] reversed;
-  private final int topNGroups;
+  private final int topNGroups;// 也就是numHits，默认为10
   private final boolean needsScores;
   private final HashMap<T, CollectedSearchGroup<T>> groupMap;
-  private final int compIDXEnd;
+  private final int compIDXEnd; // num(sort)-1
 
   // Set once we reach topNGroups unique groups:
   /**
@@ -108,7 +108,7 @@ public class FirstPassGroupingCollector<T> extends SimpleCollector {
     leafComparators = new LeafFieldComparator[sortFields.length];
     compIDXEnd = comparators.length - 1;
     reversed = new int[sortFields.length];
-    for (int i = 0; i < sortFields.length; i++) {
+    for (int i = 0; i < sortFields.length; i++) {// 遍历每个最外层的sort
       final SortField sortField = sortFields[i];
 
       // use topNGroups + 1 so we have a spare slot to use for comparing (tracked by
@@ -118,12 +118,12 @@ public class FirstPassGroupingCollector<T> extends SimpleCollector {
     }
 
     spareSlot = topNGroups;
-    groupMap = HashMap.newHashMap(topNGroups);
+    groupMap = HashMap.newHashMap(topNGroups);// 最多放多少个文档
   }
 
   @Override
   public ScoreMode scoreMode() {
-    return needsScores ? ScoreMode.COMPLETE : ScoreMode.COMPLETE_NO_SCORES;
+    return needsScores ? ScoreMode.COMPLETE : ScoreMode.COMPLETE_NO_SCORES;// 看起来都需要全部扫描
   }
 
   /**
@@ -153,16 +153,16 @@ public class FirstPassGroupingCollector<T> extends SimpleCollector {
     final Collection<SearchGroup<T>> result = new ArrayList<>(orderedGroups.size() - groupOffset);
     int upto = 0;
     final int sortFieldCount = comparators.length;
-    for (CollectedSearchGroup<T> group : orderedGroups) {
+    for(CollectedSearchGroup<T> group : orderedGroups) {// 遍历每个根据sort排序的docId
       if (upto++ < groupOffset) {
         continue;
       }
       // System.out.println("  group=" + (group.groupValue == null ? "null" :
       // group.groupValue.toString()));
       SearchGroup<T> searchGroup = new SearchGroup<>();
-      searchGroup.groupValue = group.groupValue;
+      searchGroup.groupValue = group.groupValue;// 排序值
       searchGroup.sortValues = new Object[sortFieldCount];
-      for (int sortFieldIDX = 0; sortFieldIDX < sortFieldCount; sortFieldIDX++) {
+      for(int sortFieldIDX=0;sortFieldIDX<sortFieldCount;sortFieldIDX++) {// 遍历每个sort
         searchGroup.sortValues[sortFieldIDX] =
             comparators[sortFieldIDX].value(group.comparatorSlot);
       }
@@ -171,11 +171,11 @@ public class FirstPassGroupingCollector<T> extends SimpleCollector {
     // System.out.println("  return " + result.size() + " groups");
     return result;
   }
-
+  // 每循环一批数据(from-to执行完成算一批)，都要进来
   @Override
   public void setScorer(Scorable scorer) throws IOException {
     groupSelector.setScorer(scorer);
-    for (LeafFieldComparator comparator : leafComparators) {
+    for (LeafFieldComparator comparator : leafComparators) {// 需要sort的字段
       comparator.setScorer(scorer);
     }
   }
@@ -192,14 +192,14 @@ public class FirstPassGroupingCollector<T> extends SimpleCollector {
     // wasted effort as we will most likely be updating an existing group.
     if (orderedGroups != null) {
       for (int compIDX = 0; ; compIDX++) {
-        final int c = reversed[compIDX] * leafComparators[compIDX].compareBottom(doc);
-        if (c < 0) {
+        final int c = reversed[compIDX] * leafComparators[compIDX].compareBottom(doc);// 比较的是sort值
+        if (c < 0) { // 比底部值更不符合
           // Definitely not competitive. So don't even bother to continue
           return false;
         } else if (c > 0) {
           // Definitely competitive.
           break;
-        } else if (compIDX == compIDXEnd) {
+        } else if (compIDX == compIDXEnd) {// 这个排序值相等，也不具备竞争性。文档id也大
           // Here c=0. If we're at the last comparator, this doc is not
           // competitive, since docs are visited in doc Id order, which means
           // this doc cannot compete with any other document in the queue.
@@ -211,23 +211,23 @@ public class FirstPassGroupingCollector<T> extends SimpleCollector {
   }
 
   @Override
-  public void collect(int doc) throws IOException {
+  public void collect(int doc) throws IOException {// 会检查每天数据是否符合结果
 
-    if (isCompetitive(doc) == false) {
+    if (isCompetitive(doc) == false) {// 比较的是sort值
       return;
     }
 
-    GroupSelector.State state = groupSelector.advanceTo(doc);
-    T groupValue = groupSelector.currentValue();
+    GroupSelector.State state = groupSelector.advanceTo(doc); // 可以获取这个doc的collapse对应的order
+    T groupValue = groupSelector.currentValue();// 获取这个doc的collapse对应的值，相比temrs比较，效率比较低
 
     // Skip documents without group field if option is enabled
     if (ignoreDocsWithoutGroupField && state == GroupSelector.State.SKIP) {
       return;
     }
 
-    final CollectedSearchGroup<T> group = groupMap.get(groupValue);
+    final CollectedSearchGroup<T> group = groupMap.get(groupValue);// 以group
 
-    if (group == null) {
+    if (group == null) {// 第一次出现这个value
       collectNewGroup(doc);
     } else {
       collectExistingGroup(doc, group);
@@ -239,23 +239,23 @@ public class FirstPassGroupingCollector<T> extends SimpleCollector {
     // it before but it fell out of the top N and is now
     // coming back
 
-    if (isGroupMapFull() == false) {
+    if (isGroupMapFull() == false) {// 仅仅保留根据sort排序后的10个
 
       // Still in startup transient: we have not
       // seen enough unique groups to start pruning them;
       // just keep collecting them
 
       // Add a new CollectedSearchGroup:
-      CollectedSearchGroup<T> sg = new CollectedSearchGroup<>();
+      CollectedSearchGroup<T> sg = new CollectedSearchGroup<>();// 产生一个新的CollectedSearchGroup
       sg.groupValue = groupSelector.copyValue();
-      sg.comparatorSlot = groupMap.size();
-      sg.topDoc = docBase + doc;
-      for (LeafFieldComparator fc : leafComparators) {
-        fc.copy(sg.comparatorSlot, doc);
+      sg.comparatorSlot = groupMap.size();//给个编号。（若大于topN后，comparatorSlot=topN）
+      sg.topDoc = docBase + doc;// 也保存了文档编号
+      for (LeafFieldComparator fc : leafComparators) {// 会读取每个sort对应的value值，保存起来
+        fc.copy(sg.comparatorSlot, doc);// 哪个巢放这个doc
       }
       groupMap.put(sg.groupValue, sg);
 
-      if (isGroupMapFull() == true) {
+      if (isGroupMapFull() == true) {// 若满了
         // End of startup transient: we now have max
         // number of groups; from here on we will drop
         // bottom group when we insert new one:
@@ -269,8 +269,8 @@ public class FirstPassGroupingCollector<T> extends SimpleCollector {
     } else {
       // We already tested that the document is competitive, so replace
       // the bottom group with this new group.
-
-      final CollectedSearchGroup<T> bottomGroup = orderedGroups.pollLast();
+      // 开始超过了我们设置的topN个数。isCompetitive()里面已经和最差的，可以直接将最差的去掉
+      final CollectedSearchGroup<T> bottomGroup = orderedGroups.pollLast();// 退出最差的那个
       assert orderedGroups.size() == topNGroups - 1;
 
       groupMap.remove(bottomGroup.groupValue);
@@ -297,15 +297,15 @@ public class FirstPassGroupingCollector<T> extends SimpleCollector {
   private void collectExistingGroup(final int doc, final CollectedSearchGroup<T> group)
       throws IOException {
     // Update existing group:
-    for (int compIDX = 0; ; compIDX++) {
-      leafComparators[compIDX].copy(spareSlot, doc);
+    for (int compIDX = 0;; compIDX++) { // 更新下这个group
+      leafComparators[compIDX].copy(spareSlot, doc);// 对doc进行打分，打分放在scores[spareSlot]里面
 
       final int c =
           reversed[compIDX] * comparators[compIDX].compare(group.comparatorSlot, spareSlot);
       if (c < 0) {
         // Definitely not competitive.
         return;
-      } else if (c > 0) {
+      } else if (c > 0) {// 得分更高
         // Definitely competitive; set remaining comparators:
         for (int compIDX2 = compIDX + 1; compIDX2 < comparators.length; compIDX2++) {
           leafComparators[compIDX2].copy(spareSlot, doc);
@@ -336,12 +336,12 @@ public class FirstPassGroupingCollector<T> extends SimpleCollector {
       prevLast = null;
     }
 
-    group.topDoc = docBase + doc;
+    group.topDoc = docBase + doc;// 主要是更新docId
 
     // Swap slots
     final int tmp = spareSlot;
     spareSlot = group.comparatorSlot;
-    group.comparatorSlot = tmp;
+    group.comparatorSlot = tmp;// 和compartorSlot
 
     // Re-add only if we removed it
     if (orderedGroups != null) {
@@ -354,7 +354,7 @@ public class FirstPassGroupingCollector<T> extends SimpleCollector {
       // bottom:
       if (group == newLast || prevLast != newLast) {
         for (LeafFieldComparator fc : leafComparators) {
-          fc.setBottom(newLast.comparatorSlot);
+          fc.setBottom(newLast.comparatorSlot);// 更新下bottom
         }
       }
     }
@@ -367,28 +367,28 @@ public class FirstPassGroupingCollector<T> extends SimpleCollector {
           public int compare(CollectedSearchGroup<?> o1, CollectedSearchGroup<?> o2) {
             for (int compIDX = 0; ; compIDX++) {
               FieldComparator<?> fc = comparators[compIDX];
-              final int c = reversed[compIDX] * fc.compare(o1.comparatorSlot, o2.comparatorSlot);
+              final int c = reversed[compIDX] * fc.compare(o1.comparatorSlot, o2.comparatorSlot);// 输入的编号，先输入的编号小，在前面
               if (c != 0) {
                 return c;
-              } else if (compIDX == compIDXEnd) {
+              } else if (compIDX == compIDXEnd) {// 已经是最后一个sort了
                 return o1.topDoc - o2.topDoc;
               }
             }
           }
         };
 
-    orderedGroups = new TreeSet<>(comparator);
-    orderedGroups.addAll(groupMap.values());
+    orderedGroups = new TreeSet<>(comparator);// 开始设置排序，后面的都要排序了
+    orderedGroups.addAll(groupMap.values());//按照文档Id排序
     assert orderedGroups.size() > 0;
   }
-
+  // 每次换个segment，首先换下这个leafComparators
   @Override
   protected void doSetNextReader(LeafReaderContext readerContext) throws IOException {
     docBase = readerContext.docBase;
-    for (int i = 0; i < comparators.length; i++) {
-      leafComparators[i] = comparators[i].getLeafComparator(readerContext);
+    for (int i=0; i<comparators.length; i++) {// 确定每个Sorted
+      leafComparators[i] = comparators[i].getLeafComparator(readerContext);// 将跑到SortedNumericSortField.getComparator()里面的Long定义处
     }
-    groupSelector.setNextReader(readerContext);
+    groupSelector.setNextReader(readerContext);// 修改需要collapse的那个字段
   }
 
   /**

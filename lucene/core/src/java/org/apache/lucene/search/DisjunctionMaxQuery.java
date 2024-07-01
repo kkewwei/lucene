@@ -41,14 +41,14 @@ import org.apache.lucene.index.LeafReaderContext;
  * results that include this term in only the best of those multiple fields, without confusing this
  * with the better case of two different terms in the multiple fields.
  */
-public final class DisjunctionMaxQuery extends Query implements Iterable<Query> {
+public final class DisjunctionMaxQuery extends Query implements Iterable<Query> {// 比如用在多个字段查询中，score取得分最高的那个
 
   /* The subqueries */
   private final Multiset<Query> disjuncts = new Multiset<>();
   private final List<Query> orderedQueries; // used for toString()
 
   /* Multiple of the non-max disjunct scores added into our final score.  Non-zero values support tie-breaking. */
-  private final float tieBreakerMultiplier;
+  private final float tieBreakerMultiplier;//默认为0，score取得分最高的那个
 
   /**
    * Creates a new DisjunctionMaxQuery
@@ -98,7 +98,7 @@ public final class DisjunctionMaxQuery extends Query implements Iterable<Query> 
    * <p>NOTE: this API and implementation is subject to change suddenly in the next release.
    */
   protected class DisjunctionMaxWeight extends Weight {
-
+    //Weight可以是TermWeight
     /** The Weights for our subqueries, in 1-1 correspondence with disjuncts */
     protected final ArrayList<Weight> weights =
         new ArrayList<>(); // The Weight's for our subqueries, in 1-1 correspondence with disjuncts
@@ -134,7 +134,7 @@ public final class DisjunctionMaxQuery extends Query implements Iterable<Query> 
     public ScorerSupplier scorerSupplier(LeafReaderContext context) throws IOException {
       List<ScorerSupplier> scorerSuppliers = new ArrayList<>();
       for (Weight w : weights) {
-        ScorerSupplier ss = w.scorerSupplier(context);
+        ScorerSupplier ss = w.scorerSupplier(context);// 搬移返回null
         if (ss != null) {
           scorerSuppliers.add(ss);
         }

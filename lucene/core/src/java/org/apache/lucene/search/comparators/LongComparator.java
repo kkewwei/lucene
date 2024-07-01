@@ -29,8 +29,8 @@ import org.apache.lucene.util.NumericUtils;
  */
 public class LongComparator extends NumericComparator<Long> {
   private final long[] values;
-  protected long topValue;
-  protected long bottom;
+  protected long topValue; // search_after存放的值
+  protected long bottom;//这个排序字段当前底部值
 
   public LongComparator(
       int numHits, String field, Long missingValue, boolean reverse, Pruning pruning) {
@@ -70,14 +70,14 @@ public class LongComparator extends NumericComparator<Long> {
   }
 
   /** Leaf comparator for {@link LongComparator} that provides skipping functionality */
-  public class LongLeafComparator extends NumericLeafComparator {
+  public class LongLeafComparator extends NumericLeafComparator {// 每个segment独享一个
 
     public LongLeafComparator(LeafReaderContext context) throws IOException {
       super(context);
     }
 
     private long getValueForDoc(int doc) throws IOException {
-      if (docValues.advanceExact(doc)) {
+      if (docValues.advanceExact(doc)) {// 获取这个值
         return docValues.longValue();
       } else {
         return missingValue;
@@ -97,13 +97,13 @@ public class LongComparator extends NumericComparator<Long> {
 
     @Override
     public int compareTop(int doc) throws IOException {
-      return Long.compare(topValue, getValueForDoc(doc));
+      return Long.compare(topValue, getValueForDoc(doc));// 和topValue比较
     }
 
     @Override
     public void copy(int slot, int doc) throws IOException {
-      values[slot] = getValueForDoc(doc);
-      super.copy(slot, doc);
+      values[slot] = getValueForDoc(doc);// 读取对应sort字段的value值
+      super.copy(slot, doc);// 更新下最新文档ID
     }
 
     @Override

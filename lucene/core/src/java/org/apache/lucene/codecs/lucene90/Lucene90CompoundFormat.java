@@ -68,10 +68,10 @@ import org.apache.lucene.util.PriorityQueue;
 public final class Lucene90CompoundFormat extends CompoundFormat {
 
   /** Extension of compound file */
-  static final String DATA_EXTENSION = "cfs";
+  static final String DATA_EXTENSION = "cfs"; // 存放具体数据的复合文件
 
   /** Extension of compound file entries */
-  static final String ENTRIES_EXTENSION = "cfe";
+  static final String ENTRIES_EXTENSION = "cfe";// 存放复合文件中每个文件名、长度这样的元数据
 
   static final String DATA_CODEC = "Lucene90CompoundData";
   static final String ENTRY_CODEC = "Lucene90CompoundEntries";
@@ -85,14 +85,14 @@ public final class Lucene90CompoundFormat extends CompoundFormat {
   public Lucene90CompoundFormat() {}
 
   @Override
-  public CompoundDirectory getCompoundReader(Directory dir, SegmentInfo si) throws IOException {
+  public CompoundDirectory getCompoundReader(Directory dir, SegmentInfo si) throws IOException {// 仅仅是从当前segment的复合文件的cfe中获取每个文件在数据文件cfs中位置信息。若是集群元数据读取，使用nio。
     return new Lucene90CompoundReader(dir, si);
   }
-
+  //建立_n.cfs和_n.cfe文件，并写入必要的前缀。然后从每个索引文件中读取数据，组装成复合文件
   @Override
   public void write(Directory dir, SegmentInfo si, IOContext context) throws IOException {
-    String dataFile = IndexFileNames.segmentFileName(si.name, "", DATA_EXTENSION);
-    String entriesFile = IndexFileNames.segmentFileName(si.name, "", ENTRIES_EXTENSION);
+    String dataFile = IndexFileNames.segmentFileName(si.name, "", DATA_EXTENSION);//产生_n.cfs文件名
+    String entriesFile = IndexFileNames.segmentFileName(si.name, "", ENTRIES_EXTENSION);//产生_n.cfe文件名
 
     try (IndexOutput data = dir.createOutput(dataFile, context);
         IndexOutput entries = dir.createOutput(entriesFile, context)) {
@@ -123,26 +123,26 @@ public final class Lucene90CompoundFormat extends CompoundFormat {
       IndexOutput entries, IndexOutput data, Directory dir, SegmentInfo si) throws IOException {
     // write number of files
     int numFiles = si.files().size();
-    entries.writeVInt(numFiles);
+    entries.writeVInt(numFiles); // 向cfe中写入文件个数
     // first put files in ascending size order so small files fit more likely into one page
     SizedFileQueue pq = new SizedFileQueue(numFiles);
-    for (String filename : si.files()) {
+    for (String filename : si.files()) { // 会遍历15个文件：fdx/fdt/dvd/dvm/pos/doc/tim/tip/dim/dii/nvm/nvd/fnm
       pq.add(new SizedFile(filename, dir.fileLength(filename)));
     }
     while (pq.size() > 0) {
       SizedFile sizedFile = pq.pop();
       String file = sizedFile.name;
       // align file start offset
-      long startOffset = data.alignFilePointer(ALIGNMENT_BYTES);
+      long startOffset = data.alignFilePointer(ALIGNMENT_BYTES);//  部分是mma打开，部分是传统方式打开，mmap打开是否还有必要，打开后，try结束后，调用了unmap0关闭打开的文件
       // write bytes for file
-      try (ChecksumIndexInput in = dir.openChecksumInput(file)) {
+      try (ChecksumIndexInput in = dir.openChecksumInput(file)) {// 这里文件打开，使用的mmap打开产生的15个文件
 
         // just copies the index header, verifying that its id matches what we expect
         CodecUtil.verifyAndCopyIndexHeader(in, data, si.getId());
 
         // copy all bytes except the footer
-        long numBytesToCopy = in.length() - CodecUtil.footerLength() - in.getFilePointer();
-        data.copyBytes(in, numBytesToCopy);
+        long numBytesToCopy = in.length() - CodecUtil.footerLength() - in.getFilePointer();// 索引文件正式的数据部分，一次读取16kb
+        data.copyBytes(in, numBytesToCopy); // 会去检查是merge中断检查， data是cfs文件。这里会去限速
 
         // verify footer (checksum) matches for the incoming file we are copying
         long checksum = CodecUtil.checkFooter(in);
@@ -154,13 +154,13 @@ public final class Lucene90CompoundFormat extends CompoundFormat {
         CodecUtil.writeBEInt(data, 0);
         CodecUtil.writeBELong(data, checksum);
       }
-      long endOffset = data.getFilePointer();
+      long endOffset = data.getFilePointer();// try关闭时会调用unmap0()进行关闭，会跑到ByteBufferIndexInput.close()中
 
-      long length = endOffset - startOffset;
+      long length = endOffset - startOffset;// 整个文件的长度
 
       // write entry for file
       entries.writeString(IndexFileNames.stripSegmentName(file));
-      entries.writeLong(startOffset);
+      entries.writeLong(startOffset); // 分别向cfs和cfe文件写入footer
       entries.writeLong(length);
     }
   }

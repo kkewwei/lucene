@@ -112,7 +112,7 @@ public class FacetsConfig {
    */
   public static final class DimConfig {
     /** True if this dimension is hierarchical. */
-    public boolean hierarchical;
+    public boolean hierarchical;// 是否是层级结构
 
     /** True if this dimension is multi-valued. */
     public boolean multiValued;
@@ -127,7 +127,7 @@ public class FacetsConfig {
     public DrillDownTermsIndexing drillDownTermsIndexing = DrillDownTermsIndexing.ALL;
 
     /** Actual field where this dimension's facet labels should be indexed */
-    public String indexFieldName = DEFAULT_INDEX_FIELD_NAME;
+    public String indexFieldName = DEFAULT_INDEX_FIELD_NAME;// 默认index_name:$facets
 
     /** Default constructor. */
     public DimConfig() {}
@@ -258,7 +258,7 @@ public class FacetsConfig {
    */
   public Document build(TaxonomyWriter taxoWriter, Document doc) throws IOException {
     // Find all FacetFields, collated by the actual field:
-    Map<String, List<FacetField>> byField = new HashMap<>();
+    Map<String, List<FacetField>> byField = new HashMap<>();// 分别存放三种不同的字段类型
 
     // ... and also all SortedSetDocValuesFacetFields:
     Map<String, List<SortedSetDocValuesFacetField>> dvByField = new HashMap<>();
@@ -266,7 +266,7 @@ public class FacetsConfig {
     // ... and also all AssociationFacetFields
     Map<String, List<AssociationFacetField>> assocByField = new HashMap<>();
 
-    Set<String> seenDims = new HashSet<>();
+    Set<String> seenDims = new HashSet<>();// 第一次见
 
     for (IndexableField field : doc) {
       if (field.fieldType() == FacetField.TYPE) {
@@ -420,7 +420,7 @@ public class FacetsConfig {
       Document doc, String indexFieldName, DimConfig dimConfig, FacetLabel facetLabel) {
     if (dimConfig.drillDownTermsIndexing != DrillDownTermsIndexing.NONE) {
       // index full-path drill down term
-      doc.add(
+      doc.add(// 添加一个
           new StringField(
               indexFieldName,
               pathToString(facetLabel.components, facetLabel.length),
@@ -446,7 +446,7 @@ public class FacetsConfig {
         case ALL:
           for (int i = 1; i < facetLabel.length; i++) {
             doc.add(
-                new StringField(
+                new StringField(  // 不会取最后一位
                     indexFieldName, pathToString(facetLabel.components, i), Field.Store.NO));
           }
           break;
@@ -464,7 +464,7 @@ public class FacetsConfig {
 
     for (Map.Entry<String, List<SortedSetDocValuesFacetField>> ent : byField.entrySet()) {
 
-      String indexFieldName = ent.getKey();
+      String indexFieldName = ent.getKey();// 默认是$facets
 
       for (SortedSetDocValuesFacetField facetField : ent.getValue()) {
         FacetLabel facetLabel = new FacetLabel(facetField.dim, facetField.path);

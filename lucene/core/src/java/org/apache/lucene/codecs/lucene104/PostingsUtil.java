@@ -57,7 +57,7 @@ final class PostingsUtil {
       DataOutput docOut, int[] docBuffer, int[] freqBuffer, int num, boolean writeFreqs)
       throws IOException {
     if (writeFreqs) {
-      for (int i = 0; i < num; i++) {
+      for (int i = 0; i < num; i++) {// 具体文档
         docBuffer[i] = (docBuffer[i] << 1) | (freqBuffer[i] == 1 ? 1 : 0);
       }
     }

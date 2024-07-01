@@ -18,7 +18,11 @@
 pluginManagement {
     repositories {
         mavenCentral()
+        jcenter()
+        maven { url "https://maven.byted.org/repository/public" }
+        maven { url "https://maven.byted.org/repository/android_public" }
         gradlePluginPortal()
+        maven { url "https://mvnrepository.com/" }
     }
 
     includeBuild("build-tools/build-infra")

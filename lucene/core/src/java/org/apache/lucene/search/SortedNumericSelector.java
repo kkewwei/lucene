@@ -34,9 +34,9 @@ public class SortedNumericSelector {
   /** Type of selection to perform. */
   public enum Type {
     /** Selects the minimum value in the set */
-    MIN,
+    MIN, // 升序，选择这个
     /** Selects the maximum value in the set */
-    MAX,
+    MAX,// 降序选择这个
     // TODO: we could do MEDIAN in constant time (at most 2 lookups)
   }
 
@@ -168,7 +168,7 @@ public class SortedNumericSelector {
 
     private void setValue() throws IOException {
       int count = in.docValueCount();
-      for (int i = 0; i < count; i++) {
+      for (int i = 0; i < count; i++) {// 读取最后一个
         value = in.nextValue();
       }
     }
@@ -194,7 +194,7 @@ public class SortedNumericSelector {
     @Override
     public boolean advanceExact(int target) throws IOException {
       if (in.advanceExact(target)) {
-        setValue();
+        setValue();// 进来会读取最大的value
         return true;
       }
       return false;

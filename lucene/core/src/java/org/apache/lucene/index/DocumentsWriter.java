@@ -38,7 +38,7 @@ import org.apache.lucene.util.IOUtils;
 import org.apache.lucene.util.InfoStream;
 
 /**
- * This class accepts multiple added documents and directly writes segment files.
+ * This class accepts multiple added documents and directly writes segment files. // 作为写复合文件的类，部分文件立马落地，比如stored fields and term vectors，部分文件先存放在缓存，待最终落地
  *
  * <p>Each added document is passed to the indexing chain, which in turn processes the document into
  * the different codec formats. Some formats write bytes to files immediately, e.g. stored fields
@@ -76,23 +76,23 @@ import org.apache.lucene.util.InfoStream;
  * <p>All other exceptions ("non-aborting exceptions") can still partially update the index
  * structures. These updates are consistent, but, they represent only a part of the document seen up
  * until the exception was hit. When this happens, we immediately mark the document as deleted so
- * that the document is always atomically ("all or none") added to the index.
- */
-final class DocumentsWriter implements Closeable, Accountable {
+ * that the document is always atomically ("all or none") added to the index.  //  一个shard，也只有一个DocumentsWriter
+ */// IndexWriter通过调用DocumentWriter的方法，来操作索引。每一个文档传给DocuentWriter中得DocConsumer , DocConsumer是整个搜索的核心，是indexing chain的源头。
+final class DocumentsWriter implements Closeable, Accountable {// 在索引的过程中，DocumentsWriter将词信息(term)存储在CharBlockPool中，将文档号(doc ID)，词频(freq)和位置(prox)信息存储在ByteBlockPool中。
   private final AtomicLong pendingNumDocs;
-
-  private final FlushNotifications flushNotifications;
+  // 定义详见IndexWriter里面
+  private final FlushNotifications flushNotifications;// flush完成后的一些回调时间，包括删除fdt等12个单独的索引文件
 
   private volatile boolean closed;
 
   private final InfoStream infoStream;
 
   private final LiveIndexWriterConfig config;
-
-  private final AtomicInteger numDocsInRAM = new AtomicInteger(0);
+  // 所有的DocumentsWriterPerThread里面包含的文档， 都是在内存中的
+  private final AtomicInteger numDocsInRAM = new AtomicInteger(0); // 这个是还内存中所的、有线程通过拆解文档建立索引结构的文档。直到产生segment之前一直保留。
 
   // TODO: cut over to BytesRefHash in BufferedDeletes
-  volatile DocumentsWriterDeleteQueue deleteQueue;
+  volatile DocumentsWriterDeleteQueue deleteQueue; // 当前实时在用的。一个DocuentsWriter会私下产生一个DocumentsWriterFlushQueue
   private final DocumentsWriterFlushQueue ticketQueue = new DocumentsWriterFlushQueue();
   /*
    * we preserve changes during a full flush since IW might not check out before
@@ -100,10 +100,10 @@ final class DocumentsWriter implements Closeable, Accountable {
    * isCurrent while there are actually changes currently committed. See also
    * #anyChanges() & #flushAllThreads
    */
-  private volatile boolean pendingChangesInCurrentFullFlush;
-
-  final DocumentsWriterPerThreadPool perThreadPool;
-  final DocumentsWriterFlushControl flushControl;
+  private volatile boolean pendingChangesInCurrentFullFlush;//用来保证执行完fullFlush才能使得openIfChange来判断索引是否发生变化
+  // DocumentsWriterPerThread 对象创建了DocConsumer 即IndexChain(整个索引的核心)，同时ThreadState  封装了DocumentsWriterPerThread对象，同时拥有每一个线程需要flush的对象数据，他得每一个成员和方法必须在一个时刻只能一个线程访问，调用者必须自己加锁，解锁。
+  final DocumentsWriterPerThreadPool perThreadPool; // perThreadPool被引用在flushControl中
+  final DocumentsWriterFlushControl flushControl; // DocumentsWriterFlushControl 类来控制flush策略，记录每一个DocumentsWriterPerThread内存消耗的量
 
   DocumentsWriter(
       FlushNotifications flushNotifications,
@@ -124,7 +124,7 @@ final class DocumentsWriter implements Closeable, Accountable {
               final FieldInfos.Builder infos = new FieldInfos.Builder(globalFieldNumberMap);
               return new DocumentsWriterPerThread(
                   indexCreatedVersionMajor,
-                  segmentNameSupplier.get(),
+                  segmentNameSupplier.get(), //  segmentNameSupplier.get()会产生一个新的segment_name，
                   directoryOrig,
                   directory,
                   config,
@@ -134,7 +134,7 @@ final class DocumentsWriter implements Closeable, Accountable {
                   enableTestPoints);
             });
     this.pendingNumDocs = pendingNumDocs;
-    flushControl = new DocumentsWriterFlushControl(this, config);
+    flushControl = new DocumentsWriterFlushControl(this, config); //flushControl包含有perThreadPool
     this.flushNotifications = flushNotifications;
   }
 
@@ -143,7 +143,7 @@ final class DocumentsWriter implements Closeable, Accountable {
   }
 
   long deleteTerms(final Term... terms) throws IOException {
-    return applyDeleteOrUpdate(q -> q.addDelete(terms));
+    return applyDeleteOrUpdate(q -> q.addDelete(terms)); // q = DocumentsWriterDeleteQueue
   }
 
   long updateDocValues(DocValuesUpdate... updates) throws IOException {
@@ -156,16 +156,16 @@ final class DocumentsWriter implements Closeable, Accountable {
     // update / delete
     // otherwise we might lose an update / delete if this happens concurrently to a full flush.
     final DocumentsWriterDeleteQueue deleteQueue = this.deleteQueue;
-    long seqNo = function.applyAsLong(deleteQueue);
+    long seqNo = function.applyAsLong(deleteQueue); // //这里将将跑到deleteQueue.addDelete(),会将此Term删除放入globalQueue中
     flushControl.doOnDelete();
-    if (applyAllDeletes()) {
+    if (applyAllDeletes()) { // 如果占用内存过多，先解析写入磁盘一部分
       seqNo = -seqNo;
     }
     return seqNo;
   }
 
   /** If buffered deletes are using too much heap, resolve them and write disk and return true. */
-  private boolean applyAllDeletes() throws IOException {
+  private boolean applyAllDeletes() throws IOException { // 如果缓存待delete的占用了较多内存，则delete他们
     final DocumentsWriterDeleteQueue deleteQueue = this.deleteQueue;
 
     // Check the applyAllDeletes flag first. This helps exit early most of the time without checking
@@ -184,7 +184,7 @@ final class DocumentsWriter implements Closeable, Accountable {
     }
     return false;
   }
-
+// 清除FlushTickets
   void purgeFlushTickets(boolean forced, IOConsumer<DocumentsWriterFlushQueue.FlushTicket> consumer)
       throws IOException {
     if (forced) {
@@ -346,7 +346,7 @@ final class DocumentsWriter implements Closeable, Accountable {
      * could be a window where all changes are in the ticket queue
      * before they are published to the IW. ie we need to check if the
      * ticket queue has any tickets.
-     */
+     */// 内存有写入数据 || 有删除 || 还有还未lucene flush完成的segment 或则pendingChangesInCurrentFullFlush期间
     boolean anyChanges =
         numDocsInRAM.get() != 0
             || anyDeletions()
@@ -380,28 +380,28 @@ final class DocumentsWriter implements Closeable, Accountable {
     closed = true;
     IOUtils.close(flushControl, perThreadPool);
   }
-
+  // 可能帮忙刷新线程
   private boolean preUpdate() throws IOException {
     ensureOpen();
     boolean hasEvents = false;
-    while (flushControl.anyStalledThreads()
+    while (flushControl.anyStalledThreads()// flush  等待刷新，帮助刷新线程（有线程被内存阻塞了，或者已经有排队刷新的任务了）
         || (config.checkPendingFlushOnUpdate && flushControl.numQueuedFlushes() > 0)) {
       // Help out flushing any queued DWPTs so we can un-stall:
       // Try pickup pending threads here if possible
       // no need to loop over the next pending flushes... doFlush will take care of this
-      hasEvents |= maybeFlush();
-      flushControl.waitIfStalled(); // block if stalled
+      hasEvents |= maybeFlush();// 开始帮忙刷新，文档太少，也要刷新
+      flushControl.waitIfStalled(); // block if stalled    // 如果是阻塞的，那么就wait 1s
     }
     return hasEvents;
   }
-
+  // 若触发flush时，DocumentsWriterPerThread将从空闲队列中取出，flush后，这个DocumentsWriterPerThread就直接丢弃了
   private boolean postUpdate(DocumentsWriterPerThread flushingDWPT, boolean hasEvents)
       throws IOException {
-    hasEvents |= applyAllDeletes();
-    if (flushingDWPT != null) {
-      doFlush(flushingDWPT);
+    hasEvents |= applyAllDeletes();// 如果有太多
+    if (flushingDWPT != null) {// 这里进来是因为设置的全局文档个数或者内存大小引起的刷新
+      doFlush(flushingDWPT);// 需要好好进去看下
       hasEvents = true;
-    } else if (config.checkPendingFlushOnUpdate) {
+    } else if (config.checkPendingFlushOnUpdate) {// 默认为true
       hasEvents |= maybeFlush();
     }
     return hasEvents;
@@ -409,9 +409,9 @@ final class DocumentsWriter implements Closeable, Accountable {
 
   long updateDocuments(
       final Iterable<? extends Iterable<? extends IndexableField>> docs,
-      final DocumentsWriterDeleteQueue.Node<?> delNode)
+      final DocumentsWriterDeleteQueue.Node<?> delNode)// delNode默认为null
       throws IOException {
-    boolean hasEvents = preUpdate();
+    boolean hasEvents = preUpdate();// 注意下，这里面的参数，write线程可以帮忙进行flush
 
     final DocumentsWriterPerThread dwpt = flushControl.obtainAndLock();
     final DocumentsWriterPerThread flushingDWPT;
@@ -422,14 +422,14 @@ final class DocumentsWriter implements Closeable, Accountable {
       // waits for all DWPT to be released:
       ensureOpen();
       try {
-        seqNo =
+        seqNo =// 文档Id,
             dwpt.updateDocuments(docs, delNode, flushNotifications, numDocsInRAM::incrementAndGet);
       } finally {
         if (dwpt.isAborted()) {
           flushControl.doOnAbort(dwpt);
         }
       }
-      flushingDWPT = flushControl.doAfterDocument(dwpt);
+      flushingDWPT = flushControl.doAfterDocument(dwpt);// 若有内存满了
     } finally {
       // If a flush is occurring, we don't want to allow this dwpt to be reused
       // If it is aborted, we shouldn't allow it to be reused
@@ -437,15 +437,15 @@ final class DocumentsWriter implements Closeable, Accountable {
       // reused
       synchronized (flushControl) {
         if (dwpt.isFlushPending() || dwpt.isAborted() || dwpt.isQueueAdvanced()) {
-          dwpt.unlock();
+          dwpt.unlock(); // 若设置为刷新的话，仅仅释放锁（已经从空闲列表中删除了）
         } else {
-          perThreadPool.marksAsFreeAndUnlock(dwpt);
+          perThreadPool.marksAsFreeAndUnlock(dwpt);// 若不用刷新的话，则又会放入公共池子中：perThreadPool。文档还保存在这个DocumentsWriterPerThread里面，存在内存中，并没有被刷走
         }
       }
       assert dwpt.isHeldByCurrentThread() == false : "we didn't release the dwpt even on abort";
     }
-
-    if (postUpdate(flushingDWPT, hasEvents)) {
+    // 这里会触发
+    if (postUpdate(flushingDWPT, hasEvents)) { // 若内存或者文档数用超了，会去触发flush操作
       seqNo = -seqNo;
     }
     return seqNo;
@@ -495,8 +495,8 @@ final class DocumentsWriter implements Closeable, Accountable {
       return true;
     }
     return false;
-  }
-
+  }// 要控制主动flush和自动flush按序进来
+  // 这里进来是因为1.设置的全局文档个数或者内存大小引起的刷新，2.也可以是主动调用flush而进来的。es中也可以是refresh进来的，还有可能是写入时帮助lucene flush
   private void doFlush(DocumentsWriterPerThread flushingDWPT) throws IOException {
     assert flushingDWPT != null : "Flushing DWPT must not be null";
     do {
@@ -515,7 +515,7 @@ final class DocumentsWriter implements Closeable, Accountable {
         /*
          * Since with DWPT the flush process is concurrent and several DWPT
          * could flush at the same time we must maintain the order of the
-         * flushes before we can apply the flushed segment and the frozen global
+         * flushes before we can apply the flushed segment and the frozen global // 我们必须控制flush的顺序，在我们可以将frozen global deletr作用于Segment时
          * deletes it is buffering. The reason for this is that the global
          * deletes mark a certain point in time where we took a DWPT out of
          * rotation and freeze the global deletes.
@@ -526,25 +526,25 @@ final class DocumentsWriter implements Closeable, Accountable {
          * otherwise the deletes frozen by 'B' are not applied to 'A' and we
          * might miss to deletes documents in 'A'.
          */
-        try {
+        try {// 假如a在b开始前开始了，a要在b完成前结束，否则b的fronze delete将不能作用在b身上
           assert assertTicketQueueModification(flushingDWPT.deleteQueue);
           final DocumentsWriterPerThread dwpt = flushingDWPT;
           // Each flush is assigned a ticket in the order they acquire the ticketQueue lock
           ticket =
-              ticketQueue.addTicket(
+              ticketQueue.addTicket(// 这里并发控制执行，删除顺序不能颠倒（详见说明见https://www.amazingkoala.com.cn/Lucene/Index/2019/0718/75.html介绍）
                   () -> new DocumentsWriterFlushQueue.FlushTicket(dwpt.prepareFlush(), true));
-          final int flushingDocsInRam = flushingDWPT.getNumDocsInRAM();
+          final int flushingDocsInRam = flushingDWPT.getNumDocsInRAM();// 转移到flush的文档个数
           boolean dwptSuccess = false;
           try {
             // flush concurrently without locking
-            final FlushedSegment newSegment = flushingDWPT.flush(flushNotifications);
-            ticketQueue.addSegment(ticket, newSegment);
+            final FlushedSegment newSegment = flushingDWPT.flush(flushNotifications); // 开始真正的刷新：产生单个索引文件，再合并和复合文件。这里会使TermDelete生效
+            ticketQueue.addSegment(ticket, newSegment); // 将newSegment放入ticket中
             dwptSuccess = true;
           } finally {
-            subtractFlushedNumDocs(flushingDocsInRam);
+            subtractFlushedNumDocs(flushingDocsInRam); // 减少内存中保存文档的个数
             if (flushingDWPT.pendingFilesToDelete().isEmpty() == false) {
-              Set<String> files = flushingDWPT.pendingFilesToDelete();
-              flushNotifications.deleteUnusedFiles(files);
+              Set<String> files = flushingDWPT.pendingFilesToDelete();// 删除单独的13个文件
+              flushNotifications.deleteUnusedFiles(files);// 删除复合前的文档的操作，先放入flushNotifications中
             }
             if (dwptSuccess == false) {
               flushNotifications.flushFailed(flushingDWPT.getSegmentInfo());
@@ -564,19 +564,19 @@ final class DocumentsWriter implements Closeable, Accountable {
         /*
          * Now we are done and try to flush the ticket queue if the head of the
          * queue has already finished the flush.
-         */
+         */ // 排队等待publish的Segment>可以写入的DocumentsWriterPerThread个数，那么我们先临时退出下，去先publish一波
         if (ticketQueue.getTicketCount() >= perThreadPool.size()) {
-          // This means there is a backlog: the one
+          // This means there is a backlog: the one// 将产生的newSegment放入IndexWriter.segmentInfos的过程积压了，那么就不再flush产生新的segment，而是去IndexWriter.publishFlushedSegments()中，帮忙publishFlushedSegments
           // thread in innerPurge can't keep up with all
           // other threads flushing segments.  In this case
           // we forcefully stall the producers.
-          flushNotifications.onTicketBacklog();
+          flushNotifications.onTicketBacklog(); // 会进入IndexWriter 395行的 onTicketBacklog()，增加一个事件
         }
       } finally {
-        flushControl.doAfterFlush(flushingDWPT);
+        flushControl.doAfterFlush(flushingDWPT); // 这里会从flushingWriters中去掉
       }
     } while ((flushingDWPT = flushControl.nextPendingFlush()) != null);
-    flushNotifications.afterSegmentsFlushed();
+    flushNotifications.afterSegmentsFlushed();// 将跑到IndexWriter$FlushNotifications.afterSegmentsFlushed()(在IndexWriter中)
   }
 
   synchronized long getNextSequenceNumber() {
@@ -662,8 +662,8 @@ final class DocumentsWriter implements Closeable, Accountable {
    * FlushAllThreads is synced by IW fullFlushLock. Flushing all threads is a
    * two stage operation; the caller must ensure (in try/finally) that finishFlush
    * is called after this method, to release the flush lock in DWFlushControl
-   */
-  long flushAllThreads() throws IOException {
+   */// ES translog达到512MB，就会调用该函数（该函数已经被fullFlushLock，保证了只有一个进程可以进来）
+  long flushAllThreads() throws IOException { // flusing所有的线程分为2步骤，第一步先将dwpts中取出来，第二步开始批量刷新
     final DocumentsWriterDeleteQueue flushingDeleteQueue;
     if (infoStream.isEnabled("DW")) {
       infoStream.message("DW", "startFullFlush");
@@ -671,12 +671,12 @@ final class DocumentsWriter implements Closeable, Accountable {
 
     long seqNo;
     synchronized (this) {
-      pendingChangesInCurrentFullFlush = anyChanges();
+      pendingChangesInCurrentFullFlush = anyChanges(); //有变化，只要内存中还有文档未写入磁盘,启动的时候为0
       flushingDeleteQueue = deleteQueue;
-      /* Cutover to a new delete queue.  This must be synced on the flush control
+      /* Cutover to a new delete queue.  This must be synced on the flush control 切换产生新的delete queue
        * otherwise a new DWPT could sneak into the loop with an already flushing
        * delete queue */
-      seqNo = flushControl.markForFullFlush(); // swaps this.deleteQueue synced on FlushControl
+      seqNo = flushControl.markForFullFlush(); // swaps this.deleteQueue synced on FlushControl。1。这里将不让再继续写入了
       assert setFlushingDeleteQueue(flushingDeleteQueue);
     }
     assert currentFullFlushDelQueue != null;
@@ -684,9 +684,9 @@ final class DocumentsWriter implements Closeable, Accountable {
 
     boolean anythingFlushed = false;
     try {
-      anythingFlushed |= maybeFlush();
+      anythingFlushed |= maybeFlush();// 开始真正的flush
       // If a concurrent flush is still in flight wait for it
-      flushControl.waitForFlush();
+      flushControl.waitForFlush();  // 若有等待刷新的segment，就暂停继续了
       if (anythingFlushed == false
           && flushingDeleteQueue.anyChanges()) { // apply deletes if we did not flush any document
         if (infoStream.isEnabled("DW")) {
@@ -706,7 +706,7 @@ final class DocumentsWriter implements Closeable, Accountable {
           .close(); // all DWPT have been processed and this queue has been fully flushed to the
       // ticket-queue
     }
-    if (anythingFlushed) {
+    if (anythingFlushed) { // 又刷新
       return -seqNo;
     } else {
       return seqNo;
@@ -723,7 +723,7 @@ final class DocumentsWriter implements Closeable, Accountable {
     return null;
   }
 
-  void finishFullFlush(boolean success) throws IOException {
+  void finishFullFlush(boolean success) throws IOException {// 会从IndexWriter.doFlush()主动跳到这里
     try {
       if (infoStream.isEnabled("DW")) {
         infoStream.message(
@@ -732,7 +732,7 @@ final class DocumentsWriter implements Closeable, Accountable {
       assert setFlushingDeleteQueue(null);
       if (success) {
         // Release the flush lock
-        flushControl.finishFullFlush();
+        flushControl.finishFullFlush(); // 没啥用 
       } else {
         flushControl.abortFullFlushes();
       }

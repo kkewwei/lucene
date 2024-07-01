@@ -33,19 +33,19 @@ import org.apache.lucene.util.packed.DirectMonotonicReader;
 
 final class FieldsIndexReader extends FieldsIndex {
 
-  private final int maxDoc;
+  private final int maxDoc;// 总文档数
   private final int blockShift;
-  private final int numChunks;
+  private final int numChunks;// 这个semgent多少个numchunks
   private final DirectMonotonicReader.Meta docsMeta;
   private final DirectMonotonicReader.Meta startPointersMeta;
-  private final IndexInput indexInput;
-  private final long docsStartPointer,
+  private final IndexInput indexInput;//_v.fdx
+  private final long docsStartPointer,//  应该是放的某个block或者chunk在文档存放的位置
       docsEndPointer,
       startPointersStartPointer,
       startPointersEndPointer;
   private final DirectMonotonicReader docs, startPointers;
   private final long maxPointer;
-
+  // 读取的是fdm整个文件
   FieldsIndexReader(
       Directory dir,
       String name,
@@ -53,19 +53,19 @@ final class FieldsIndexReader extends FieldsIndex {
       String extension,
       String codecName,
       byte[] id,
-      IndexInput metaIn,
+      IndexInput metaIn,//metaIn=_v.fdm
       IOContext context)
       throws IOException {
-    maxDoc = metaIn.readInt();
-    blockShift = metaIn.readInt();
-    numChunks = metaIn.readInt();
+    maxDoc = metaIn.readInt(); // 写入时就是numDocs
+    blockShift = metaIn.readInt();// 一个block 1024个chunk
+    numChunks = metaIn.readInt();// 所有block里面chunk和
     docsStartPointer = metaIn.readLong();
     docsMeta = DirectMonotonicReader.loadMeta(metaIn, numChunks, blockShift);
     docsEndPointer = startPointersStartPointer = metaIn.readLong();
     startPointersMeta = DirectMonotonicReader.loadMeta(metaIn, numChunks, blockShift);
     startPointersEndPointer = metaIn.readLong();
     maxPointer = metaIn.readLong();
-
+    // 读取_v.fdx
     indexInput =
         dir.openInput(
             IndexFileNames.segmentFileName(name, suffix, extension),
@@ -86,8 +86,8 @@ final class FieldsIndexReader extends FieldsIndex {
     final RandomAccessInput startPointersSlice =
         indexInput.randomAccessSlice(
             startPointersStartPointer, startPointersEndPointer - startPointersStartPointer);
-    docs = DirectMonotonicReader.getInstance(docsMeta, docsSlice);
-    startPointers = DirectMonotonicReader.getInstance(startPointersMeta, startPointersSlice);
+    docs = DirectMonotonicReader.getInstance(docsMeta, docsSlice);// 是从fdm里面的_ids部分读取
+    startPointers = DirectMonotonicReader.getInstance(startPointersMeta, startPointersSlice);// 是从fdm里面的_pointers部分读取
   }
 
   private FieldsIndexReader(FieldsIndexReader other) throws IOException {
@@ -115,20 +115,20 @@ final class FieldsIndexReader extends FieldsIndex {
   public void close() throws IOException {
     indexInput.close();
   }
-
+  // 返回的是这个docID在哪个chunkId上
   @Override
   long getBlockID(int docID) {
     Objects.checkIndex(docID, maxDoc);
-    long blockIndex = docs.binarySearch(0, numChunks, docID);
-    if (blockIndex < 0) {
+    long blockIndex = docs.binarySearch(0, numChunks, docID); // 找到这个docId的文档在哪个chunk上
+    if (blockIndex < 0) { // 找一个chunk内的docId
       blockIndex = -2 - blockIndex;
     }
     return blockIndex;
   }
-
+  // blockIndex实际是chunkId，名称有点问题
   @Override
   long getBlockStartPointer(long blockIndex) {
-    return startPointers.get(blockIndex);
+    return startPointers.get(blockIndex);// DirectMonotonicReader
   }
 
   @Override
@@ -157,6 +157,6 @@ final class FieldsIndexReader extends FieldsIndex {
 
   @Override
   void checkIntegrity() throws IOException {
-    CodecUtil.checksumEntireFile(indexInput);
+    CodecUtil.checksumEntireFile(indexInput);// check的是fdx的尾部内容
   }
 }

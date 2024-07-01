@@ -39,7 +39,7 @@ import java.util.stream.Stream;
 public abstract class PriorityQueue<T> implements Iterable<T> {
   private int size = 0;
   private final int maxSize;
-  private final T[] heap;
+  private final T[] heap; // 0位置没有使用，是基于1开始的，保存是topHit+1了
 
   /** Create an empty priority queue of the configured size. */
   public PriorityQueue(int maxSize) {
@@ -76,7 +76,7 @@ public abstract class PriorityQueue<T> implements Iterable<T> {
    * this method creates a new instance and behaves consistently, e.g., it cannot return null if it
    * previously returned non-null and all returned instances must {@link #lessThan compare equal}.
    */
-  public PriorityQueue(int maxSize, Supplier<T> sentinelObjectSupplier) {
+  public PriorityQueue(int maxSize, Supplier<T> sentinelObjectSupplier) { // sentinelObjectSupplier： 用"哨兵对象"把整个堆预先填满，从而让调用方在后续使用时可以 永远把堆当作"已满"来对待 。
     final int heapSize;
 
     if (0 == maxSize) {
@@ -91,7 +91,7 @@ public abstract class PriorityQueue<T> implements Iterable<T> {
 
       // NOTE: we add +1 because all access to heap is
       // 1-based not 0-based.  heap[0] is unused.
-      heapSize = maxSize + 1;
+      heapSize = maxSize + 1; // 堆下标从1开始计算
     }
 
     // T is an unbounded type, so this unchecked cast works always.
@@ -101,8 +101,8 @@ public abstract class PriorityQueue<T> implements Iterable<T> {
     this.maxSize = maxSize;
 
     // If sentinel objects are supported, populate the queue with them
-    T sentinel = sentinelObjectSupplier.get();
-    if (sentinel != null) {
+    T sentinel = sentinelObjectSupplier.get(); // 哨兵预先填满
+    if (sentinel != null) { // 充实每个shard
       heap[1] = sentinel;
       for (int i = 2; i < heap.length; i++) {
         heap[i] = sentinelObjectSupplier.get();
@@ -184,12 +184,12 @@ public abstract class PriorityQueue<T> implements Iterable<T> {
    *
    * @return the new 'top' element in the queue.
    */
-  public final T add(T element) {
+  public final T add(T element) {// 若满了，还插入就抛ArrayIndexOutOfBoundsException异常
     // don't modify size until we know heap access didn't throw AIOOB.
     int index = size + 1;
-    heap[index] = element;
+    heap[index] = element; // 尾插发
     size = index;
-    upHeap(index);
+    upHeap(index);// 开始调整尾插元素
     return heap[1];
   }
 
@@ -200,17 +200,17 @@ public abstract class PriorityQueue<T> implements Iterable<T> {
    * previously the smallest value in the heap and now has been replaced by a larger one, or null if
    * the queue wasn't yet full with maxSize elements.
    */
-  public T insertWithOverflow(T element) {
-    if (size < maxSize) {
+  public T insertWithOverflow(T element) { // 优先级队列插入，若满了并不会抛异常，而是先去查找合适的再删除
+    if (size < maxSize) { // 若堆未满，直接加入元素
       add(element);
-      return null;
-    } else if (size > 0 && lessThan(heap[1], element)) {
+      return null; //返回null
+    } else if (size > 0 && lessThan(heap[1], element)) {// 若满了，那么和堆顶元素比
       T ret = heap[1];
       heap[1] = element;
       updateTop();
-      return ret;
+      return ret; // 和栈顶对比下，返回栈顶
     } else {
-      return element;
+      return element; // 返回原始值
     }
   }
 
@@ -219,7 +219,7 @@ public abstract class PriorityQueue<T> implements Iterable<T> {
     // We don't need to check size here: if maxSize is 0,
     // then heap is length 2 array with both entries null.
     // If size is 0 then heap[1] is already null.
-    return heap[1];
+    return heap[1]; // 下标从1开始的
   }
 
   /** Removes and returns the least element of the PriorityQueue in log(size) time. */
@@ -255,7 +255,7 @@ public abstract class PriorityQueue<T> implements Iterable<T> {
    *
    * @return the new 'top' element.
    */
-  public final T updateTop() {
+  public final T updateTop() { // 重新更新下栈顶元素
     downHeap(1);
     return heap[1];
   }
@@ -301,24 +301,24 @@ public abstract class PriorityQueue<T> implements Iterable<T> {
     return false;
   }
 
-  private boolean upHeap(int origPos) {
+  private boolean upHeap(int origPos) {// 调整第origPos上的元素，从尾部开始调整
     int i = origPos;
     T node = heap[i]; // save bottom node
     int j = i >>> 1;
-    while (j > 0 && lessThan(node, heap[j])) {
+    while (j > 0 && lessThan(node, heap[j])) {// 若node小于父节点
       heap[i] = heap[j]; // shift parents down
       i = j;
-      j = j >>> 1;
+      j = j >>> 1;//先调整到父节点去
     }
     heap[i] = node; // install saved node
     return i != origPos;
   }
 
-  private void downHeap(int i) {
+  private void downHeap(int i) { // 开始对下标为i的node向下沉淀，
     T node = heap[i]; // save top node
     int j = i << 1; // find smaller child
     int k = j + 1;
-    if (k <= size && lessThan(heap[k], heap[j])) {
+    if (k <= size && lessThan(heap[k], heap[j])) { // 左右孩子中找个最小的，根据得分来选择哪个，得分最小的放最上面
       j = k;
     }
     while (j <= size && lessThan(heap[j], node)) {

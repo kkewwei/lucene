@@ -55,7 +55,7 @@ public class MergeOnFlushMergePolicy extends FilterMergePolicy {
   }
 
   @Override
-  public MergeSpecification findFullFlushMerges(
+  public MergeSpecification findFullFlushMerges(// 更激进，仅仅是修改了这个fullmerge的策略。
       MergeTrigger mergeTrigger, SegmentInfos segmentInfos, MergeContext mergeContext)
       throws IOException {
     List<SegmentCommitInfo> smallSegments = new ArrayList<>();

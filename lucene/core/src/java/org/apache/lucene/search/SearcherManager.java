@@ -190,14 +190,14 @@ public final class SearcherManager extends ReferenceManager<IndexSearcher> {
     reference.getIndexReader().decRef();
   }
 
-  @Override
+  @Override// 更新下IndexSearch：先获取IndexReader, 然后根据IndexReader产生IndexSearcher
   protected IndexSearcher refreshIfNeeded(IndexSearcher referenceToRefresh) throws IOException {
-    final IndexReader r = referenceToRefresh.getIndexReader();
+    final IndexReader r = referenceToRefresh.getIndexReader(); // ElasticsearchDirectoryReader
     assert r instanceof DirectoryReader
         : "searcher's IndexReader should be a DirectoryReader, but got " + r;
     DirectoryReader dr = (DirectoryReader) r;
     IndexCommit refreshCommit = refreshCommitSupplier.getSearcherRefreshCommit(dr);
-    final IndexReader newReader = DirectoryReader.openIfChanged(dr, refreshCommit);
+    final IndexReader newReader = DirectoryReader.openIfChanged(dr, refreshCommit);// 可能会触发主动merge操作
     if (newReader == null) {
       return null;
     } else {

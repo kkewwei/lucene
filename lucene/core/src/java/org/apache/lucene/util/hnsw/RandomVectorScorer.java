@@ -25,14 +25,14 @@ import org.apache.lucene.util.Bits;
  * A {@link RandomVectorScorer} for scoring random nodes in batches against an abstract query. This
  * class isn't thread-safe and should be used by a single thread.
  */
-public interface RandomVectorScorer {
+public interface RandomVectorScorer {// 图算法本身 不直接碰向量数据 ，所有"节点 a 和查询向量有多近"都通过 RandomVectorScorer
   /**
    * Returns the score between the query and the provided node.
    *
    * @param node a random node in the graph
    * @return the computed score
    */
-  float score(int node) throws IOException;
+  float score(int node) throws IOException; // 返回查询向量与某 ordinal 节点向量的相似度（已归一到"越大越近"）。
 
   /**
    * Score a list of numNodes and store the results in the scores array.
@@ -44,7 +44,7 @@ public interface RandomVectorScorer {
    * @param numNodes number of nodes to score. Must not exceed length of nodes or scores arrays.
    * @return the maximum scored value of any node, or Float.NEGATIVE_INFINITY if numNodes == 0.
    */
-  default float bulkScore(int[] nodes, float[] scores, int numNodes) throws IOException {
+  default float bulkScore(int[] nodes, float[] scores, int numNodes) throws IOException { // 批量打分，返回这批里的最大分。批量化是为了利用 SIMD（Panama Vector API）和减少虚调用开销——你在 searchLevel 里看到的 bulkNodes / bulkScores 就是为此服务。
     float max = Float.NEGATIVE_INFINITY;
     for (int i = 0; i < numNodes; i++) {
       scores[i] = score(nodes[i]);

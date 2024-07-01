@@ -28,7 +28,7 @@ import java.util.Arrays;
  *
  * @lucene.internal
  */
-public final class LongHeap {
+public final class LongHeap {// 小顶堆
 
   private final int initialCapacity;
 
@@ -168,7 +168,7 @@ public final class LongHeap {
     int i = origPos;
     long value = heap[i]; // save bottom value
     int j = i >>> 1;
-    while (j > 0 && value < heap[j]) {
+    while (j > 0 && value < heap[j]) { // 更小的，放下面
       heap[i] = heap[j]; // shift parents down
       i = j;
       j = j >>> 1;

@@ -55,29 +55,29 @@ public final class SloppyPhraseMatcher extends PhraseMatcher {
   private final int slop;
   private final int numPostings;
   private final PhraseQueue pq; // for advancing min position
-  private final boolean captureLeadMatch;
+  private final boolean captureLeadMatch;// 是否存储零头term的位置信息
 
   private final DocIdSetIterator approximation;
   private final ImpactsDISI impactsApproximation;
-
+  // 当前短语匹配位置中误差最大的那个term的position（在文中position-传入短语term的position）
   private int end; // current largest phrase position
 
   private int leadPosition;
   private int leadOffset;
   private int leadEndOffset;
   private int leadOrd;
-
+  // 查询query中，是否有重复的词
   private boolean
       hasRpts; // flag indicating that there are repetitions (as checked in first candidate doc)
-  private boolean checkedRpts; // flag to only check for repetitions in first candidate doc
+  private boolean checkedRpts; // flag to only check for repetitions in first candidate doc 是否检查过重叠情况，只会处理一次
   private boolean hasMultiTermRpts; //
   private PhrasePositions[][]
       rptGroups; // in each group are PPs that repeats each other (i.e. same term), sorted by
   // (query) offset
   private PhrasePositions[] rptStack; // temporary stack for switching colliding repeating pps
-
+  // 用来快速判断每个词分配时后面是否还有匹配的词组。
   private boolean positioned;
-  private int matchLength;
+  private int matchLength;// 当前最合适的长度
   private boolean freqsLoaded;
 
   public SloppyPhraseMatcher(
@@ -97,7 +97,7 @@ public final class SloppyPhraseMatcher extends PhraseMatcher {
       phrasePositions[i] =
           new PhrasePositions(postings[i].postings, postings[i].position, i, postings[i].terms);
     }
-
+    //approximation=ConjunctionDISI， 根据每个词出现的文档频率，排序了
     approximation =
         ConjunctionUtils.intersectIterators(Arrays.stream(postings).map(p -> p.postings).toList());
     // What would be a good upper bound of the sloppy frequency? A sum of the
@@ -184,42 +184,42 @@ public final class SloppyPhraseMatcher extends PhraseMatcher {
   float sloppyWeight() {
     return 1f / (1f + matchLength);
   }
-
+  //nextMatch是找下一个匹配位置。
   @Override
   public boolean nextMatch() throws IOException {
     if (!positioned) {
       return false;
     }
-    PhrasePositions pp = pq.pop();
+    PhrasePositions pp = pq.pop(); // PhrasePos最小的出来
     assert pp != null; // if the pq is not full, then positioned == false
     captureLead(pp);
-    matchLength = end - pp.position;
-    int next = pq.top().position;
-    while (advancePP(pp)) {
+    matchLength = end - pp.position;// 当前匹配位置的匹配的长度。这里可以直接返回，只要最大的position(end)-最小的position(优先队列第一个)<=slop就可以了。
+    int next = pq.top().position;  // 要保证最小的前进不能超过第二小的term，用来判断当前查找轮次的结束时机
+    while (advancePP(pp)) {// 当前找到的不一定是满足slop距离的或者不是最优匹配，需要继续查找
       if (hasRpts && !advanceRpts(pp)) {
         break; // pps exhausted
       }
-      if (pp.position > next) { // done minimizing current match-length
-        pq.add(pp);
-        if (matchLength <= slop) {
+      if (pp.position > next) { // done minimizing current match-length   要保证最小的前进不能超过第二小的term
+        pq.add(pp);// 再把pp放进队列
+        if (matchLength <= slop) {//找到合适的了，那么就推出
           return true;
         }
-        pp = pq.pop();
+        pp = pq.pop();// 更新下最小header
         next = pq.top().position;
         assert pp != null; // if the pq is not full, then positioned == false
         matchLength = end - pp.position;
-      } else {
+      } else { // 选中这个，那么这个term在文档中的index就前进
         int matchLength2 = end - pp.position;
         if (matchLength2 < matchLength) {
-          matchLength = matchLength2;
+          matchLength = matchLength2; //更新更近的距离
         }
       }
       captureLead(pp);
     }
     positioned = false;
-    return matchLength <= slop;
+    return matchLength <= slop;// 是否匹配了
   }
-
+  // 存储leader的位置信息
   private void captureLead(PhrasePositions pp) throws IOException {
     if (captureLeadMatch == false) {
       return;
@@ -284,10 +284,10 @@ public final class SloppyPhraseMatcher extends PhraseMatcher {
 
   /** advance a PhrasePosition and update 'end', return false if exhausted */
   private boolean advancePP(PhrasePositions pp) throws IOException {
-    if (!pp.nextPosition()) {
+    if (!pp.nextPosition()) {// 找该term下一个position, 没找到
       return false;
     }
-    if (pp.position > end) {
+    if (pp.position > end) {// 跟新下最大距离
       end = pp.position;
     }
     return true;
@@ -299,19 +299,19 @@ public final class SloppyPhraseMatcher extends PhraseMatcher {
    * there were no collisions before pp was advanced.
    */
   private boolean advanceRpts(PhrasePositions pp) throws IOException {
-    if (pp.rptGroup < 0) {
+    if (pp.rptGroup < 0) {// 没有重复的词。
       return true; // not a repeater
     }
     PhrasePositions[] rg = rptGroups[pp.rptGroup];
     FixedBitSet bits = new FixedBitSet(rg.length); // for re-queuing after collisions are resolved
     int k0 = pp.rptInd;
     int k;
-    while ((k = collide(pp)) >= 0) {
+    while ((k = collide(pp)) >= 0) {// 和pp冲突的PhrasePositions 在组中的下标
       pp = lesser(pp, rg[k]); // always advance the lesser of the (only) two colliding pps
-      if (!advancePP(pp)) {
+      if (!advancePP(pp)) { // 继续往下找一个。已经找到了，那么就
         return false; // exhausted
-      }
-      if (k != k0) { // careful: mark only those currently in the queue
+      }// k0对应最开始的pp，还没在队列中，不用管
+      if (k != k0) { // careful: mark only those currently in the queue 记录冲动的哪些需要重新进queue排队
         bits = FixedBitSet.ensureCapacity(bits, k);
         bits.set(k); // mark that pp2 need to be re-queued
       }
@@ -321,17 +321,17 @@ public final class SloppyPhraseMatcher extends PhraseMatcher {
     int n = 0;
     // TODO would be good if we can avoid calling cardinality() in each iteration!
     int numBits = bits.length(); // larges bit we set
-    while (bits.cardinality() > 0) {
-      PhrasePositions pp2 = pq.pop();
+    while (bits.cardinality() > 0) {// 对更新过PhrasePos的PhrasePositions，再重新出队再入队
+      PhrasePositions pp2 = pq.pop();// 实际小堆里面的没发生变化
       rptStack[n++] = pp2;
-      if (pp2.rptGroup >= 0
+      if (pp2.rptGroup >= 0// 如果pp2是更新过PhrasePos的，则清空位图中的标记
           && pp2.rptInd < numBits // this bit may not have been set
           && bits.get(pp2.rptInd)) {
         bits.clear(pp2.rptInd);
       }
     }
     // add back to queue
-    for (int i = n - 1; i >= 0; i--) {
+    for (int i = n - 1; i >= 0; i--) {// 重新放入队列中
       pq.add(rptStack[i]);
     }
     return true;
@@ -346,10 +346,10 @@ public final class SloppyPhraseMatcher extends PhraseMatcher {
   }
 
   /** index of a pp2 colliding with pp, or -1 if none */
-  private int collide(PhrasePositions pp) {
+  private int collide(PhrasePositions pp) {// 返回和pp冲突的PhrasePositions 在组中的下标
     int tpPos = tpPos(pp);
     PhrasePositions[] rg = rptGroups[pp.rptGroup];
-    for (PhrasePositions pp2 : rg) {
+    for (PhrasePositions pp2 : rg) {// 遍历query 同组每个term,
       if (pp2 != pp && tpPos(pp2) == tpPos) {
         return pp2.rptInd;
       }
@@ -381,7 +381,7 @@ public final class SloppyPhraseMatcher extends PhraseMatcher {
     if (!checkedRpts) {
       return initFirstTime();
     }
-    if (!hasRpts) {
+    if (!hasRpts) {// 还没检查过是否有重叠的term，则需要进行一次检查，只会执行一次
       initSimple();
       return true; // PPs available
     }
@@ -424,11 +424,11 @@ public final class SloppyPhraseMatcher extends PhraseMatcher {
   }
 
   /** Fill the queue (all pps are already placed */
-  private void fillQueue() {
+  private void fillQueue() {//  将phrasePositions全部转移到qp优先级队列中
     pq.clear();
     for (PhrasePositions pp : phrasePositions) { // iterate cyclic list: done once handled max
       if (pp.position > end) {
-        end = pp.position;
+        end = pp.position; //当前误差最大的那个值
       }
       pq.add(pp);
     }
@@ -446,7 +446,7 @@ public final class SloppyPhraseMatcher extends PhraseMatcher {
    *
    * @return false if PPs are exhausted.
    */
-  private boolean advanceRepeatGroups() throws IOException {
+  private boolean advanceRepeatGroups() throws IOException {// 需要对有重复的term单独处理下，使得每个倒排都定位到唯一的位置
     for (PhrasePositions[] rg : rptGroups) {
       if (hasMultiTermRpts) {
         // more involved, some may not collide
@@ -468,8 +468,8 @@ public final class SloppyPhraseMatcher extends PhraseMatcher {
         }
       } else {
         // simpler, we know exactly how much to advance
-        for (int j = 1; j < rg.length; j++) {
-          for (int k = 0; k < j; k++) {
+        for (int j = 1; j < rg.length; j++) {// 从第二个词开始，每个词的往后延后
+          for (int k=0; k<j; k++) { //若是第3个重复的词，那么给他分配可用词的话，就往后多分配几次。比如针对a, 第一个a占用第一个a的index，第二个a占用第二个a的index。
             if (!rg[j].nextPosition()) {
               return false; // PPs exhausted
             }
@@ -502,19 +502,19 @@ public final class SloppyPhraseMatcher extends PhraseMatcher {
     // System.err.println("initFirstTime: doc: "+min.doc);
     checkedRpts = true;
     placeFirstPositions();
-
+// 查找重复的term，value是重复term出现的编号，从0开始
     LinkedHashMap<Term, Integer> rptTerms = repeatingTerms();
     hasRpts = !rptTerms.isEmpty();
 
-    if (hasRpts) {
+    if (hasRpts) {// 词有重复的
       rptStack = new PhrasePositions[numPostings]; // needed with repetitions
-      ArrayList<ArrayList<PhrasePositions>> rgs = gatherRptGroups(rptTerms);
+      ArrayList<ArrayList<PhrasePositions>> rgs = gatherRptGroups(rptTerms);// 根据重复的term进行分组
       sortRptGroups(rgs);
-      if (!advanceRepeatGroups()) {
+      if (!advanceRepeatGroups()) { // 每个重复词，都给他分配了一个位置
         return false; // PPs exhausted
       }
     }
-
+//将phrasePositions全部转移到qp优先级队列中
     fillQueue();
     return true; // PPs available
   }
@@ -523,40 +523,40 @@ public final class SloppyPhraseMatcher extends PhraseMatcher {
    * sort each repetition group by (query) offset. Done only once (at first doc) and allows to
    * initialize faster for each doc.
    */
-  private void sortRptGroups(ArrayList<ArrayList<PhrasePositions>> rgs) {
+  private void sortRptGroups(ArrayList<ArrayList<PhrasePositions>> rgs) {// 查询query中相同term的多个位置排序+编号
     rptGroups = new PhrasePositions[rgs.size()][];
-    Comparator<PhrasePositions> cmprtr = Comparator.comparingInt(pp -> pp.offset);
+    Comparator<PhrasePositions> cmprtr = Comparator.comparingInt(pp -> pp.offset);//term的offset排序
     for (int i = 0; i < rptGroups.length; i++) {
       PhrasePositions[] rg = rgs.get(i).toArray(PhrasePositions[]::new);
       Arrays.sort(rg, cmprtr);
       rptGroups[i] = rg;
-      for (int j = 0; j < rg.length; j++) {
+      for (int j = 0; j < rg.length; j++) { // 相同的每个term都分配一个下标
         rg[j].rptInd = j; // we use this index for efficient re-queuing
-      }
+      }   // 设置 PhrasePositions 在组中的下标
     }
   }
-
+  // 根据重复的term进行分组
   /** Detect repetition groups. Done once - for first doc */
   private ArrayList<ArrayList<PhrasePositions>> gatherRptGroups(
       LinkedHashMap<Term, Integer> rptTerms) throws IOException {
-    PhrasePositions[] rpp = repeatingPPs(rptTerms);
+    PhrasePositions[] rpp = repeatingPPs(rptTerms); // 哪几个词是重读的
     ArrayList<ArrayList<PhrasePositions>> res = new ArrayList<>();
     if (!hasMultiTermRpts) {
       // simpler - no multi-terms - can base on positions in first doc
-      for (int i = 0; i < rpp.length; i++) {
+      for (int i = 0; i < rpp.length; i++) {// 对所有query 语句中重复的term遍历
         PhrasePositions pp = rpp[i];
-        if (pp.rptGroup >= 0) continue; // already marked as a repetition
-        int tpPos = tpPos(pp);
-        for (int j = i + 1; j < rpp.length; j++) {
+        if (pp.rptGroup >=0) continue; // already marked as a repetition  // 单term的情况下，如果有重复，最多需要处理一次。所以已经标记为重复的了，不需要再处理。
+        int tpPos = tpPos(pp);// 获取是这个term在文档中的真实位置
+        for (int j=i+1; j<rpp.length; j++) { // 找后续重复的每个词
           PhrasePositions pp2 = rpp[j];
           if (pp2.rptGroup >= 0 // already marked as a repetition
               || pp2.offset == pp.offset // not a repetition: two PPs are originally in same offset
-              || tpPos(pp2) != tpPos) { // not a repetition
+              || tpPos(pp2) != tpPos) { // not a repetition query确定的不是同一个词
             continue;
           }
           // a repetition
-          int g = pp.rptGroup;
-          if (g < 0) {
+          int g = pp.rptGroup; //查询语句中重复的term
+          if (g < 0) { // 还没有分过组
             g = res.size();
             pp.rptGroup = g;
             ArrayList<PhrasePositions> rl = new ArrayList<>(2);
@@ -600,13 +600,13 @@ public final class SloppyPhraseMatcher extends PhraseMatcher {
   }
 
   /** find repeating terms and assign them ordinal values */
-  private LinkedHashMap<Term, Integer> repeatingTerms() {
+  private LinkedHashMap<Term, Integer> repeatingTerms() {// 查看待查询的词中是否与重复出现的词
     LinkedHashMap<Term, Integer> tord = new LinkedHashMap<>();
     HashMap<Term, Integer> tcnt = new HashMap<>();
     for (PhrasePositions pp : phrasePositions) {
       for (Term t : pp.terms) {
         Integer cnt = tcnt.compute(t, (key, old) -> old == null ? 1 : 1 + old);
-        if (cnt == 2) {
+        if (cnt == 2) {// 仅统计第二次出现的相同的term。只要统计第二个，就知道哪个重复了
           tord.put(t, tord.size());
         }
       }
@@ -621,7 +621,7 @@ public final class SloppyPhraseMatcher extends PhraseMatcher {
       for (Term t : pp.terms) {
         if (rptTerms.containsKey(t)) {
           rp.add(pp);
-          hasMultiTermRpts |= (pp.terms.length > 1);
+          hasMultiTermRpts |= (pp.terms.length > 1);// 如果PhrasePositions中有多个term，则设置hasMultiTermRpts
           break;
         }
       }

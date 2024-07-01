@@ -60,10 +60,10 @@ import org.apache.lucene.util.RamUsageEstimator;
  * <p>See the {@link org.apache.lucene.util.fst package documentation} for some simple examples.
  *
  * @lucene.experimental
- */
+ */  // FST全程是Finite State Transducers，是一个带输出的有限状态机
 public final class FST<T> implements Accountable {
 
-  final FSTMetadata<T> metadata;
+  final FSTMetadata<T> metadata;// 包含这个blocks编码后在fst存储的长度以及这个blocks在fst存储存储的截止位置，
 
   /** Specifies allowed range of each int input label for this FST. */
   public enum INPUT_TYPE {
@@ -75,17 +75,17 @@ public final class FST<T> implements Accountable {
   private static final long BASE_RAM_BYTES_USED =
       RamUsageEstimator.shallowSizeOfInstance(FST.class);
 
-  static final int BIT_FINAL_ARC = 1 << 0;
-  static final int BIT_LAST_ARC = 1 << 1;
-  static final int BIT_TARGET_NEXT = 1 << 2;
+  static final int BIT_FINAL_ARC = 1 << 0;// target.node<0,就是BIT_FINAL_ARC
+  static final int BIT_LAST_ARC = 1 << 1;// 表示此边是节点和下一个节点之间的最后一条边，此边后面的内容就是下一个节点了。一个节点的所有边按顺序写入到bytes中，只有最后一条边被标记为BIT_LAST_ARC
+  static final int BIT_TARGET_NEXT = 1 << 2;// 使用了节点优化: 该边的target刚好是上次存储的节点，那么就不需要存储target了。读取target的时候直接取position
 
   // TODO: we can free up a bit if we can nuke this:
-  static final int BIT_STOP_NODE = 1 << 3;
+  static final int BIT_STOP_NODE = 1 << 3; // arc的target是一个终止节点。结束FST结构了
 
   /** This flag is set if the arc has an output. */
-  public static final int BIT_ARC_HAS_OUTPUT = 1 << 4;
+  public static final int BIT_ARC_HAS_OUTPUT = 1 << 4; // arc有output值(output不为0)
 
-  static final int BIT_ARC_HAS_FINAL_OUTPUT = 1 << 5;
+  static final int BIT_ARC_HAS_FINAL_OUTPUT = 1 << 5;//arc有output值，并且output的值是最终的值
 
   /**
    * Value of the arc flags to declare a node with fixed length (sparse) arcs designed for binary
@@ -133,32 +133,32 @@ public final class FST<T> implements Accountable {
 
   // Never serialized; just used to represent the virtual
   // non-final node w/ no arcs:
-  static final long NON_FINAL_END_NODE = 0;
+  static final long NON_FINAL_END_NODE = 0;// 仅仅是表示虚拟非final节点
 
   /** If arc has this label then that arc is final/accepted */
   public static final int END_LABEL = -1;
 
   /** The reader of the FST, used to read bytes from the underlying FST storage */
-  private final FSTReader fstReader;
+  private final FSTReader fstReader;//  就是 FSTCompiler.dataOutput(看FSTCompiler.getFSTReader())。 就是序列话的fst（节点从末尾向前序列化的），是ReadWriteDataOutput
 
-  public final Outputs<T> outputs;
+  public final Outputs<T> outputs;//主要存储本block fp以及子block的fp
 
   /** Represents a single arc. */
-  public static final class Arc<T> {
+  public static final class Arc<T> {// FSTCompiler中也有一个Arc
 
     // *** Arc fields.
 
     private int label;
 
-    private T output;
+    private T output; // 实际是在PendingBlock.compileIndex()中构建的，用来指向26个term的fp等信息
 
-    private long target;
+    private long target; // 这个边的终点，写数据写到这里停止了。通过这个向前读取边的内容
 
     private byte flags;
 
-    private T nextFinalOutput;
+    private T nextFinalOutput; // 就是等于了 emptyOutput，说明是个终边，该进入子block了
 
-    private long nextArc;
+    private long nextArc;// 下一条边的起点，也就是
 
     private byte nodeFlags;
 
@@ -281,7 +281,7 @@ public final class FST<T> implements Accountable {
     }
 
     /** Ord/address to target node. */
-    public long target() {
+    public long target() {// fst出边的地址
       return target;
     }
 
@@ -425,7 +425,7 @@ public final class FST<T> implements Accountable {
     assert fstReader != null;
     this.metadata = Objects.requireNonNull(metadata, "FSTMetadata cannot be null");
     this.outputs = metadata.outputs;
-    this.fstReader = fstReader;
+    this.fstReader = fstReader;// 就是序列话的fst（节点从末尾向前序列化的）是ReadWriteDataOutput
   }
 
   /**
@@ -456,12 +456,12 @@ public final class FST<T> implements Accountable {
       throws IOException {
     // NOTE: only reads formats VERSION_START up to VERSION_CURRENT; we don't have
     // back-compat promise for FSTs (they are experimental), but we are sometimes able to offer it
-    int version = CodecUtil.checkHeader(metaIn, FILE_FORMAT_NAME, VERSION_START, VERSION_CURRENT);
+    int version = CodecUtil.checkHeader(metaIn, FILE_FORMAT_NAME, VERSION_START, VERSION_CURRENT);// 读取tip文件
     T emptyOutput;
-    if (metaIn.readByte() == 1) {
+    if (metaIn.readByte() == 1) {// 参考FST 525行的save部分
       // accepts empty string
       // 1 KB blocks:
-      ReadWriteDataOutput emptyBytes = (ReadWriteDataOutput) getOnHeapReaderWriter(10);
+      ReadWriteDataOutput emptyBytes = (ReadWriteDataOutput) getOnHeapReaderWriter(10);// 是要进来的
       int numBytes = metaIn.readVInt();
       emptyBytes.copyBytes(metaIn, numBytes);
 
@@ -488,13 +488,13 @@ public final class FST<T> implements Accountable {
           case 2 -> INPUT_TYPE.BYTE4;
           default -> throw new CorruptIndexException("invalid input type " + t, metaIn);
         };
-    long startNode = metaIn.readVLong();
+    long startNode = metaIn.readVLong();// in=ByteBufferIndexInput$SingleBufferImpl,从tmd中读取，指向tip。
     long numBytes = metaIn.readVLong();
-    return new FSTMetadata<>(inputType, outputs, emptyOutput, startNode, version, numBytes);
+    return new FSTMetadata<>(inputType, outputs, emptyOutput, startNode, version, numBytes);// 对fstStore进行初始化，没干啥，仅仅赋值
   }
 
   @Override
-  public long ramBytesUsed() {
+  public long ramBytesUsed() {//统计fst内存使用大小，算的是fst结构全部加载到内存中了
     return BASE_RAM_BYTES_USED + fstReader.ramBytesUsed();
   }
 
@@ -522,8 +522,8 @@ public final class FST<T> implements Accountable {
    * @param out the DataOutput to write the FST bytes to
    */
   public void save(DataOutput metaOut, DataOutput out) throws IOException {
-    metadata.save(metaOut);
-    fstReader.writeTo(out);
+    metadata.save(metaOut);//仅仅fst meta写入 metaOut中 tmd文件
+    fstReader.writeTo(out);// 把root的fst写入tip文件
   }
 
   /** Writes an automaton to a file. */
@@ -562,7 +562,7 @@ public final class FST<T> implements Accountable {
   }
 
   /** returns true if the node at this address has any outgoing arcs */
-  public static <T> boolean targetHasArcs(Arc<T> arc) {
+  public static <T> boolean targetHasArcs(Arc<T> arc) {// 这个边还有出节点
     return arc.target() > 0;
   }
 
@@ -585,14 +585,14 @@ public final class FST<T> implements Accountable {
     arc.bitTableStart = in.getPosition();
     in.skipBytes(getNumPresenceBytes(arc.numArcs()));
   }
-
+  //
   /** Fills virtual 'start' arc, ie, an empty incoming arc to the FST's start node */
-  public Arc<T> getFirstArc(Arc<T> arc) {
-    T NO_OUTPUT = outputs.getNoOutput();
+  public Arc<T> getFirstArc(Arc<T> arc) { // 虚拟出来的一条边，它的下游是root
+    T NO_OUTPUT = outputs.getNoOutput(); // ByteSequenceOutputs
 
-    if (metadata.emptyOutput != null) {
-      arc.flags = BIT_FINAL_ARC | BIT_LAST_ARC;
-      arc.nextFinalOutput = metadata.emptyOutput;
+    if (metadata.emptyOutput != null) { // root根进来，不可能为空。（因为root都prefixLength=0，被明确指定了）
+      arc.flags = BIT_FINAL_ARC | BIT_LAST_ARC; // 就直接赋值乘了final+last，给标注了下
+      arc.nextFinalOutput = metadata.emptyOutput; //赋值了呀
       if (metadata.emptyOutput != NO_OUTPUT) {
         arc.flags = (byte) (arc.flags() | BIT_ARC_HAS_FINAL_OUTPUT);
       }
@@ -604,7 +604,7 @@ public final class FST<T> implements Accountable {
 
     // If there are no nodes, ie, the FST only accepts the
     // empty string, then startNode is 0
-    arc.target = metadata.startNode;
+    arc.target = metadata.startNode;// (从尾部开始存储，向前遍历节点，也就是最末尾写入其实是root节点下标)
     return arc;
   }
 
@@ -689,12 +689,12 @@ public final class FST<T> implements Accountable {
    * provided <code>arc</code> (2nd arg) in-place and returns it.
    *
    * @return Returns the second argument (<code>arc</code>).
-   */
+   */  // 从follow指向的target点读取第一条边，
   public Arc<T> readFirstTargetArc(Arc<T> follow, Arc<T> arc, BytesReader in) throws IOException {
     // int pos = address;
     // System.out.println("    readFirstTarget follow.target=" + follow.target + " isFinal=" +
     // follow.isFinal());
-    if (follow.isFinal()) {
+    if (follow.isFinal()) {//
       // Insert "fake" final first arc:
       arc.label = END_LABEL;
       arc.output = follow.nextFinalOutput();
@@ -714,13 +714,13 @@ public final class FST<T> implements Accountable {
       return readFirstRealTargetArc(follow.target(), arc, in);
     }
   }
-
-  private void readFirstArcInfo(long nodeAddress, Arc<T> arc, final BytesReader in)
+  // addNode()函数是写一个节点
+  private void readFirstArcInfo(long nodeAddress, Arc<T> arc, final BytesReader in) // 从这里in读取该地址address指向的那个边，放入scratchArc
       throws IOException {
-    in.setPosition(nodeAddress);
-
-    byte flags = arc.nodeFlags = in.readByte();
-    if (flags == ARCS_FOR_BINARY_SEARCH
+    in.setPosition(nodeAddress);// 从这个arc开始读取
+// 倒序，根据flag先把flag对应的值读取出来
+    byte flags = arc.nodeFlags = in.readByte();// 看592行，先写的flag，但是倒序导到了尾部，然后倒序读取
+    if (flags == ARCS_FOR_BINARY_SEARCH // 边二分搜索
         || flags == ARCS_FOR_DIRECT_ADDRESSING
         || flags == ARCS_FOR_CONTINUOUS) {
       // Special arc which is actually a node header for fixed length arcs.
@@ -736,14 +736,14 @@ public final class FST<T> implements Accountable {
       }
       arc.posArcsStart = in.getPosition();
     } else {
-      arc.nextArc = nodeAddress;
+      arc.nextArc = nodeAddress;//下次从哪里读取下一个边， 这里指的是本身，没啥意思，马上有的进来
       arc.bytesPerArc = 0;
     }
   }
 
   public Arc<T> readFirstRealTargetArc(long nodeAddress, Arc<T> arc, final BytesReader in)
       throws IOException {
-    readFirstArcInfo(nodeAddress, arc, in);
+    readFirstArcInfo(nodeAddress, arc, in);// 重新再读取当前边的信息，
     return readNextRealArc(arc, in);
   }
 
@@ -904,7 +904,7 @@ public final class FST<T> implements Accountable {
     // assert !flag(arc.flags, BIT_LAST_ARC);
 
     switch (arc.nodeFlags()) {
-      case ARCS_FOR_BINARY_SEARCH:
+      case ARCS_FOR_BINARY_SEARCH:// arcs_for_binary_search
       case ARCS_FOR_CONTINUOUS:
         assert arc.bytesPerArc() > 0;
         arc.arcIdx++;
@@ -913,7 +913,7 @@ public final class FST<T> implements Accountable {
         arc.flags = in.readByte();
         break;
 
-      case ARCS_FOR_DIRECT_ADDRESSING:
+      case ARCS_FOR_DIRECT_ADDRESSING:// arcs_for_direct_addressing
         assert BitTable.assertIsValid(arc, in);
         assert arc.arcIdx() == -1 || BitTable.isBitSet(arc.arcIdx(), arc, in);
         int nextIndex = BitTable.nextBitSet(arc.arcIdx(), arc, in);
@@ -922,7 +922,7 @@ public final class FST<T> implements Accountable {
       default:
         // Variable length arcs - linear search.
         assert arc.bytesPerArc() == 0;
-        in.setPosition(arc.nextArc());
+        in.setPosition(arc.nextArc());// 读取下一条边
         arc.flags = in.readByte();
     }
     return readArc(arc, in);
@@ -935,15 +935,15 @@ public final class FST<T> implements Accountable {
    */
   private Arc<T> readArc(Arc<T> arc, BytesReader in) throws IOException {
     if (arc.nodeFlags() == ARCS_FOR_DIRECT_ADDRESSING || arc.nodeFlags() == ARCS_FOR_CONTINUOUS) {
-      arc.label = arc.firstLabel() + arc.arcIdx();
+      arc.label = arc.firstLabel() + arc.arcIdx();// 估计边是连续的
     } else {
-      arc.label = readLabel(in);
+      arc.label = readLabel(in);// 再去读lebal
     }
 
     if (arc.flag(BIT_ARC_HAS_OUTPUT)) {
       arc.output = outputs.read(in);
-    } else {
-      arc.output = outputs.getNoOutput();
+    } else {// 没有output
+      arc.output = outputs.getNoOutput(); // 啥东西，没看懂
     }
 
     if (arc.flag(BIT_ARC_HAS_FINAL_OUTPUT)) {
@@ -954,13 +954,13 @@ public final class FST<T> implements Accountable {
 
     if (arc.flag(BIT_STOP_NODE)) {
       if (arc.flag(BIT_FINAL_ARC)) {
-        arc.target = FINAL_END_NODE;
+        arc.target = FINAL_END_NODE;// 没有结尾的边了
       } else {
         arc.target = NON_FINAL_END_NODE;
       }
       arc.nextArc = in.getPosition(); // Only useful for list.
     } else if (arc.flag(BIT_TARGET_NEXT)) {
-      arc.nextArc = in.getPosition(); // Only useful for list.
+      arc.nextArc = in.getPosition(); // Only useful for list.// 下一个arc的读取位置
       // TODO: would be nice to make this lazy -- maybe
       // caller doesn't need the target and is scanning arcs...
       if (!arc.flag(BIT_LAST_ARC)) {
@@ -975,9 +975,9 @@ public final class FST<T> implements Accountable {
           in.setPosition(arc.posArcsStart() - arc.bytesPerArc() * (long) numArcs);
         }
       }
-      arc.target = in.getPosition();
+      arc.target = in.getPosition();// eab，eac, ead来说，在存储e这个边的时候才有这个优化
     } else {
-      arc.target = readUnpackedNodeTarget(in);
+      arc.target = readUnpackedNodeTarget(in);//
       arc.nextArc = in.getPosition(); // Only useful for list.
     }
     return arc;
@@ -1003,13 +1003,13 @@ public final class FST<T> implements Accountable {
   // TODO: could we somehow [partially] tableize arc lookups
   // like automaton?
 
-  /**
+  /**  follow：可以认为就存储了target，不算边。
    * Finds an arc leaving the incoming arc, replacing the arc in place. This returns null if the arc
    * was not found, else the incoming arc.
    */
   public Arc<T> findTargetArc(int labelToMatch, Arc<T> follow, Arc<T> arc, BytesReader in)
       throws IOException {
-
+// 从in中读取一个字符labelToMatch对应的边, 将该边放入arc中
     if (labelToMatch == END_LABEL) {
       if (follow.isFinal()) {
         if (follow.target() <= 0) {
@@ -1028,15 +1028,15 @@ public final class FST<T> implements Accountable {
       }
     }
 
-    if (!targetHasArcs(follow)) {
+    if (!targetHasArcs(follow)) {//根节点不是
       return null;
     }
 
-    in.setPosition(follow.target());
+    in.setPosition(follow.target());//直接跑到对应fst位置
 
     // System.out.println("fta label=" + (char) labelToMatch);
 
-    byte flags = arc.nodeFlags = in.readByte();
+    byte flags = arc.nodeFlags = in.readByte(); // node节点首先读到的flags
     if (flags == ARCS_FOR_DIRECT_ADDRESSING) {
       arc.numArcs = in.readVInt(); // This is in fact the label range.
       arc.bytesPerArc = in.readVInt();
@@ -1055,7 +1055,7 @@ public final class FST<T> implements Accountable {
       arc.numArcs = in.readVInt();
       arc.bytesPerArc = in.readVInt();
       arc.posArcsStart = in.getPosition();
-
+      // 节点所有的边都排好序了, 二分查找该边。
       // Array is sparse; do binary search:
       int low = 0;
       int high = arc.numArcs() - 1;
@@ -1077,33 +1077,33 @@ public final class FST<T> implements Accountable {
         }
       }
       return null;
-    } else if (flags == ARCS_FOR_CONTINUOUS) {
-      arc.numArcs = in.readVInt();
+    } else if (flags == ARCS_FOR_CONTINUOUS) {// 若边是连续的话
+      arc.numArcs = in.readVInt();// 这个读取的是啥？
       arc.bytesPerArc = in.readVInt();
-      arc.firstLabel = readLabel(in);
+      arc.firstLabel = readLabel(in);// 第一条边
       arc.posArcsStart = in.getPosition();
-      int arcIndex = labelToMatch - arc.firstLabel();
-      if (arcIndex < 0 || arcIndex >= arc.numArcs()) {
+      int arcIndex = labelToMatch - arc.firstLabel();//是否比这个小
+      if (arcIndex < 0 || arcIndex >= arc.numArcs()) {// 若小的话，肯定就不满足了
         return null; // Before or after label range.
       }
       arc.arcIdx = arcIndex - 1;
       return readNextRealArc(arc, in);
     }
-
+    // 那只能线性探索每条边了
     // Linear scan
-    readFirstArcInfo(follow.target(), arc, in);
+    readFirstArcInfo(follow.target(), arc, in);// 啥不干
     in.setPosition(arc.nextArc());
-    while (true) {
+    while (true) {// 遍历每条边
       assert arc.bytesPerArc() == 0;
-      flags = arc.flags = in.readByte();
+      flags = arc.flags = in.readByte();// 一条边一条边的读取
       long pos = in.getPosition();
       int label = readLabel(in);
       if (label == labelToMatch) {
-        in.setPosition(pos);
-        return readArc(arc, in);
-      } else if (label > labelToMatch) {
+        in.setPosition(pos);//再回到读取label前的地方
+        return readArc(arc, in);// 找到边了，再继续下一个 边
+      } else if (label > labelToMatch) {//边肯定排序好了。大于就直接退出
         return null;
-      } else if (arc.isLast()) {
+      } else if (arc.isLast()) {// 如果是最后一个边，那么就直接返回空
         return null;
       } else {
         if (flag(flags, BIT_ARC_HAS_OUTPUT)) {
@@ -1146,7 +1146,7 @@ public final class FST<T> implements Accountable {
 
   /** Returns a {@link BytesReader} for this FST, positioned at position 0. */
   public BytesReader getBytesReader() {
-    return fstReader.getReverseBytesReader();
+    return fstReader.getReverseBytesReader(); // fstStore=OffHeapFSTStore
   }
 
   /** Reads bytes stored in an FST. */
@@ -1169,9 +1169,9 @@ public final class FST<T> implements Accountable {
     final int version;
     // if non-null, this FST accepts the empty string and
     // produces this output
-    T emptyOutput;
-    long startNode;
-    long numBytes;
+    T emptyOutput; //root block的prefix一定为""（主要是Lucene90BlockTreeTermsWriter.writeBlocks(0, pending.size())中，将前缀长度指定为0）, 存放的的是root block的output(fp, subblock的fst等)，可看 TermsWriter.finish()里面判断
+    long startNode;// 在fst中存储的root node的下标(从尾部开始存储，向前遍历节点，也就是最末尾写入其实是root节点下标，为啥倒序：因为CompileNode时候只能从后往前Compile)
+    long numBytes; // fst长度
 
     public FSTMetadata(
         INPUT_TYPE inputType,
@@ -1214,29 +1214,29 @@ public final class FST<T> implements Accountable {
       CodecUtil.writeHeader(metaOut, FILE_FORMAT_NAME, VERSION_CURRENT);
       // TODO: really we should encode this as an arc, arriving
       // to the root node, instead of special casing here:
-      if (emptyOutput != null) {
+      if (emptyOutput != null) {// 在 FSTCompiler.setEmptyOutput中会设置，主要
         // Accepts empty string
-        metaOut.writeByte((byte) 1);
+        metaOut.writeByte((byte) 1);// 首先写入1，在FST初始化的时候会用。426行
 
         // Serialize empty-string output:
         ByteBuffersDataOutput ros = new ByteBuffersDataOutput();
-        outputs.writeFinalOutput(emptyOutput, ros);
+        outputs.writeFinalOutput(emptyOutput, ros);// 将emptyOutput数据写入ros中
         byte[] emptyOutputBytes = ros.toArrayCopy();
         int emptyLen = emptyOutputBytes.length;
 
         // reverse
         final int stopAt = emptyLen / 2;
         int upto = 0;
-        while (upto < stopAt) {
+        while (upto < stopAt) { // 字符串首尾颠倒位置,为了读取的时候正确读取出来
           final byte b = emptyOutputBytes[upto];
           emptyOutputBytes[upto] = emptyOutputBytes[emptyLen - upto - 1];
           emptyOutputBytes[emptyLen - upto - 1] = b;
           upto++;
         }
-        metaOut.writeVInt(emptyLen);
+        metaOut.writeVInt(emptyLen);// 先写长度，再写内容
         metaOut.writeBytes(emptyOutputBytes, 0, emptyLen);
       } else {
-        metaOut.writeByte((byte) 0);
+        metaOut.writeByte((byte) 0);// 告诉没空string
       }
       final byte t;
       if (inputType == INPUT_TYPE.BYTE1) {
@@ -1246,8 +1246,8 @@ public final class FST<T> implements Accountable {
       } else {
         t = 2;
       }
-      metaOut.writeByte(t);
-      metaOut.writeVLong(startNode);
+      metaOut.writeByte(t);// 写入fst类型
+      metaOut.writeVLong(startNode);// fst写入的终点位置
       metaOut.writeVLong(numBytes);
     }
   }

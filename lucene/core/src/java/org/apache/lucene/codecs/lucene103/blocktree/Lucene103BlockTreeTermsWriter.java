@@ -545,8 +545,8 @@ public final class Lucene103BlockTreeTermsWriter extends FieldsConsumer {
     private final FieldInfo fieldInfo;
     private long numTerms;
     final FixedBitSet docsSeen;
-    long sumTotalTermFreq;
-    long sumDocFreq;
+    long sumTotalTermFreq;//// 所有词出现的总次数， 若keyword字段，不保存词频，则为-1
+    long sumDocFreq;// 每个词在多个文档中出现过词频。然后将所有词的该值相加，即为sumDocFreq
 
     // Records index into pending where the current prefix at that
     // length "started"; for example, if current term starts with 't',
@@ -1084,7 +1084,7 @@ public final class Lucene103BlockTreeTermsWriter extends FieldsConsumer {
         metaOut.writeVInt(fieldInfo.number);
         metaOut.writeVLong(numTerms);
         assert fieldInfo.getIndexOptions() != IndexOptions.NONE;
-        if (fieldInfo.getIndexOptions() != IndexOptions.DOCS) {
+        if (fieldInfo.getIndexOptions() != IndexOptions.DOCS) {// 若keyword的话，只存储sumDocFreq。在读取端，不保存词频，则sumDocFreq=sumTotalTermFreq
           metaOut.writeVLong(sumTotalTermFreq);
         }
         metaOut.writeVLong(sumDocFreq);

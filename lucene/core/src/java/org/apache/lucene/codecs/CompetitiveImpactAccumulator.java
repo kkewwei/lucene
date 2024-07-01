@@ -61,10 +61,10 @@ public final class CompetitiveImpactAccumulator {
    * Accumulate a (freq,norm) pair, updating this structure if there is no equivalent or more
    * competitive entry already.
    */
-  public void add(int freq, long norm) {
+  public void add(int freq, long norm) {// 每隔文档都会进来一次
     if (norm >= Byte.MIN_VALUE && norm <= Byte.MAX_VALUE) {
       int index = Byte.toUnsignedInt((byte) norm);
-      maxFreqs[index] = Math.max(maxFreqs[index], freq);
+      maxFreqs[index] = Math.max(maxFreqs[index], freq);// 始终统计最大的词频那个
     } else {
       add(new Impact(freq, norm), otherFreqNormPairs);
     }
@@ -100,11 +100,11 @@ public final class CompetitiveImpactAccumulator {
 
   /** Get the set of competitive freq and norm pairs, ordered by increasing freq and norm. */
   public List<Impact> getCompetitiveFreqNormPairs() {
-    List<Impact> impacts = new ArrayList<>();
+    List<Impact> impacts = new ArrayList<>();// 统计doc内某个term频率递增的频率
     int maxFreqForLowerNorms = 0;
     for (int i = 0; i < maxFreqs.length; ++i) {
       int maxFreq = maxFreqs[i];
-      if (maxFreq > maxFreqForLowerNorms) {
+      if (maxFreq > maxFreqForLowerNorms) {// 一直找频率最大的那些doc，反正必须要是递增的。这样便于快速跳跃文档
         impacts.add(new Impact(maxFreq, (byte) i));
         maxFreqForLowerNorms = maxFreq;
       }
@@ -123,7 +123,7 @@ public final class CompetitiveImpactAccumulator {
   }
 
   private void add(Impact newEntry, TreeSet<Impact> freqNormPairs) {
-    Impact next = freqNormPairs.ceiling(newEntry);
+    Impact next = freqNormPairs.ceiling(newEntry);// 提供大于等于newEntry的最小元素
     if (next == null) {
       // nothing is more competitive
       freqNormPairs.add(newEntry);

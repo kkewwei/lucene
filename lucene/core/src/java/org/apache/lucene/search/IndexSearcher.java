@@ -83,7 +83,7 @@ public class IndexSearcher {
   private static QueryCache DEFAULT_QUERY_CACHE;
 
   @SuppressWarnings("NonFinalStaticField")
-  private static QueryCachingPolicy DEFAULT_CACHING_POLICY = new UsageTrackingQueryCachingPolicy();
+  private static QueryCachingPolicy DEFAULT_CACHING_POLICY = new UsageTrackingQueryCachingPolicy();// es和lucene中都是这个
 
   private QueryTimeout queryTimeout = null;
   // partialResult may be set on one of the threads of the executor. It may be correct to not make
@@ -109,16 +109,16 @@ public class IndexSearcher {
    * Thresholds for index slice allocation logic. To change the default, extend <code> IndexSearcher
    * </code> and use custom values
    */
-  private static final int MAX_DOCS_PER_SLICE = 250_000;
+  private static final int MAX_DOCS_PER_SLICE = 250_000;// 默认一个文档数25万个
 
   private static final int MAX_SEGMENTS_PER_SLICE = 5;
-
-  final IndexReader reader; // package private for testing!
-
+  // 查询时会获取这个值
+  final IndexReader reader; // package private for testing!   查询时是ExitableLeafReader,refresh时是ElasticsearchDirectoryReader
+  // refresh的时候是ElasticsearchDirectoryReader
   // NOTE: these members might change in incompatible ways
   // in the next release
-  protected final IndexReaderContext readerContext;
-  protected final List<LeafReaderContext> leafContexts;
+  protected final IndexReaderContext readerContext; // LeafReaderContext
+  protected final List<LeafReaderContext> leafContexts;// 该shard所有的segments
 
   private volatile LeafSlice[] leafSlices;
 
@@ -128,7 +128,7 @@ public class IndexSearcher {
   // the default Similarity
   private static final Similarity defaultSimilarity = new BM25Similarity();
 
-  private QueryCache queryCache = DEFAULT_QUERY_CACHE;
+  private QueryCache queryCache = DEFAULT_QUERY_CACHE;//ES中是OptOutQueryCache
   private QueryCachingPolicy queryCachingPolicy = DEFAULT_CACHING_POLICY;
 
   /**
@@ -205,7 +205,7 @@ public class IndexSearcher {
    * @lucene.experimental
    */
   public IndexSearcher(IndexReader r, Executor executor) {
-    this(r.getContext(), executor);
+    this(r.getContext(), executor); // os中只有一个入口，DefaultSearchContext构造函数中， r.getContext()会跑到CompositeReader.getContext()
   }
 
   /**
@@ -221,7 +221,7 @@ public class IndexSearcher {
    * @see IndexReader#getContext()
    * @lucene.experimental
    */
-  public IndexSearcher(IndexReaderContext context, Executor executor) {
+  public IndexSearcher(IndexReaderContext context, Executor executor) {//context =CompositeReaderContext
     assert context.isTopLevel
         : "IndexSearcher's ReaderContext must be topLevel for reader " + context.reader();
     reader = context.reader();
@@ -229,7 +229,7 @@ public class IndexSearcher {
         executor == null ? new TaskExecutor(Runnable::run) : new TaskExecutor(executor);
     this.readerContext = context;
     leafContexts = context.leaves();
-    if (executor == null) {
+    if (executor == null) {//若为null，就产生一个partition，包含所有的segment。
       leafSlices =
           leafContexts.isEmpty()
               ? new LeafSlice[0]
@@ -344,7 +344,7 @@ public class IndexSearcher {
    *     each gets its own slice assigned.
    * @return the array of slices
    */
-  public static LeafSlice[] slices(
+  public static LeafSlice[] slices(// 一个元素就是一组，默认5个segment
       List<LeafReaderContext> leaves,
       int maxDocsPerSlice,
       int maxSegmentsPerSlice,
@@ -352,7 +352,7 @@ public class IndexSearcher {
 
     // Make a copy so we can sort:
     List<LeafReaderContext> sortedLeaves = new ArrayList<>(leaves);
-
+    // 降序排序
     // Sort by maxDoc, descending:
     sortedLeaves.sort(Collections.reverseOrder(Comparator.comparingInt(l -> l.reader().maxDoc())));
 
@@ -372,7 +372,7 @@ public class IndexSearcher {
           group = new ArrayList<>();
           group.add(ctx);
 
-          groupedLeaves.add(group);
+          groupedLeaves.add(group);// slice分组，最多maxDocsPerSlice/maxSegmentsPerSlice2个segment
         } else {
           group.add(ctx);
         }
@@ -385,7 +385,7 @@ public class IndexSearcher {
       }
     }
 
-    LeafSlice[] slices = new LeafSlice[groupedLeaves.size()];
+    LeafSlice[] slices = new LeafSlice[groupedLeaves.size()];// 分组好的
     int upto = 0;
     for (List<LeafReaderContext> currentLeaf : groupedLeaves) {
       slices[upto] = LeafSlice.entireSegments(currentLeaf);
@@ -401,16 +401,16 @@ public class IndexSearcher {
     int currentSliceNumDocs = 0;
     List<LeafReaderContextPartition> group = null;
     for (LeafReaderContext ctx : sortedLeaves) {
-      if (ctx.reader().maxDoc() > maxDocsPerSlice) {
+      if (ctx.reader().maxDoc() > maxDocsPerSlice) {// 吐过超过了一个slice的大小
         assert group == null;
         // if the segment does not fit in a single slice, we split it into maximum 5 partitions of
         // equal size
-        int numSlices = Math.min(5, Math.ceilDiv(ctx.reader().maxDoc(), maxDocsPerSlice));
+        int numSlices = Math.min(5, Math.ceilDiv(ctx.reader().maxDoc(), maxDocsPerSlice));//不超过5个的slince
         int numDocs = ctx.reader().maxDoc() / numSlices;
         int maxDocId = numDocs;
         int minDocId = 0;
         for (int i = 0; i < numSlices - 1; i++) {
-          groupedLeafPartitions.add(
+          groupedLeafPartitions.add(// 文档大小来拆分
               Collections.singletonList(
                   LeafReaderContextPartition.createFromAndTo(ctx, minDocId, maxDocId)));
           minDocId = maxDocId;
@@ -420,7 +420,7 @@ public class IndexSearcher {
         groupedLeafPartitions.add(
             Collections.singletonList(
                 LeafReaderContextPartition.createFromAndTo(ctx, minDocId, ctx.reader().maxDoc())));
-      } else {
+      } else {// 若没超过一个slice的大小
         if (group == null) {
           group = new ArrayList<>();
           groupedLeafPartitions.add(group);
@@ -451,7 +451,7 @@ public class IndexSearcher {
 
   /** Return the {@link IndexReader} this searches. */
   public IndexReader getIndexReader() {
-    return reader;
+    return reader; // 查询时是ExitableLeafReader,refresh时是ElasticsearchDirectoryReader
   }
 
   /**
@@ -642,12 +642,12 @@ public class IndexSearcher {
    */
   @Deprecated
   public void search(Query query, Collector collector) throws IOException {
-    query = rewrite(query, collector.scoreMode().needsScores());
-    Weight weight = createWeight(query, collector.scoreMode(), 1);
+    query = rewrite(query, collector.scoreMode().needsScores());// 查询会进来，跑这里，query可以是IndexOrDocValuesQuery。会接着进入ContextIndexSearcher.rewrite
+    Weight weight = createWeight(query, collector.scoreMode(), 1);// createWeight跑到ContextIndexSearcher
     collector.setWeight(weight);
     for (LeafReaderContext ctx : leafContexts) { // search each subreader
       searchLeaf(ctx, 0, DocIdSetIterator.NO_MORE_DOCS, weight, collector);
-    }
+    }//会进入ContextIndexSearcher.search()
   }
 
   /** Returns true if any search hit the {@link #setTimeout(QueryTimeout) timeout}. */
@@ -763,7 +763,7 @@ public class IndexSearcher {
 
   private <C extends Collector, T> T search(
       Weight weight, CollectorManager<C, T> collectorManager, C firstCollector) throws IOException {
-    final LeafSlice[] leafSlices = getSlices();
+    final LeafSlice[] leafSlices = getSlices();// 开始进行切割成slice
     if (leafSlices.length == 0) {
       // there are no segments, nothing to offload to the executor, but we do need to call reduce to
       // create some kind of empty result
@@ -775,7 +775,7 @@ public class IndexSearcher {
       final ScoreMode scoreMode = firstCollector.scoreMode();
       for (int i = 1; i < leafSlices.length; ++i) {
         final C collector = collectorManager.newCollector();
-        collectors.add(collector);
+        collectors.add(collector);// 需要收集四个的
         if (scoreMode != collector.scoreMode()) {
           throw new IllegalStateException(
               "CollectorManager does not always produce collectors with the same score mode");
@@ -786,13 +786,13 @@ public class IndexSearcher {
         final LeafReaderContextPartition[] leaves = leafSlices[i].partitions;
         final C collector = collectors.get(i);
         listTasks.add(
-            () -> {
+            () -> {// 并发搜索
               search(leaves, weight, collector);
               return collector;
             });
       }
       List<C> results = taskExecutor.invokeAll(listTasks);
-      return collectorManager.reduce(results);
+      return collectorManager.reduce(results); // 会将单个分片的所有slice聚合结果合并成一个
     }
   }
 
@@ -884,7 +884,7 @@ public class IndexSearcher {
     Query query = original;
     for (Query rewrittenQuery = query.rewrite(this);
         rewrittenQuery != query;
-        rewrittenQuery = query.rewrite(this)) {
+        rewrittenQuery = query.rewrite(this)) {// 递归迭代式重写。让query自己重新写
       query = rewrittenQuery;
     }
     query.visit(getNumClausesCheckVisitor());
@@ -984,12 +984,12 @@ public class IndexSearcher {
    * configured. The query is assumed to have been {@link #rewrite(Query)}-en already.
    *
    * @lucene.experimental
-   */
+   */ // query可以是IndexOrDocValuesQuery
   public Weight createWeight(Query query, ScoreMode scoreMode, float boost) throws IOException {
-    final QueryCache queryCache = this.queryCache;
-    Weight weight = query.createWeight(this, scoreMode, boost);
-    if (scoreMode.needsScores() == false && queryCache != null) {
-      weight = queryCache.doCache(weight, queryCachingPolicy);
+    final QueryCache queryCache = this.queryCache;// lucene中是LRUQueryCache，es中是 OptOutQueryCache
+    Weight weight = query.createWeight(this, scoreMode, boost);// 每个query类型都有一个对应的Weight, 可能会对FST遍历查找了
+    if (scoreMode.needsScores() == false && queryCache != null) { // 不需要打分的话，可以尝试从缓存中找下
+      weight = queryCache.doCache(weight, queryCachingPolicy); // 看样子还是可能从缓存中找数据了
     }
     return weight;
   }
@@ -1159,10 +1159,10 @@ public class IndexSearcher {
     long docCount = 0;
     long sumTotalTermFreq = 0;
     long sumDocFreq = 0;
-    for (LeafReaderContext leaf : reader.leaves()) {
+    for (LeafReaderContext leaf : reader.leaves()) {// 这个字段总的文档数
       final Terms terms = Terms.getTerms(leaf.reader(), field);
-      docCount += terms.getDocCount();
-      sumTotalTermFreq += terms.getSumTotalTermFreq();
+      docCount += terms.getDocCount();//
+      sumTotalTermFreq += terms.getSumTotalTermFreq();// 这个字段的所有词
       sumDocFreq += terms.getSumDocFreq();
     }
     if (docCount == 0) {

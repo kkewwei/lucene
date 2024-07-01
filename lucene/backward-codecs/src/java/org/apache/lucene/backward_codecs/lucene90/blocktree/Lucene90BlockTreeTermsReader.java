@@ -159,7 +159,7 @@ public final class Lucene90BlockTreeTermsReader extends FieldsProducer {
 
       // Read per-field details
       String metaName =
-          IndexFileNames.segmentFileName(segment, state.segmentSuffix, TERMS_META_EXTENSION);
+          IndexFileNames.segmentFileName(segment, state.segmentSuffix, TERMS_META_EXTENSION); // tmd文件
       IntObjectHashMap<FieldReader> fieldMap = null;
       Throwable priorE = null;
       long indexLength = -1, termsLength = -1;
@@ -174,31 +174,31 @@ public final class Lucene90BlockTreeTermsReader extends FieldsProducer {
               state.segmentSuffix);
           postingsReader.init(metaIn, state);
 
-          final int numFields = metaIn.readVInt();
+          final int numFields = metaIn.readVInt();// tmd文件
           if (numFields < 0) {
             throw new CorruptIndexException("invalid numFields: " + numFields, metaIn);
           }
           fieldMap = new IntObjectHashMap<>(numFields);
-          for (int i = 0; i < numFields; ++i) {
+          for (int i = 0; i < numFields; ++i) {// 多个字段
             final int field = metaIn.readVInt();
-            final long numTerms = metaIn.readVLong();
+            final long numTerms = metaIn.readVLong();// 词典词的个数
             if (numTerms <= 0) {
               throw new CorruptIndexException(
                   "Illegal numTerms for field number: " + field, metaIn);
             }
-            final BytesRef rootCode = readBytesRef(metaIn);
+            final BytesRef rootCode = readBytesRef(metaIn); // tdm中
             final FieldInfo fieldInfo = state.fieldInfos.fieldInfo(field);
             if (fieldInfo == null) {
               throw new CorruptIndexException("invalid field number: " + field, metaIn);
             }
-            final long sumTotalTermFreq = metaIn.readVLong();
+            final long sumTotalTermFreq = metaIn.readVLong(); //这个semgent这个字段所有词的count（重复词算多个）
             // when frequencies are omitted, sumDocFreq=sumTotalTermFreq and only one value is
             // written.
-            final long sumDocFreq =
+            final long sumDocFreq = // 每个词在多少个文档中出现过，然后文档相加
                 fieldInfo.getIndexOptions() == IndexOptions.DOCS
                     ? sumTotalTermFreq
                     : metaIn.readVLong();
-            final int docCount = metaIn.readVInt();
+            final int docCount = metaIn.readVInt();//这个字段(所有term)再多少个文档中出现过，就是docsSeen.cardinality()
             BytesRef minTerm = readBytesRef(metaIn);
             BytesRef maxTerm = readBytesRef(metaIn);
             if (numTerms == 1) {
@@ -221,7 +221,7 @@ public final class Lucene90BlockTreeTermsReader extends FieldsProducer {
                   "invalid sumTotalTermFreq: " + sumTotalTermFreq + " sumDocFreq: " + sumDocFreq,
                   metaIn);
             }
-            final long indexStartFP = metaIn.readVLong();
+            final long indexStartFP = metaIn.readVLong(); // tdm文件起始位置
             FieldReader previous =
                 fieldMap.put(
                     fieldInfo.number,
@@ -234,8 +234,8 @@ public final class Lucene90BlockTreeTermsReader extends FieldsProducer {
                         sumDocFreq,
                         docCount,
                         indexStartFP,
-                        metaIn,
-                        indexIn,
+                        metaIn,// tdm文件
+                        indexIn, // tip文件
                         minTerm,
                         maxTerm));
             if (previous != null) {
@@ -318,7 +318,7 @@ public final class Lucene90BlockTreeTermsReader extends FieldsProducer {
   public Terms terms(String field) throws IOException {
     assert field != null;
     FieldInfo fieldInfo = fieldInfos.fieldInfo(field);
-    return fieldInfo == null ? null : fieldMap.get(fieldInfo.number);
+    return fieldInfo == null ? null : fieldMap.get(fieldInfo.number); // 将返回 FieldReader
   }
 
   @Override

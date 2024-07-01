@@ -48,7 +48,7 @@ public class Transition implements Accountable {
    * Remembers where we are in the iteration; init to -1 to provoke exception if nextTransition is
    * called without first initTransition.
    */
-  int transitionUpto = -1;
+  int transitionUpto = -1;// 还没有获取到的transitionUpto
 
   @Override
   public String toString() {

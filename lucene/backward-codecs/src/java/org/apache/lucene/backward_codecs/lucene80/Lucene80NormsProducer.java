@@ -40,9 +40,9 @@ import org.apache.lucene.util.IOUtils;
 /** Reader for {@link Lucene80NormsFormat} */
 final class Lucene80NormsProducer extends NormsProducer implements Cloneable {
   // metadata maps (just file pointers and minimal stuff)
-  private final Map<Integer, NormsEntry> norms = new HashMap<>();
+  private final Map<Integer, NormsEntry> norms = new HashMap<>(); // 读取出来
   private final int maxDoc;
-  private IndexInput data;
+  private IndexInput data; //数据文件读取部分
   private boolean merging;
   private Map<Integer, IndexInput> disiInputs;
   private Map<Integer, RandomAccessInput> disiJumpTables;
@@ -56,12 +56,12 @@ final class Lucene80NormsProducer extends NormsProducer implements Cloneable {
       String metaExtension)
       throws IOException {
     maxDoc = state.segmentInfo.maxDoc();
-    String metaName =
+    String metaName =// _v.nvm
         IndexFileNames.segmentFileName(state.segmentInfo.name, state.segmentSuffix, metaExtension);
     int version = -1;
 
     // read in the entries from the metadata file.
-    try (ChecksumIndexInput in =
+    try (ChecksumIndexInput in =//_dk.nvm
         EndiannessReverserUtil.openChecksumInput(state.directory, metaName, state.context)) {
       Throwable priorE = null;
       try {
@@ -81,7 +81,7 @@ final class Lucene80NormsProducer extends NormsProducer implements Cloneable {
       }
     }
 
-    String dataName =
+    String dataName =//_dk.nvd
         IndexFileNames.segmentFileName(state.segmentInfo.name, state.segmentSuffix, dataExtension);
     data = EndiannessReverserUtil.openInput(state.directory, dataName, state.context);
     boolean success = false;
@@ -479,7 +479,7 @@ final class Lucene80NormsProducer extends NormsProducer implements Cloneable {
 
   @Override
   public void checkIntegrity() throws IOException {
-    CodecUtil.checksumEntireFile(data);
+    CodecUtil.checksumEntireFile(data); // 这里校验的是nvd文件
   }
 
   @Override

@@ -202,7 +202,7 @@ public class Lucene104Codec extends Codec {
    * future version of Lucene are only guaranteed to be able to read the default implementation.
    */
   public KnnVectorsFormat getKnnVectorsFormatForField(String field) {
-    return defaultKnnVectorsFormat;
+    return defaultKnnVectorsFormat; //默认Lucene99HnswVectorsFormat
   }
 
   @Override

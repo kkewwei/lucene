@@ -27,7 +27,7 @@ import org.apache.lucene.search.BooleanClause.Occur;
 import org.apache.lucene.search.similarities.Similarity;
 
 /** Expert: the Weight for BooleanQuery, used to normalize, score and explain these queries. */
-final class BooleanWeight extends Weight {
+final class BooleanWeight extends Weight {// 比较重要，进行合并
   /** The Similarity implementation. */
   final Similarity similarity;
 
@@ -43,7 +43,7 @@ final class BooleanWeight extends Weight {
     }
   }
 
-  final ArrayList<WeightedBooleanClause> weightedClauses;
+  final ArrayList<WeightedBooleanClause> weightedClauses;// 统计每个算子自己的WeightedBooleanClause
   final ScoreMode scoreMode;
 
   BooleanWeight(BooleanQuery query, IndexSearcher searcher, ScoreMode scoreMode, float boost)
@@ -53,10 +53,10 @@ final class BooleanWeight extends Weight {
     this.scoreMode = scoreMode;
     this.similarity = searcher.getSimilarity();
     weightedClauses = new ArrayList<>();
-    for (BooleanClause c : query) {
+    for (BooleanClause c : query) {//(这里的c比较简单，若是bool的话，只有filter和must_not才不需要打分）
       Weight w =
-          searcher.createWeight(
-              c.query(), c.isScoring() ? scoreMode : ScoreMode.COMPLETE_NO_SCORES, boost);
+          searcher.createWeight(// 若上层和本query，只要有一个不打分，那么本query就不打分。本身或者上层只要有一个缓存，若不需要的分，那么就直接缓存了，然后还遍历所有匹配的结果
+              c.query(), c.isScoring() ? scoreMode : ScoreMode.COMPLETE_NO_SCORES, boost); // boolean时这里会判断，相当于这里给包裹了一层
       weightedClauses.add(new WeightedBooleanClause(c, w));
     }
   }
@@ -272,13 +272,13 @@ final class BooleanWeight extends Weight {
   @Override
   public boolean isCacheable(LeafReaderContext ctx) {
     if (query.clauses().size()
-        > AbstractMultiTermQueryConstantScoreWrapper.BOOLEAN_REWRITE_TERM_COUNT_THRESHOLD) {
+        > AbstractMultiTermQueryConstantScoreWrapper.BOOLEAN_REWRITE_TERM_COUNT_THRESHOLD) {//  若bool里面条件超过16个，就不适合cache了
       // Disallow caching large boolean queries to not encourage users
       // to build large boolean queries as a workaround to the fact that
       // we disallow caching large TermInSetQueries.
-      return false;
+      return false;// 若长度太长，就不会缓存了。不鼓励太多条件
     }
-    for (WeightedBooleanClause wc : weightedClauses) {
+    for (WeightedBooleanClause wc : weightedClauses) {// 若一个不适合cache，那么就不cache了
       Weight w = wc.weight;
       if (w.isCacheable(ctx) == false) return false;
     }
@@ -297,13 +297,13 @@ final class BooleanWeight extends Weight {
     for (WeightedBooleanClause wc : weightedClauses) {
       Weight w = wc.weight;
       BooleanClause c = wc.clause;
-      ScorerSupplier subScorer = w.scorerSupplier(context);
+      ScorerSupplier subScorer = w.scorerSupplier(context);// TermWeight使用默认实现。这里也比较
       if (subScorer == null) {
         if (c.isRequired()) {
           return null;
         }
       } else {
-        scorers.get(c.occur()).add(subScorer);
+        scorers.get(c.occur()).add(subScorer);// 每个都进
       }
     }
 
@@ -321,7 +321,7 @@ final class BooleanWeight extends Weight {
         && scorers.get(Occur.SHOULD).isEmpty()) {
       // no required and optional clauses.
       return null;
-    } else if (scorers.get(Occur.SHOULD).size() < minShouldMatch) {
+    } else if (scorers.get(Occur.SHOULD).size() < minShouldMatch) {// 若should个数小于阈值，直接推出
       // either >1 req scorer, or there are 0 req scorers and at least 1
       // optional scorer. Therefore if there are not enough optional scorers
       // no documents will be matched by the query

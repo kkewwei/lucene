@@ -30,8 +30,8 @@ import org.apache.lucene.util.LongsRef;
 
 final class DocIdsWriter {
 
-  private static final byte CONTINUOUS_IDS = (byte) -2;
-  private static final byte BITSET_IDS = (byte) -1;
+  private static final byte CONTINUOUS_IDS = (byte) -2;//在bkd数中， docList是从小到大排好序，切连续的
+  private static final byte BITSET_IDS = (byte) -1;//在一个叶子上的文档Id很相近，最大最小不超过512*4，靠近的话，则可以使用bitset存储，使用更好
   private static final byte DELTA_BPV_16 = (byte) 16;
   private static final byte BPV_21 = (byte) 21;
   private static final byte BPV_24 = (byte) 24;
@@ -64,31 +64,31 @@ final class DocIdsWriter {
     this.scratch = new int[maxPointsInLeaf];
     this.version = version;
   }
-
+  // Id有序无序都可以下载， 写入docIdList
   void writeDocIds(int[] docIds, int start, int count, DataOutput out) throws IOException {
     // docs can be sorted either when all docs in a block have the same value
     // or when a segment is sorted
     boolean strictlySorted = true;
     int min = docIds[0];
     int max = docIds[0];
-    for (int i = 1; i < count; ++i) {
+    for (int i = 1; i < count; ++i) {// 自带检查，若后面的数小于前面的数,是递增数列
       int last = docIds[start + i - 1];
       int current = docIds[start + i];
       if (last >= current) {
         strictlySorted = false;
       }
-      min = Math.min(min, current);
+      min = Math.min(min, current);// 找最大值和最小值
       max = Math.max(max, current);
     }
 
     int min2max = max - min + 1;
-    if (strictlySorted) {
+    if (strictlySorted) { // 若docId排是增增量排序好的
       if (min2max == count) {
         // continuous ids, typically happens when segment is sorted
         out.writeByte(CONTINUOUS_IDS);
         out.writeVInt(docIds[start]);
         return;
-      } else if (min2max <= (count << 4)) {
+      } else if (min2max <= (count << 4)) {//在一个叶子上的文档Id很相近，最大最小不超过512*4，靠近的话，则可以使用bitset存储，使用更好
         assert min2max > count : "min2max: " + min2max + ", count: " + count;
         // Only trigger bitset optimization when max - min + 1 <= 16 * count in order to avoid
         // expanding too much storage.
@@ -99,14 +99,14 @@ final class DocIdsWriter {
       }
     }
 
-    if (min2max <= 0xFFFF) {
+    if (min2max <= 0xFFFF) {// 65536,每个文档最多使用16位
       out.writeByte(DELTA_BPV_16);
       for (int i = 0; i < count; i++) {
         scratch[i] = docIds[start + i] - min;
       }
       out.writeVInt(min);
       final int halfLen = count >> 1;
-      for (int i = 0; i < halfLen; ++i) {
+      for (int i = 0; i < halfLen; ++i) {// 每位需要16位，存储的时候0+256存放在同一个int中
         scratch[i] = scratch[halfLen + i] | (scratch[i] << 16);
       }
       for (int i = 0; i < halfLen; i++) {
@@ -115,10 +115,10 @@ final class DocIdsWriter {
       if ((count & 1) == 1) {
         out.writeShort((short) scratch[count - 1]);
       }
-    } else {
+    } else {// min2max小于65536， 可以使用20位保存
       if (max <= 0x1FFFFF && version >= BKDWriter.VERSION_VECTORIZE_BPV24_AND_INTRODUCE_BPV21) {
         out.writeByte(BPV_21);
-        final int oneThird = floorToMultipleOf16(count / 3);
+        final int oneThird = floorToMultipleOf16(count / 3);// 取整，必须时16的倍数
         final int numInts = oneThird * 2;
         for (int i = 0; i < numInts; i++) {
           scratch[i] = docIds[i + start] << 11;
@@ -140,12 +140,12 @@ final class DocIdsWriter {
           out.writeShort((short) docIds[start + i]);
           out.writeByte((byte) (docIds[start + i] >>> 16));
         }
-      } else if (max <= 0xFFFFFF) {
+      } else if (max <= 0xFFFFFF) {// 最大值小于1677215，1<<24
         out.writeByte(BPV_24);
         if (version < BKDWriter.VERSION_VECTORIZE_BPV24_AND_INTRODUCE_BPV21) {
           writeScalarInts24(docIds, start, count, out);
         } else {
-          // encode the docs in the format that can be vectorized decoded.
+          // encode the docs in the format that can be vectorized decoded. 可以被矢量化解码
           final int quarter = count >> 2;
           final int numInts = quarter * 3;
           for (int i = 0; i < numInts; i++) {
@@ -165,8 +165,8 @@ final class DocIdsWriter {
             out.writeByte((byte) (docIds[start + i] >>> 16));
           }
         }
-      } else {
-        out.writeByte(BPV_32);
+      } else {// 最大值已经超过1677215，1<<24，min2max大于65536
+        out.writeByte(BPV_32);// 每个文档使用32位, 1>>24
         for (int i = 0; i < count; i++) {
           out.writeInt(docIds[start + i]);
         }
@@ -235,24 +235,24 @@ final class DocIdsWriter {
     out.writeLong(currentWord);
     assert currentWordIndex + 1 == totalWordCount;
   }
-
+  // 参考BKDWriter.build()中叶子存储过程：writeLeafBlockDocs函数,先存储的docCount，
   /** Read {@code count} integers into {@code docIDs}. */
   void readInts(IndexInput in, int count, int[] docIDs) throws IOException {
     final int bpv = in.readByte();
     switch (bpv) {
-      case CONTINUOUS_IDS:
+      case CONTINUOUS_IDS: // 叶子都是连续的
         readContinuousIds(in, count, docIDs);
         break;
-      case BITSET_IDS:
+      case BITSET_IDS:// //在一个叶子上的文档Id很相近，最大最小不超过512*4，靠近的话，则可以使用bitset存储，使用更好
         readBitSet(in, count, docIDs);
         break;
-      case DELTA_BPV_16:
+      case DELTA_BPV_16:// 每个docId占用16位，2个占用一个int
         readDelta16(in, count, docIDs);
         break;
       case BPV_21:
         readInts21(in, count, docIDs);
         break;
-      case BPV_24:
+      case BPV_24: //
         if (version < BKDWriter.VERSION_VECTORIZE_BPV24_AND_INTRODUCE_BPV21) {
           readScalarInts24(in, count, docIDs);
         } else {
@@ -316,7 +316,7 @@ final class DocIdsWriter {
     if (count == BKDConfig.DEFAULT_MAX_POINTS_IN_LEAF_NODE) {
       // Same format, but enabling the JVM to specialize the decoding logic for the default number
       // of points per node proved to help on benchmarks
-      decode16(docIds, BKDConfig.DEFAULT_MAX_POINTS_IN_LEAF_NODE / 2, min);
+      decode16(docIds, BKDConfig.DEFAULT_MAX_POINTS_IN_LEAF_NODE / 2, min);// 解码16位
     } else {
       decode16(docIds, half, min);
     }

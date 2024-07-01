@@ -46,20 +46,20 @@ import java.util.concurrent.atomic.AtomicInteger;
  * @lucene.internal
  */
 public abstract class BaseCompositeReader<R extends IndexReader> extends CompositeReader {
-  private final R[] subReaders;
+  private final R[] subReaders;// SegmentReader。 每次查询直接是从这里拿的
 
   /** A comparator for sorting sub-readers */
   protected final Comparator<R> subReadersSorter;
 
   private final int[] starts; // 1st docno for each reader
-  private final int maxDoc;
+  private final int maxDoc;// subReaders里面所有文档的总和
   private AtomicInteger numDocs = new AtomicInteger(-1); // computed lazily
 
   /**
    * List view solely for {@link #getSequentialSubReaders()}, for effectiveness the array is used
    * internally.
    */
-  private final List<R> subReadersList;
+  private final List<R> subReadersList;// 和subReaders都是一个事情
 
   /**
    * Constructs a {@code BaseCompositeReader} on the given subReaders.
@@ -75,16 +75,16 @@ public abstract class BaseCompositeReader<R extends IndexReader> extends Composi
     if (subReadersSorter != null) {
       Arrays.sort(subReaders, subReadersSorter);
     }
-    this.subReaders = subReaders;
+    this.subReaders = subReaders; // SegmentReader
     this.subReadersSorter = subReadersSorter;
     this.subReadersList = Collections.unmodifiableList(Arrays.asList(subReaders));
     starts = new int[subReaders.length + 1]; // build starts array
     long maxDoc = 0;
     for (int i = 0; i < subReaders.length; i++) {
       starts[i] = (int) maxDoc;
-      final IndexReader r = subReaders[i];
+      final IndexReader r = subReaders[i];// SegmentReader
       maxDoc += r.maxDoc(); // compute maxDocs
-      r.registerParentReader(this);
+      r.registerParentReader(this);// 将自己注册到IndexReader上，若IndexReader关闭了，那么自己再调用讲抛异常
     }
 
     if (maxDoc > IndexWriter.getActualMaxDocs()) {
@@ -152,8 +152,8 @@ public abstract class BaseCompositeReader<R extends IndexReader> extends Composi
     int numDocs = this.numDocs.getOpaque();
     if (numDocs == -1) {
       numDocs = 0;
-      for (IndexReader r : subReaders) {
-        numDocs += r.numDocs();
+      for (IndexReader r : subReaders) { // r = ExitableDirectoryReader$ExitableLeafReader
+        numDocs += r.numDocs(); // 查询时
       }
       assert numDocs >= 0;
       this.numDocs.set(numDocs);

@@ -34,23 +34,23 @@ import org.apache.lucene.util.IOBooleanSupplier;
 import org.apache.lucene.util.RamUsageEstimator;
 import org.apache.lucene.util.fst.FST;
 import org.apache.lucene.util.fst.Util;
-
+// 方便在此FST中遍历使用
 /** Iterates through terms in this field. */
 final class SegmentTermsEnum extends BaseTermsEnum {
-
-  // Lazy init:
-  IndexInput in;
+  // TermsDict由SegmentTermsEnum或者IntersectTermsEnum表示，分别代表两种查询TermsDict的方式，精确查询和近似查询
+  // Lazy init:  TermsDict中的Block部分称之为Frame，Frame的加载过程分为两个步骤：在初始化过程中读取元数据；按需读取索引数据。
+  IndexInput in;// tim
 
   private SegmentTermsEnumFrame[] stack;
   private final SegmentTermsEnumFrame staticFrame;
-  SegmentTermsEnumFrame currentFrame;
+  SegmentTermsEnumFrame currentFrame;//当前处理的第几个字符，对应的Frame
   boolean termExists;
-  final FieldReader fr;
+  final FieldReader fr;// FieldReader，倒排索引结构就放在这里
 
   private int targetBeforeCurrentLength;
 
   // static boolean DEBUG = BlockTreeTermsWriter.DEBUG;
-
+  // 放对应合理边的output的
   private final OutputAccumulator outputAccumulator = new OutputAccumulator();
 
   // What prefix of the current term was present in the index; when we only next() through the
@@ -61,13 +61,13 @@ final class SegmentTermsEnum extends BaseTermsEnum {
   // assert only:
   private boolean eof;
 
-  final BytesRefBuilder term = new BytesRefBuilder();
+  final BytesRefBuilder term = new BytesRefBuilder();//当前找到的这个字段
   private final FST.BytesReader fstReader;
-
+  // 什么时候初始化的
   @SuppressWarnings({"rawtypes", "unchecked"})
   private FST.Arc<BytesRef>[] arcs = new FST.Arc[1];
-
-  public SegmentTermsEnum(FieldReader fr) throws IOException {
+  // 详情可参考http://www.nosqlnotes.com/technotes/searchengine/lucene-search-1/
+  public SegmentTermsEnum(FieldReader fr) throws IOException {//会读取FST结构的第一条边
     this.fr = fr;
 
     // if (DEBUG) {
@@ -76,12 +76,12 @@ final class SegmentTermsEnum extends BaseTermsEnum {
     stack = new SegmentTermsEnumFrame[0];
 
     // Used to hold seek by TermState, or cached seek
-    staticFrame = new SegmentTermsEnumFrame(this, -1);
+    staticFrame = new SegmentTermsEnumFrame(this, -1);// 禁止的，-1
 
     if (fr.index == null) {
       fstReader = null;
     } else {
-      fstReader = fr.index.getBytesReader();
+      fstReader = fr.index.getBytesReader();// 就是FST结构，倒着读取
     }
 
     // Init w/ root block; don't use index since it may
@@ -93,9 +93,9 @@ final class SegmentTermsEnum extends BaseTermsEnum {
     currentFrame = staticFrame;
     final FST.Arc<BytesRef> arc;
     if (fr.index != null) {
-      arc = fr.index.getFirstArc(arcs[0]);
+      arc = fr.index.getFirstArc(arcs[0]);// 开始找第一条边，边的内容放在arcs[0]中
       // Empty string prefix must have an output in the index!
-      assert arc.isFinal();
+      assert arc.isFinal();// 写入根root时，同时指定了为last+final
     } else {
       arc = null;
     }
@@ -114,7 +114,7 @@ final class SegmentTermsEnum extends BaseTermsEnum {
   // Not private to avoid synthetic access$NNN methods
   void initIndexInput() {
     if (this.in == null) {
-      this.in = fr.parent.termsIn.clone();
+      this.in = fr.parent.termsIn.clone();// tim内容
     }
   }
 
@@ -212,7 +212,7 @@ final class SegmentTermsEnum extends BaseTermsEnum {
           new SegmentTermsEnumFrame
               [ArrayUtil.oversize(1 + ord, RamUsageEstimator.NUM_BYTES_OBJECT_REF)];
       System.arraycopy(stack, 0, next, 0, stack.length);
-      for (int stackOrd = stack.length; stackOrd < next.length; stackOrd++) {
+      for (int stackOrd = stack.length; stackOrd < next.length; stackOrd++) {// 初始化
         next[stackOrd] = new SegmentTermsEnumFrame(this, stackOrd);
       }
       stack = next;
@@ -222,7 +222,7 @@ final class SegmentTermsEnum extends BaseTermsEnum {
   }
 
   private FST.Arc<BytesRef> getArc(int ord) {
-    if (ord >= arcs.length) {
+    if (ord >= arcs.length) {// ord大于最长值，则扩容
       @SuppressWarnings({"rawtypes", "unchecked"})
       final FST.Arc<BytesRef>[] next =
           new FST.Arc[ArrayUtil.oversize(1 + ord, RamUsageEstimator.NUM_BYTES_OBJECT_REF)];
@@ -241,20 +241,20 @@ final class SegmentTermsEnum extends BaseTermsEnum {
     outputAccumulator.push(frameData);
     return pushFrame(arc, length);
   }
-
+   // 解析参考Lucene90BlockTreeTermsWriter$PendingBlock.compileIndex()
   // Pushes a frame we seek'd to
-  SegmentTermsEnumFrame pushFrame(FST.Arc<BytesRef> arc, int length) throws IOException {
-    outputAccumulator.prepareRead();
-    final long code = fr.readVLongOutput(outputAccumulator);
+  SegmentTermsEnumFrame pushFrame(FST.Arc<BytesRef> arc, int length) throws IOException {// 前进一个字段
+    outputAccumulator.prepareRead();// reset
+    final long code = fr.readVLongOutput(outputAccumulator);// 读取对应的output，先读取code
     final long fpSeek = code >>> Lucene90BlockTreeTermsReader.OUTPUT_FLAGS_NUM_BITS;
-    final SegmentTermsEnumFrame f = getFrame(1 + currentFrame.ord);
+    final SegmentTermsEnumFrame f = getFrame(1 + currentFrame.ord);// 获取一个空的SegmentTermsEnumFrame，然后设置最基本的
     f.hasTerms = (code & Lucene90BlockTreeTermsReader.OUTPUT_FLAG_HAS_TERMS) != 0;
     f.hasTermsOrig = f.hasTerms;
     f.isFloor = (code & Lucene90BlockTreeTermsReader.OUTPUT_FLAG_IS_FLOOR) != 0;
-    if (f.isFloor) {
-      f.setFloorData(outputAccumulator);
+    if (f.isFloor) {// 不包含一整个blocks的
+      f.setFloorData(outputAccumulator);// 会读取子block的信息
     }
-    pushFrame(arc, fpSeek, length);
+    pushFrame(arc, fpSeek, length);// 这里才有点用
 
     return f;
   }
@@ -263,7 +263,7 @@ final class SegmentTermsEnum extends BaseTermsEnum {
   // lazy-load the frame only when needed
   SegmentTermsEnumFrame pushFrame(FST.Arc<BytesRef> arc, long fp, int length) throws IOException {
     final SegmentTermsEnumFrame f = getFrame(1 + currentFrame.ord);
-    f.arc = arc;
+    f.arc = arc;// 放入arc
     if (f.fpOrig == fp && f.nextEnt != -1) {
       // if (DEBUG) System.out.println("      push reused frame ord=" + f.ord + " fp=" + f.fp +
       // " isFloor?=" + f.isFloor + " hasTerms=" + f.hasTerms + " pref=" + term + " nextEnt=" +
@@ -278,7 +278,7 @@ final class SegmentTermsEnum extends BaseTermsEnum {
         // }
       }
       assert length == f.prefixLength;
-    } else {
+    } else {// 继续设置
       f.nextEnt = -1;
       f.prefixLength = length;
       f.state.termBlockOrd = 0;
@@ -308,11 +308,11 @@ final class SegmentTermsEnum extends BaseTermsEnum {
     return true;
   }
 
-  private IOBooleanSupplier prepareSeekExact(BytesRef target, boolean prefetch) throws IOException {
+  private IOBooleanSupplier prepareSeekExact(BytesRef target, boolean prefetch) throws IOException {// 寻找这个term的
     if (fr.index == null) {
       throw new IllegalStateException("terms index was not loaded");
     }
-
+    // 词小于最小值 || 词大于最大值，tdm文件会记录这个term的最大词和最小词
     if (fr.size() > 0 && (target.compareTo(fr.getMin()) < 0 || target.compareTo(fr.getMax()) > 0)) {
       return null;
     }
@@ -330,12 +330,12 @@ final class SegmentTermsEnum extends BaseTermsEnum {
     // }
 
     FST.Arc<BytesRef> arc;
-    int targetUpto;
+    int targetUpto;// 第条边了，第几个字符了
 
     targetBeforeCurrentLength = currentFrame.ord;
     outputAccumulator.reset();
 
-    if (currentFrame != staticFrame) {
+    if (currentFrame != staticFrame) {// 会跳过
 
       // We are already seek'd; find the common
       // prefix of new seek term vs current term and
@@ -441,10 +441,10 @@ final class SegmentTermsEnum extends BaseTermsEnum {
         // return termExists;
       }
 
-    } else {
+    } else { // 刚开始找，先获取root的第一个出边
 
       targetBeforeCurrentLength = -1;
-      arc = fr.index.getFirstArc(arcs[0]);
+      arc = fr.index.getFirstArc(arcs[0]); // 先读取第一条边。明确指定了边为final+last
 
       // Empty string prefix must have an output (block) in the index!
       assert arc.isFinal();
@@ -454,13 +454,13 @@ final class SegmentTermsEnum extends BaseTermsEnum {
       //   System.out.println("    no seek state; push root frame");
       // }
 
-      outputAccumulator.push(arc.output());
+      outputAccumulator.push(arc.output());// 这里output和下面的nextFinalOutput总有一个不为null
 
-      currentFrame = staticFrame;
+      currentFrame = staticFrame;// 若不是当前静态Frame，就初始化下
 
       // term.length = 0;
-      targetUpto = 0;
-      outputAccumulator.push(arc.nextFinalOutput());
+      targetUpto = 0;// 开始真正统计了
+      outputAccumulator.push(arc.nextFinalOutput());// 就是emptpyoutput
       currentFrame = pushFrame(arc, 0);
       outputAccumulator.pop(arc.nextFinalOutput());
     }
@@ -473,14 +473,14 @@ final class SegmentTermsEnum extends BaseTermsEnum {
 
     // We are done sharing the common prefix with the incoming target and where we are currently
     // seek'd; now continue walking the index:
-    while (targetUpto < target.length) {
+    while (targetUpto < target.length) {// 开始遍历FST结构
 
       final int targetLabel = target.bytes[target.offset + targetUpto] & 0xFF;
 
-      final FST.Arc<BytesRef> nextArc =
+      final FST.Arc<BytesRef> nextArc = // 获取到targetLabel对应的边
           fr.index.findTargetArc(targetLabel, arc, getArc(1 + targetUpto), fstReader);
 
-      if (nextArc == null) {
+      if (nextArc == null) {// 没找到对应的边
 
         // Index is exhausted
         // if (DEBUG) {
@@ -491,9 +491,9 @@ final class SegmentTermsEnum extends BaseTermsEnum {
         validIndexPrefix = currentFrame.prefixLength;
         // validIndexPrefix = targetUpto;
 
-        currentFrame.scanToFloorFrame(target);
+        currentFrame.scanToFloorFrame(target);// 解析这个currentFrame
 
-        if (!currentFrame.hasTerms) {
+        if (!currentFrame.hasTerms) {// 若不包含具体term，那么就直接返回问题索引了
           termExists = false;
           term.setByteAt(targetUpto, (byte) targetLabel);
           term.setLength(1 + targetUpto);
@@ -524,13 +524,13 @@ final class SegmentTermsEnum extends BaseTermsEnum {
             return false;
           }
         };
-      } else {
+      } else {//进来了，说明找到对应边了
         // Follow this arc
         arc = nextArc;
-        term.setByteAt(targetUpto, (byte) targetLabel);
+        term.setByteAt(targetUpto, (byte) targetLabel);// 设置部分边
         // Aggregate output as we go:
         assert arc.output() != null;
-        outputAccumulator.push(arc.output());
+        outputAccumulator.push(arc.output());// 把这个边的output再拿出来，可能为null
 
         // if (DEBUG) {
         //   System.out.println("    index: follow label=" + toHex(target.bytes[target.offset +
@@ -538,10 +538,10 @@ final class SegmentTermsEnum extends BaseTermsEnum {
         // }
         targetUpto++;
 
-        if (arc.isFinal()) {
+        if (arc.isFinal()) {// 这个边是一个终点了（且有子block），那么就有output。若后面找不到
           // if (DEBUG) System.out.println("    arc is final!");
-          outputAccumulator.push(arc.nextFinalOutput());
-          currentFrame = pushFrame(arc, targetUpto);
+          outputAccumulator.push(arc.nextFinalOutput());// 获取对应的output
+          currentFrame = pushFrame(arc, targetUpto);// 要到下一个节点
           outputAccumulator.pop(arc.nextFinalOutput());
           // if (DEBUG) System.out.println("    curFrame.ord=" + currentFrame.ord + " hasTerms=" +
           // currentFrame.hasTerms);
@@ -569,9 +569,9 @@ final class SegmentTermsEnum extends BaseTermsEnum {
     }
 
     return () -> {
-      currentFrame.loadBlock();
+      currentFrame.loadBlock();// 加载这个block
 
-      final SeekStatus result = currentFrame.scanToTerm(target, true);
+      final SeekStatus result = currentFrame.scanToTerm(target, true);//然后遍历这个block里面的term
       if (result == SeekStatus.FOUND) {
         // if (DEBUG) {
         //   System.out.println("  return FOUND term=" + term.utf8ToString() + " " + term);
@@ -1082,7 +1082,7 @@ final class SegmentTermsEnum extends BaseTermsEnum {
   public int docFreq() throws IOException {
     assert !eof;
     // if (DEBUG) System.out.println("BTR.docFreq");
-    currentFrame.decodeMetaData();
+    currentFrame.decodeMetaData();// 解析的tim中的metaWriter部分，包括这个block的docStartFP/posStartFP等地址
     // if (DEBUG) System.out.println("  return " + currentFrame.state.docFreq);
     return currentFrame.state.docFreq;
   }
@@ -1093,7 +1093,7 @@ final class SegmentTermsEnum extends BaseTermsEnum {
     currentFrame.decodeMetaData();
     return currentFrame.state.totalTermFreq;
   }
-
+   // 词频
   @Override
   public PostingsEnum postings(PostingsEnum reuse, int flags) throws IOException {
     assert !eof;
@@ -1108,12 +1108,12 @@ final class SegmentTermsEnum extends BaseTermsEnum {
   }
 
   @Override
-  public ImpactsEnum impacts(int flags) throws IOException {
+  public ImpactsEnum impacts(int flags) throws IOException {// flags是 PostingsEnum.FREQS
     assert !eof;
     // if (DEBUG) {
     // System.out.println("BTTR.docs seg=" + segment);
     // }
-    currentFrame.decodeMetaData();
+    currentFrame.decodeMetaData();// 解析的tim中的metaWriter部分，包括这个block的docStartFP/posStartFP等地址
     // if (DEBUG) {
     // System.out.println("  state=" + currentFrame.state);
     // }
@@ -1121,7 +1121,7 @@ final class SegmentTermsEnum extends BaseTermsEnum {
   }
 
   @Override
-  public void seekExact(BytesRef target, TermState otherState) {
+  public void seekExact(BytesRef target, TermState otherState) {// 精确查找某个targe
     // if (DEBUG) {
     //   System.out.println("BTTR.seekExact termState seg=" + segment + " target=" +
     // target.utf8ToString() + " " + target + " state=" + otherState);
@@ -1131,7 +1131,7 @@ final class SegmentTermsEnum extends BaseTermsEnum {
       assert otherState != null && otherState instanceof BlockTermState;
       currentFrame = staticFrame;
       currentFrame.state.copyFrom(otherState);
-      term.copyBytes(target);
+      term.copyBytes(target); // copy目标value
       currentFrame.metaDataUpto = currentFrame.getTermBlockOrd();
       assert currentFrame.metaDataUpto > 0;
       validIndexPrefix = 0;

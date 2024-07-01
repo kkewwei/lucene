@@ -27,7 +27,7 @@ import org.apache.lucene.util.packed.PackedInts;
 
 /**
  * A builder of {@link DocIdSet}s. At first it uses a sparse structure to gather documents, and then
- * upgrades to a non-sparse bit set once enough hits match.
+ * upgrades to a non-sparse bit set once enough hits match. // 首先使用稀疏的结构来存储文档，当匹配足够的数据时，将升级为非稀疏结构
  *
  * <p>To add documents, you first need to call {@link #grow} in order to reserve space, and then
  * call {@link BulkAdder#add(int)} on the returned {@link BulkAdder}.
@@ -48,14 +48,14 @@ public final class DocIdSetBuilder {
 
     void add(DocIdSetIterator iterator) throws IOException;
 
-    void add(IntsRef docs, int docLowerBoundInclusive);
+    void add(IntsRef docs, int docLowerBoundInclusive);// 仅包含大于docLowerBoundInclusive
   }
 
   private record FixedBitSetAdder(FixedBitSet bitSet) implements BulkAdder {
 
     @Override
     public void add(int doc) {
-      bitSet.set(doc);
+      bitSet.set(doc); // 匹配一个文档
     }
 
     @Override
@@ -123,7 +123,7 @@ public final class DocIdSetBuilder {
       int index = buffer.length;
       for (int i = docs.offset, to = docs.offset + docs.length; i < to; i++) {
         int doc = docs.ints[i];
-        if (doc >= docLowerBoundInclusive) {
+        if (doc >= docLowerBoundInclusive) {// 仅包含大于docLowerBoundInclusive
           buffer.array[index++] = doc;
         }
       }
@@ -131,19 +131,19 @@ public final class DocIdSetBuilder {
     }
   }
 
-  private final int maxDoc;
-  private final int threshold;
+  private final int maxDoc; // 该segment最大的文档Id。用回来初始化bitSet
+  private final int threshold;// 若读取的文档数小于总文档数的/128，就使用数组，若大于，则使用BitSize
   // pkg-private for testing
   final boolean multivalued;
-  final double numValuesPerDoc;
+  final double numValuesPerDoc; // 每个文档该域几个值
 
-  private List<Buffer> buffers = new ArrayList<>();
+  private List<Buffer> buffers = new ArrayList<>(); // 数量少于threshold时，使用数组保存，
   private int totalAllocated; // accumulated size of the allocated buffers
+  // 在buffers中已经存储的文档数. 针对terms查询时，保存的docId肯定是有重复的，每个term对应的所有docId都会占用一个Buffer
+  private FixedBitSet bitSet; // 当数据量大于threshold时，使用 bitSet 保存。定义空间为该segment最大的DocId
 
-  private FixedBitSet bitSet;
-
-  private long counter = -1;
-  private BulkAdder adder;
+  private long counter = -1; //当前bitsit能装多少doc,不是真实doc个数
+  private BulkAdder adder;// 若是数组类型的话，表示当前可写入的数组BufferAdder，保存的文档docId肯定有重复的；若是bitSet的话，表示为FixedBitSetAdder，全量的数据
 
   /** Create a builder that can contain doc IDs between {@code 0} and {@code maxDoc}. */
   public DocIdSetBuilder(int maxDoc) {
@@ -165,7 +165,7 @@ public final class DocIdSetBuilder {
   public DocIdSetBuilder(int maxDoc, PointValues values) throws IOException {
     this(maxDoc, values.getDocCount(), values.size());
   }
-
+  //
   DocIdSetBuilder(int maxDoc, int docCount, long valueCount) {
     this.maxDoc = maxDoc;
     this.multivalued = docCount < 0 || docCount != valueCount;
@@ -184,7 +184,7 @@ public final class DocIdSetBuilder {
     // maxDoc >>> 7 is a good value if you want to save memory, lower values
     // such as maxDoc >>> 11 should provide faster building but at the expense
     // of using a full bitset even for quite sparse data
-    this.threshold = maxDoc >>> 7;
+    this.threshold = maxDoc >>> 7; // 若读取的文档数小于总文档数的/128，就使用数组，若大于，则使用BitSize
 
     this.bitSet = null;
   }
@@ -218,11 +218,11 @@ public final class DocIdSetBuilder {
    * numDocs} documents.
    */
   public BulkAdder grow(int numDocs) {
-    if (bitSet == null) {
+    if (bitSet == null) { //
       if ((long) totalAllocated + numDocs <= threshold) {
-        ensureBufferCapacity(numDocs);
-      } else {
-        upgradeToBitSet();
+        ensureBufferCapacity(numDocs); // copy扩容
+      } else {// 装不下了
+        upgradeToBitSet(); // 升级为非BitSet
         counter += numDocs;
       }
     } else {
@@ -281,7 +281,7 @@ public final class DocIdSetBuilder {
     assert bitSet == null;
     FixedBitSet bitSet = new FixedBitSet(maxDoc);
     long counter = 0;
-    for (Buffer buffer : buffers) {
+    for (Buffer buffer : buffers) { // 针对这个buffer
       int[] array = buffer.array;
       int length = buffer.length;
       counter += length;

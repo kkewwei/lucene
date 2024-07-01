@@ -24,7 +24,7 @@ import org.apache.lucene.store.DataOutput;
 
 abstract class AbstractBlockPackedWriter {
 
-  static final int MIN_BLOCK_SIZE = 64;
+  static final int MIN_BLOCK_SIZE = 64;// 最小的block个数
   static final int MAX_BLOCK_SIZE = 1 << (30 - 3);
   static final int MIN_VALUE_EQUALS_0 = 1 << 0;
   static final int BPV_SHIFT = 1;
@@ -39,10 +39,10 @@ abstract class AbstractBlockPackedWriter {
     out.writeByte((byte) i);
   }
 
-  protected DataOutput out;
-  protected final long[] values;
-  protected byte[] blocks;
-  protected int off;
+  protected DataOutput out; // _0.tvd   FSIndexOutput
+  protected final long[] values;// 可能每个文档的域个数，
+  protected byte[] blocks; //需要几个byte来存放values里面的所有数据
+  protected int off; //  这一批缓存准备向文件中刷入的数据
   protected long ord;
   protected boolean finished;
 
@@ -54,7 +54,7 @@ abstract class AbstractBlockPackedWriter {
   protected AbstractBlockPackedWriter(DataOutput out, int blockSize) {
     checkBlockSize(blockSize, MIN_BLOCK_SIZE, MAX_BLOCK_SIZE);
     reset(out);
-    values = new long[blockSize];
+    values = new long[blockSize]; // 默认大小64个
   }
 
   /** Reset this writer to wrap <code>out</code>. The block size remains unchanged. */
@@ -73,12 +73,12 @@ abstract class AbstractBlockPackedWriter {
   }
 
   /** Append a new long. */
-  public void add(long l) throws IOException {
+  public void add(long l) throws IOException { // l可以是文档个数
     checkNotFinished();
     if (off == values.length) {
-      flush();
+      flush();  //
     }
-    values[off++] = l;
+    values[off++] = l; // 可能每个文档的域个数， 直接是覆盖型的
     ++ord;
   }
 
@@ -118,8 +118,8 @@ abstract class AbstractBlockPackedWriter {
   protected final void writeValues(int bitsRequired) throws IOException {
     final PackedInts.Encoder encoder =
         PackedInts.getEncoder(PackedInts.Format.PACKED, PackedInts.VERSION_CURRENT, bitsRequired);
-    final int iterations = values.length / encoder.byteValueCount();
-    final int blockSize = encoder.byteBlockCount() * iterations;
+    final int iterations = values.length / encoder.byteValueCount();// 需要几个block来存放这些数据
+    final int blockSize = encoder.byteBlockCount() * iterations;// 需要几个byte来存放这些这些数据
     if (blocks == null || blocks.length < blockSize) {
       blocks = new byte[blockSize];
     }
@@ -129,6 +129,6 @@ abstract class AbstractBlockPackedWriter {
     encoder.encode(values, 0, blocks, 0, iterations);
     final int blockCount =
         (int) PackedInts.Format.PACKED.byteCount(PackedInts.VERSION_CURRENT, off, bitsRequired);
-    out.writeBytes(blocks, blockCount);
+    out.writeBytes(blocks, blockCount); // 放入_0.tvd中
   }
 }

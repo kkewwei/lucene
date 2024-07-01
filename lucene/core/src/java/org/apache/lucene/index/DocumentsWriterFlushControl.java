@@ -38,18 +38,18 @@ import org.apache.lucene.util.ThreadInterruptedException;
  * <p>In addition to the {@link FlushPolicy} the flush control might set certain {@link
  * DocumentsWriterPerThread} as flush pending iff a {@link DocumentsWriterPerThread} exceeds the
  * {@link IndexWriterConfig#getRAMPerThreadHardLimitMB()} to prevent address space exhaustion.
- */
+ */ // DocumentsWriterFlushControl 类来控制flush策略，记录每一个DocumentsWriterPerThread内存消耗的量
 final class DocumentsWriterFlushControl implements Accountable, Closeable {
   private final long hardMaxBytesPerDWPT;
-  private long activeBytes = 0;
-  private volatile long flushBytes = 0;
-  private volatile int numPending = 0;
+  private long activeBytes = 0; // 所有构建lucene线程使用的内存统计，主要是拆分文本时构建索引结构占用的内存，不包含刷新时候的内存(修改numPending时，就会减少activeBytes)
+  private volatile long flushBytes = 0; // 每写完一个文档，会判断文档/内存是否用超了，若用超，会设置为刷新，将activeBytes占用的内存统计全部转移到flushBytes中
+  private volatile int numPending = 0; // 比如内存超了，就会立马设置该状态，但是还没有放入flushingWriters等待刷新,统计个数
   private int numDocsSinceStalled = 0; // only with assert
   private final AtomicBoolean flushDeletes = new AtomicBoolean(false);
-  private boolean fullFlush = false;
+  private boolean fullFlush = false;// 比如ES周期性refresh，会将fullFlush置位
   // only for assertion that we don't get stale DWPTs from the pool
   private boolean fullFlushMarkDone = false;
-  // The flushQueue is used to concurrently distribute DWPTs that are ready to be flushed ie. when a
+  // The flushQueue is used to concurrently distribute DWPTs that are ready to be flushed ie. when a，已经将需要refresh的标记完成了
   // full flush is in
   // progress. This might be triggered by a commit or NRT refresh. The trigger will only walk all
   // eligible DWPTs and
@@ -64,16 +64,16 @@ final class DocumentsWriterFlushControl implements Accountable, Closeable {
   // already actively flushing. They are only in the state of flushing and might be picked up in the
   // future by
   // polling the flushQueue
-  private final List<DocumentsWriterPerThread> flushingWriters = new ArrayList<>();
-
+  private final List<DocumentsWriterPerThread> flushingWriters = new ArrayList<>(); // flushQueue和flushingWriters内容基本一致
+  //循环从flushQueue中出队拿的待刷新的缓存文件， 只有DWPT完成刷新后，才会从flushingWriters中去掉。
   private double maxConfiguredRamBuffer = 0;
   private long peakActiveBytes = 0; // only with assert
   private long peakFlushBytes = 0; // only with assert
   private long peakNetBytes = 0; // only with assert
   private long peakDelta = 0; // only with assert
   private boolean flushByRAMWasDisabled; // only with assert
-  final DocumentsWriterStallControl stallControl = new DocumentsWriterStallControl();
-  private final DocumentsWriterPerThreadPool perThreadPool;
+  final DocumentsWriterStallControl stallControl = new DocumentsWriterStallControl();// 是否需要阻塞写入，当刷新线程的DocumentsWriterPerThread个数大于写入线程的DocumentsWriterPerThread个数，就需要阻塞写入了
+  private final DocumentsWriterPerThreadPool perThreadPool; // 是DocumentsWriterPerThread循环使用池子
   private final FlushPolicy flushPolicy;
   private boolean closed = false;
   private final DocumentsWriter documentsWriter;
@@ -85,7 +85,7 @@ final class DocumentsWriterFlushControl implements Accountable, Closeable {
     this.perThreadPool = documentsWriter.perThreadPool;
     this.flushPolicy = config.getFlushPolicy();
     this.config = config;
-    this.hardMaxBytesPerDWPT = config.getRAMPerThreadHardLimitMB() * 1024L * 1024L;
+    this.hardMaxBytesPerDWPT = config.getRAMPerThreadHardLimitMB() * 1024L * 1024L; // 默认1045MB
     this.documentsWriter = documentsWriter;
   }
 
@@ -101,15 +101,15 @@ final class DocumentsWriterFlushControl implements Accountable, Closeable {
     return flushBytes + activeBytes;
   }
 
-  private long stallLimitBytes() {
+  private long stallLimitBytes() { // 阻塞的阈值是indices.memory.index_buffer_size配置的两倍
     final double maxRamMB = config.getRAMBufferSizeMB();
     return maxRamMB != IndexWriterConfig.DISABLE_AUTO_FLUSH
         ? (long) (2 * (maxRamMB * 1024 * 1024))
         : Long.MAX_VALUE;
   }
-
+  //每次写入时候都会去检查
   private boolean assertMemory() {
-    final double maxRamMB = config.getRAMBufferSizeMB();
+    final double maxRamMB = config.getRAMBufferSizeMB(); //配置的
     // We can only assert if we have always been flushing by RAM usage; otherwise the assert will
     // false trip if e.g. the
     // flush-by-doc-count * doc size was large enough to use far more RAM than the sudden change to
@@ -201,7 +201,7 @@ final class DocumentsWriterFlushControl implements Accountable, Closeable {
     granularity = Math.min(granularity, 16 * 1024L);
     return granularity;
   }
-
+  // 单条数据建立完lucene索引后，就会跑到这里。这里会检查是否因为设置的内存或者文档个数进行强制flush
   DocumentsWriterPerThread doAfterDocument(DocumentsWriterPerThread perThread) {
     final long delta = perThread.getCommitLastBytesUsedDelta();
     // in order to prevent contention in the case of many threads indexing small documents
@@ -220,21 +220,21 @@ final class DocumentsWriterFlushControl implements Accountable, Closeable {
       // lock in #setFlushPending and this also reads the committed bytes and modifies the
       // flush/activeBytes.
       // In the future we can clean this up to be more intuitive.
-      perThread.commitLastBytesUsed(delta);
+      perThread.commitLastBytesUsed(delta);// 里面可以看下byte处理
       try {
         /*
          * We need to differentiate here if we are pending since setFlushPending
          * moves the perThread memory to the flushBytes and we could be set to
          * pending during a delete
          */
-        if (perThread.isFlushPending()) {
+        if (perThread.isFlushPending()) {// 不刷新
           flushBytes += delta;
           assert updatePeaks(delta);
-        } else {
+        } else { // 仅仅置位flushPending
           activeBytes += delta;
           assert updatePeaks(delta);
-          flushPolicy.onChange(this, perThread);
-          if (!perThread.isFlushPending() && perThread.ramBytesUsed() > hardMaxBytesPerDWPT) {
+          flushPolicy.onChange(this, perThread);// 会有所有的内存buffer，若超过了 check
+          if (!perThread.isFlushPending() && perThread.ramBytesUsed() > hardMaxBytesPerDWPT) {// 若还没有置为等待刷新flush（不会刷新），但是实际内存已经超过硬限制1094M的话，也会置为刷新
             // Safety check to prevent a single DWPT exceeding its RAM limit. This
             // is super important since we can not address more than 2048 MB per DWPT
             setFlushPending(perThread);
@@ -247,23 +247,23 @@ final class DocumentsWriterFlushControl implements Accountable, Closeable {
       }
     }
   }
-
+  // check出这个perThread（一般是文档数满了），和fullFlush的checkoutForFlush（fullFlush直接跑的是这里）还是不一样的
   private DocumentsWriterPerThread checkout(
       DocumentsWriterPerThread perThread, boolean markPending) {
     assert Thread.holdsLock(this);
-    if (fullFlush) {
-      if (perThread.isFlushPending()) {
-        checkoutAndBlock(perThread);
-        return nextPendingFlush();
+    if (fullFlush) { // 比如用户主动调用IndexWriter.flush时候，或者周期性refresh时，就会置该位
+      if (perThread.isFlushPending()) {// 已经被置位
+        checkoutAndBlock(perThread); // 先阻塞下，不刷新这个DWPT
+        return nextPendingFlush(); // 从flushQueue中取一个
       }
     } else {
-      if (markPending) {
+      if (markPending) { // 是否已经mark为pending
         assert perThread.isFlushPending() == false;
         setFlushPending(perThread);
       }
 
-      if (perThread.isFlushPending()) {
-        return checkOutForFlush(perThread);
+      if (perThread.isFlushPending()) { // 被置为等待刷新（比如内存超了）
+        return checkOutForFlush(perThread);// 会从dwpts中去掉
       }
     }
     return null;
@@ -273,24 +273,24 @@ final class DocumentsWriterFlushControl implements Accountable, Closeable {
     /*
      *  updates the number of documents "finished" while we are in a stalled state.
      *  this is important for asserting memory upper bounds since it corresponds
-     *  to the number of threads that are in-flight and crossed the stall control
+     *  to the number of threads that are in-flight and crossed the stall control// 为了应对横在进行的，但是已经失控的检查，
      *  check before we actually stalled.
      *  see #assertMemory()
      */
     if (stalled) {
-      numDocsSinceStalled++;
+      numDocsSinceStalled++; // 被阻塞的文档树
     } else {
       numDocsSinceStalled = 0;
     }
     return true;
   }
-
+ // 会从DocumentsWriter.doFlush()中跑过来，此时segment已经完成了刷新
   synchronized void doAfterFlush(DocumentsWriterPerThread dwpt) {
     assert flushingWriters.contains(dwpt);
     try {
       flushingWriters.remove(dwpt);
       flushBytes -= dwpt.getLastCommittedBytesUsed();
-      assert assertMemory();
+      assert assertMemory();// 检查内存使用情况
     } finally {
       try {
         updateStallState();
@@ -301,23 +301,23 @@ final class DocumentsWriterFlushControl implements Accountable, Closeable {
   }
 
   private long stallStartNS;
-
+ // 更新阻塞状态
   private boolean updateStallState() {
 
     assert Thread.holdsLock(this);
-    final long limit = stallLimitBytes();
+    final long limit = stallLimitBytes(); // 冂
     /*
      * we block indexing threads if net byte grows due to slow flushes
      * yet, for small ram buffers and large documents we can easily
      * reach the limit without any ongoing flushes. we need to ensure
      * that we don't stall/block if an ongoing or pending flush can
      * not free up enough memory to release the stall lock.
-     */
+     */ // 我们block写入线程，保证即将的刷新不会释放足够的内存来解锁(内存超的时候，我们才需需阻塞下)
     final boolean stall = (activeBytes + flushBytes) > limit && activeBytes < limit && !closed;
 
     if (infoStream.isEnabled("DWFC")) {
-      if (stall != stallControl.anyStalledThreads()) {
-        if (stall) {
+      if (stall != stallControl.anyStalledThreads()) {// 是否有任何被阻塞的线程
+        if (stall) { // 若被阻塞
           infoStream.message(
               "DW",
               String.format(
@@ -341,7 +341,7 @@ final class DocumentsWriterFlushControl implements Accountable, Closeable {
       }
     }
 
-    stallControl.updateStalled(stall);
+    stallControl.updateStalled(stall); // 若内存使用没超，会唤醒阻塞的线程
     return stall;
   }
 
@@ -359,11 +359,11 @@ final class DocumentsWriterFlushControl implements Accountable, Closeable {
    * Sets flush pending state on the given {@link DocumentsWriterPerThread}. The {@link
    * DocumentsWriterPerThread} must have indexed at least on Document and must not be already
    * pending.
-   */
+   */// 比如es 索引周期性refresh的话，则将当前DocumentsWriterPerThread放入flushPending中
   public synchronized void setFlushPending(DocumentsWriterPerThread perThread) {
     assert !perThread.isFlushPending();
     if (perThread.getNumDocsInRAM() > 0) {
-      perThread.setFlushPending(); // write access synced
+      perThread.setFlushPending(); // write access synced       flush置位
       final long bytes = perThread.getLastCommittedBytesUsed();
       flushBytes += bytes;
       activeBytes -= bytes;
@@ -390,7 +390,7 @@ final class DocumentsWriterFlushControl implements Accountable, Closeable {
       assert checkedOut;
     }
   }
-
+  // 只有fullFlush被置位，恰好该线程又准备flush，才会被阻塞
   /** To be called only by the owner of this object's monitor lock */
   private void checkoutAndBlock(DocumentsWriterPerThread perThread) {
     assert Thread.holdsLock(this);
@@ -403,21 +403,21 @@ final class DocumentsWriterFlushControl implements Accountable, Closeable {
     boolean checkedOut = perThreadPool.checkout(perThread);
     assert checkedOut;
   }
-
+  // 写完后是否需要刷新，将当前DocumentsWriterPerThread从DocumentsWriterPerThreadPool.dwpts中checkut出。
   private synchronized DocumentsWriterPerThread checkOutForFlush(
       DocumentsWriterPerThread perThread) {
     assert Thread.holdsLock(this);
-    assert perThread.isFlushPending();
+    assert perThread.isFlushPending(); // 调用该函数前，已经保证perThread.isFlushPending()
     assert perThread.isHeldByCurrentThread();
     assert perThreadPool.isRegistered(perThread);
     try {
-      addFlushingDWPT(perThread);
+      addFlushingDWPT(perThread); // 放入到flushingWriters
       numPending--; // write access synced
-      boolean checkedOut = perThreadPool.checkout(perThread);
-      assert checkedOut;
+      boolean checkedOut = perThreadPool.checkout(perThread);// 从DocumentsWriterPerThreadPool.dwpts和freeList中去掉
+      assert checkedOut; // 一定可以checkout
       return perThread;
     } finally {
-      updateStallState();
+      updateStallState(); // 目前flushBytes和activeBytes已经发生改变
     }
   }
 
@@ -435,25 +435,25 @@ final class DocumentsWriterFlushControl implements Accountable, Closeable {
         + flushBytes
         + "]";
   }
-
+  // 获取下一个等待刷新的的任务：首先从现成的flushQueue中，不行的话从perThreadPool中等待flush的
   DocumentsWriterPerThread nextPendingFlush() {
     int numPending;
     boolean fullFlush;
     synchronized (this) {
       final DocumentsWriterPerThread poll;
-      if ((poll = flushQueue.poll()) != null) {
+      if ((poll = flushQueue.poll()) != null) { //首先从flush队列中找到一个
         updateStallState();
         return poll;
       }
       fullFlush = this.fullFlush;
       numPending = this.numPending;
-    }
+    } // 没找到存量刷新的话，并且已经有numPending（比如单个DWTP的内存满了）
     if (numPending > 0 && fullFlush == false) { // don't check if we are doing a full flush
-      for (final DocumentsWriterPerThread next : perThreadPool) {
-        if (next.isFlushPending()) {
+      for (final DocumentsWriterPerThread next : perThreadPool) { // 然后从perThreadPool找等待刷新的
+        if (next.isFlushPending()) { // 等待被刷新的
           if (next.tryLock()) {
             try {
-              if (perThreadPool.isRegistered(next)) {
+              if (perThreadPool.isRegistered(next)) {// 还在，双层确认
                 return checkOutForFlush(next);
               }
             } finally {
@@ -518,13 +518,13 @@ final class DocumentsWriterFlushControl implements Accountable, Closeable {
   }
 
   public void setApplyAllDeletes() {
-    flushDeletes.set(true);
+    flushDeletes.set(true);// 需要运行刷新delete了
   }
-
+    // 在进行全量刷新时，需要将这个参数设置为
   DocumentsWriterPerThread obtainAndLock() {
-    while (closed == false) {
-      final DocumentsWriterPerThread perThread = perThreadPool.getAndLock();
-      if (perThread.deleteQueue == documentsWriter.deleteQueue) {
+    while (closed == false) {// 循环获取，校验不过再重新获取
+      final DocumentsWriterPerThread perThread = perThreadPool.getAndLock();// 简单封装了下ReentrantLock
+      if (perThread.deleteQueue == documentsWriter.deleteQueue) {// 尽管处于fullFlush（详见）阶段，也是可以直接返回的。因为已经更新过了。
         // simply return the DWPT even in a flush all case since we already hold the lock and the
         // DWPT is not stale
         // since it has the current delete queue associated with it. This means we have established
@@ -533,7 +533,7 @@ final class DocumentsWriterFlushControl implements Accountable, Closeable {
         // the currently
         // progress full flush.
         return perThread;
-      } else {
+      } else { // 循环重试，说明正处于fullFlush阶段，
         try {
           // we must first assert otherwise the full flush might make progress once we unlock the
           // dwpt
@@ -543,7 +543,7 @@ final class DocumentsWriterFlushControl implements Accountable, Closeable {
                   + " markDone: "
                   + fullFlushMarkDone;
         } finally {
-          perThread.unlock();
+          perThread.unlock(); // 释放这个吧
           // There is a flush-all in process and this DWPT is
           // now stale - try another one
         }
@@ -551,18 +551,18 @@ final class DocumentsWriterFlushControl implements Accountable, Closeable {
     }
     throw new AlreadyClosedException("flush control is closed");
   }
-
+// 比如主动调用lucen commit操作（外边已经保证了，只能一个线程进来）
   long markForFullFlush() {
     final DocumentsWriterDeleteQueue flushingQueue;
     long seqNo;
-    synchronized (this) {
+    synchronized (this) { // 这里是一次锁
       assert fullFlush == false
           : "called DWFC#markForFullFlush() while full flush is still running";
       assert fullFlushMarkDone == false : "full flush collection marker is still set to true";
-      fullFlush = true;
-      flushingQueue = documentsWriter.deleteQueue;
+      fullFlush = true; // 标志所有线程都进入flush阶段
+      flushingQueue = documentsWriter.deleteQueue; // 旧的deleteQueue
       // Set a new delete queue - all subsequent DWPT will use this queue until
-      // we do another full flush
+      // we do another full flush// 别的线程将不能再继续写入，因为分配不到ThreadStates了。因为要产生
       perThreadPool
           .lockNewWriters(); // no new thread-states while we do a flush otherwise the seqNo
       // accounting might be off
@@ -570,20 +570,20 @@ final class DocumentsWriterFlushControl implements Accountable, Closeable {
         // Insert a gap in seqNo of current active thread count, in the worst case each of those
         // threads now have one operation in flight.  It's fine
         // if we have some sequence numbers that were never assigned:
-        seqNo = documentsWriter.resetDeleteQueue(perThreadPool.size());
+        seqNo = documentsWriter.resetDeleteQueue(perThreadPool.size());// 重置queue
       } finally {
-        perThreadPool.unlockNewWriters();
+        perThreadPool.unlockNewWriters(); // 和lockNewThreadStates必须一起用
       }
     }
     final List<DocumentsWriterPerThread> fullFlushBuffer = new ArrayList<>();
     for (final DocumentsWriterPerThread next :
-        perThreadPool.filterAndLock(dwpt -> dwpt.deleteQueue == flushingQueue)) {
-      try {
-        if (next.getNumDocsInRAM() > 0) {
+        perThreadPool.filterAndLock(dwpt -> dwpt.deleteQueue == flushingQueue)) {// 获取当前正在写入的doc,若有dwpt还在被被人使用，那么我们flush线程就等待
+      try { // 这有多个的原因：比如上个的flushAllThreads产生的DocumentsWriterPerThread仍然还放在flushQueue中，但是没有写入了。或者还没来得及有线程处理。
+        if (next.getNumDocsInRAM() > 0) {// 有文档的话。当前内存中只会有一个正在写的缓存带刷新的segment
           final DocumentsWriterPerThread flushingDWPT;
           synchronized (this) {
-            if (next.isFlushPending() == false) {
-              setFlushPending(next);
+            if (next.isFlushPending() == false) { // 若没有处于flushPending状态，则设置处于
+              setFlushPending(next); // 就将该DocumentsWriterPerThread放入DocumentsWriterPerThread.flushPending
             }
             flushingDWPT = checkOutForFlush(next);
           }
@@ -591,7 +591,7 @@ final class DocumentsWriterFlushControl implements Accountable, Closeable {
               : "DWPT must never be null here since we hold the lock and it holds documents";
           assert next == flushingDWPT : "flushControl returned different DWPT";
           fullFlushBuffer.add(flushingDWPT);
-        } else {
+        } else {// 没有文档，因为我们再换每个DWPT里面的deleteQueue，旧的DWPT已经过期了，简单处理的话，就仅仅丢弃彻底丢弃DocumentsWriterPerThread
           // it's possible that we get a DWPT with 0 docs if we flush concurrently to
           // threads getting DWPTs from the pool. In this case we simply remove it from
           // the pool and drop it on the floor.
@@ -599,7 +599,7 @@ final class DocumentsWriterFlushControl implements Accountable, Closeable {
           assert checkout;
         }
       } finally {
-        next.unlock();
+        next.unlock(); // 从dwpts中取出后，也会释放了锁。
       }
     }
     synchronized (this) {
@@ -607,9 +607,9 @@ final class DocumentsWriterFlushControl implements Accountable, Closeable {
        * pending and moved to blocked are moved over to the flushQueue. There is
        * a chance that this happens since we marking DWPT for full flush without
        * blocking indexing.*/
-      pruneBlockedQueue(flushingQueue);
-      assert assertBlockedFlushes(documentsWriter.deleteQueue);
-      flushQueue.addAll(fullFlushBuffer);
+      pruneBlockedQueue(flushingQueue); // 会将旧DocumentsWriterDeleteQueue的里面blockedFlushes待flush的DocumentsWriterPerThread全部移到flushQueue中
+      assert assertBlockedFlushes(documentsWriter.deleteQueue);// 确认下
+      flushQueue.addAll(fullFlushBuffer); // 全部checkout出来，然后再将这批DWPT放在flushQueue中（为啥blockedFlushes先放进来的原因：这批是因为文档数满了|内存占用满了导致的flush，里面包含的DWPT都是大家伙）
       updateStallState();
       fullFlushMarkDone =
           true; // at this point we must have collected all DWPTs that belong to the old delete
@@ -637,19 +637,19 @@ final class DocumentsWriterFlushControl implements Accountable, Closeable {
       DocumentsWriterPerThread blockedFlush = iterator.next();
       if (blockedFlush.deleteQueue == flushingQueue) {
         iterator.remove();
-        addFlushingDWPT(blockedFlush);
+        addFlushingDWPT(blockedFlush); // 在就deleteQueue中的DWPT同时会移到flushingWriters和flushQueue中flushingWriters中
         // don't decr pending here - it's already done when DWPT is blocked
         flushQueue.add(blockedFlush);
       }
     }
   }
-
+// 会从DocumentsWriter.finishFullFlush()中主动跳到这里
   synchronized void finishFullFlush() {
     assert fullFlush;
     assert flushQueue.isEmpty();
     assert flushingWriters.isEmpty();
     try {
-      if (!blockedFlushes.isEmpty()) {
+      if (!blockedFlushes.isEmpty()) { // 若发现还有阻塞的DocumentsWriterPerThread
         assert assertBlockedFlushes(documentsWriter.deleteQueue);
         pruneBlockedQueue(documentsWriter.deleteQueue);
         assert blockedFlushes.isEmpty();
@@ -725,7 +725,7 @@ final class DocumentsWriterFlushControl implements Accountable, Closeable {
    * Returns the number of flushes that are checked out but not yet available for flushing. This
    * only applies during a full flush if a DWPT needs flushing but must not be flushed until the
    * full flush has finished.
-   */
+   */ // 发现正在进行full flush的同事，本DWPT也准备flush，那么先将本DWPT挂起，知道full flush完后后再继续进行
   synchronized int numBlockedFlushes() {
     return blockedFlushes.size();
   }

@@ -126,7 +126,7 @@ public final class BytesRefArray implements SortableBytesRefArray {
    * @return A {@link SortState} that could be used in {@link BytesRefArray#iterator(SortState)}
    */
   public SortState sort(final Comparator<BytesRef> comp, boolean stable) {
-    final int[] orderedEntries = new int[size()];
+    final int[] orderedEntries = new int[size()];// 排序前词的下标.//1.首先按照从大到小进行排序。_id: 1 , _id: 2等term。2.其次再按照docId排序，文档id倒序排序
     for (int i = 0; i < orderedEntries.length; i++) {
       orderedEntries[i] = i;
     }
@@ -237,7 +237,7 @@ public final class BytesRefArray implements SortableBytesRefArray {
 
   /** Used to iterate the elements of an array in a given order. */
   public static final class SortState implements Accountable {
-    private final int[] indices;
+    private final int[] indices;/// //1.首先按照从大到小进行排序。_id: 1 , _id: 2等term。2.其次再按照docId排序，文档id倒序排序
 
     private SortState(int[] indices) {
       this.indices = indices;

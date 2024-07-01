@@ -274,7 +274,7 @@ public final class Automata {
 
     return true;
   }
-
+  // 用于TermRange
   /**
    * Creates a new deterministic, minimal automaton accepting all binary terms in the specified
    * interval. Note that unlike {@link #makeDecimalInterval}, the returned automaton is infinite,
@@ -312,7 +312,7 @@ public final class Automata {
       }
     }
 
-    if (cmp == 0) {
+    if (cmp == 0) {// 最大和最小相差多少
       if (minInclusive == false || maxInclusive == false) {
         return makeEmpty();
       } else {
@@ -323,7 +323,7 @@ public final class Automata {
       return makeEmpty();
     }
 
-    if (max != null && StringHelper.startsWith(max, min) && suffixIsZeros(max, min.length)) {
+    if (max != null && StringHelper.startsWith(max, min) && suffixIsZeros(max, min.length)) {// 判断min是否为max的前缀值
 
       // Finite case: no sink state!
 
@@ -346,7 +346,7 @@ public final class Automata {
       }
 
       Automaton a = new Automaton();
-      int lastState = a.createState();
+      int lastState = a.createState(); // 新增一个初始状态
       for (int i = 0; i < min.length; i++) {
         int state = a.createState();
         int label = min.bytes[min.offset + i] & 0xff;
@@ -372,8 +372,8 @@ public final class Automata {
     int startState = a.createState();
 
     int sinkState = a.createState();
-    a.setAccept(sinkState, true);
-
+    a.setAccept(sinkState, true);// 设置状态位可接受，这里设置的目的是为了查询时能提前结束字符的比较
+    // 新增sinkState到自身的转移，这是一个可接受状态，到达这个状态后，出现的任何字符都是满足查询范围的, 所以是一个自旋的可接受状态
     // This state accepts all suffixes:
     a.addTransition(sinkState, sinkState, 0, 255);
 
@@ -381,24 +381,24 @@ public final class Automata {
     int lastState = startState;
     int firstMaxState = -1;
     int sharedPrefixLength = 0;
-    for (int i = 0; i < min.length; i++) {
-      int minLabel = min.bytes[min.offset + i] & 0xff;
+    for(int i=0;i<min.length;i++) {// 遍历每个字母
+      int minLabel = min.bytes[min.offset+i] & 0xff;// 获取min中第一个字符
 
       int maxLabel;
       if (max != null && equalPrefix && i < max.length) {
-        maxLabel = max.bytes[max.offset + i] & 0xff;
+        maxLabel = max.bytes[max.offset+i] & 0xff;// 获取max中第一个字符
       } else {
         maxLabel = -1;
       }
 
       int nextState;
       if (minInclusive && i == min.length - 1 && (equalPrefix == false || minLabel != maxLabel)) {
-        nextState = sinkState;
+        nextState = sinkState;// 已经到min的末尾了，但是和max当前字符还不相同
       } else {
-        nextState = a.createState();
+        nextState = a.createState();// 确定了下一个起点
       }
 
-      if (equalPrefix) {
+      if (equalPrefix) {// 相同前缀
 
         if (minLabel == maxLabel) {
           // Still in shared prefix
@@ -408,10 +408,10 @@ public final class Automata {
           sharedPrefixLength = 0;
           a.addTransition(lastState, sinkState, minLabel + 1, 0xff);
           a.addTransition(lastState, nextState, minLabel);
-        } else {
+        } else {// maxLabel比minLabel大
           // This is the first point where min & max diverge:
           assert maxLabel > minLabel;
-
+          // 新增一个到 可接受状态的转移, 在查询阶段，如果字符是大于等于minLabel或者大于等于maxLabel，那么肯定是在查询范围内的
           a.addTransition(lastState, nextState, minLabel);
 
           if (maxLabel > minLabel + 1) {
@@ -426,8 +426,8 @@ public final class Automata {
             }
             a.addTransition(lastState, firstMaxState, maxLabel);
           }
-          equalPrefix = false;
-          sharedPrefixLength = i;
+          equalPrefix = false;// 确定不同了
+          sharedPrefixLength = i; // 共享的长度
         }
       } else {
         // OK, already diverged:
@@ -449,7 +449,7 @@ public final class Automata {
       a.setAccept(lastState, true);
     }
 
-    if (max != null) {
+    if (max != null) {//还有max的
 
       // Now do max:
       if (firstMaxState == -1) {
@@ -461,12 +461,12 @@ public final class Automata {
       }
       for (int i = sharedPrefixLength; i < max.length; i++) {
         int maxLabel = max.bytes[max.offset + i] & 0xff;
-        if (maxLabel > 0) {
+        if (maxLabel > 0) {// 0~maxLabel-1的字符肯定是在查询范围内，所以新增一个到可接受状态的转移
           a.addTransition(lastState, sinkState, 0, maxLabel - 1);
         }
         if (maxInclusive || i < max.length - 1) {
-          int nextState = a.createState();
-          if (i < max.length - 1) {
+          int nextState = a.createState();// 就说明要进入下一个了
+          if (i < max.length-1) {// 不是最后一个
             a.setAccept(nextState, true);
           }
           a.addTransition(lastState, nextState, maxLabel);
@@ -553,7 +553,7 @@ public final class Automata {
     for (int i = 0, cp = 0; i < s.length(); i += Character.charCount(cp)) {
       int state = a.createState();
       cp = s.codePointAt(i);
-      a.addTransition(lastState, state, cp);
+      a.addTransition(lastState, state, cp);// 就是前后两个state
       lastState = state;
     }
 

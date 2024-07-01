@@ -24,7 +24,7 @@ import org.apache.lucene.util.Bits;
 /**
  * A query that wraps another query and simply returns a constant score equal to 1 for every
  * document that matches the query. It therefore simply strips of all scores and always returns 1.
- */
+ */// 打分全部为1的话，就是常亮查询器
 public final class ConstantScoreQuery extends Query {
   private final Query query;
 
@@ -82,7 +82,7 @@ public final class ConstantScoreQuery extends Query {
    * We return this as our {@link BulkScorer} so that if the CSQ wraps a query with its own
    * optimized top-level scorer (e.g. BooleanScorer) we can use that top-level scorer.
    */
-  protected static class ConstantBulkScorer extends BulkScorer {
+  protected static class ConstantBulkScorer extends BulkScorer {// 这个需要读取全量的文档。 还有个ConstantScoreWeight，
     final BulkScorer bulkScorer;
     final Weight weight;
     final float theScore;
@@ -128,25 +128,25 @@ public final class ConstantScoreQuery extends Query {
     // sure to not disable any of the dynamic pruning optimizations for queries sorted by field or
     // top scores.
     final ScoreMode innerScoreMode;
-    if (scoreMode.isExhaustive()) {
+    if (scoreMode.isExhaustive()) {//需要查询全部数据, 恒定打分，就弄成不打分
       innerScoreMode = ScoreMode.COMPLETE_NO_SCORES;
-    } else {
+    } else {// 若需要
       innerScoreMode = ScoreMode.TOP_DOCS;
     }
-    final Weight innerWeight = searcher.createWeight(query, innerScoreMode, 1f);
-    if (scoreMode.needsScores()) {
-      return new ConstantScoreWeight(this, boost) {
+    final Weight innerWeight = searcher.createWeight(query, innerScoreMode, 1f);// 常量，不需要打分
+    if (scoreMode.needsScores()) {// 需要打分的话，就常量打分
+      return new ConstantScoreWeight(this, boost) {// 注意下，这里的boost，就是这个的score
 
         @Override
         public ScorerSupplier scorerSupplier(LeafReaderContext context) throws IOException {
-          ScorerSupplier innerScorerSupplier = innerWeight.scorerSupplier(context);
+          ScorerSupplier innerScorerSupplier = innerWeight.scorerSupplier(context);// 可以返回 Boolean2ScorerSupplier
           if (innerScorerSupplier == null) {
             return null;
           }
           return new ScorerSupplier() {
             @Override
             public Scorer get(long leadCost) throws IOException {
-              final Scorer innerScorer = innerScorerSupplier.get(leadCost);
+              final Scorer innerScorer = innerScorerSupplier.get(leadCost); //返回DisjunctionSumScorer
               final TwoPhaseIterator twoPhaseIterator = innerScorer.twoPhaseIterator();
               if (twoPhaseIterator == null) {
                 return new ConstantScoreScorer(score(), scoreMode, innerScorer.iterator());
@@ -157,7 +157,7 @@ public final class ConstantScoreQuery extends Query {
 
             @Override
             public BulkScorer bulkScorer() throws IOException {
-              if (scoreMode.isExhaustive() == false) {
+              if (scoreMode.isExhaustive() == false) {// 不用查询全部苏剧
                 return super.bulkScorer();
               }
               final BulkScorer innerScorer = innerScorerSupplier.bulkScorer();
@@ -169,7 +169,7 @@ public final class ConstantScoreQuery extends Query {
 
             @Override
             public long cost() {
-              return innerScorerSupplier.cost();
+              return innerScorerSupplier.cost();// 是从fst中计算cost
             }
           };
         }

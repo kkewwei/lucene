@@ -29,30 +29,30 @@ import org.apache.lucene.util.StringHelper;
 
 /**
  * Embeds a [read-only] SegmentInfo and adds per-commit fields.
- *
+ * 一个只读的segmentInfo
  * @lucene.experimental
  */
-public class SegmentCommitInfo {
+public class SegmentCommitInfo {// 一个只读的SegmentInfo
 
   /** The {@link SegmentInfo} that we wrap. */
   public final SegmentInfo info;
 
   /** Id that uniquely identifies this segment commit. */
-  private byte[] id;
+  private byte[] id;// 
 
   // How many deleted docs in the segment:
-  private int delCount;
+  private int delCount;//TermDelete删除的文档数（硬删除），不包含软删除的文档
 
   // How many soft-deleted docs in the segment that are not also hard-deleted:
-  private int softDelCount;
+  private int softDelCount; // 软删除的个数（已经确定了2次)
 
   // Generation number of the live docs file (-1 if there
   // are no deletes yet):
-  private long delGen;
+  private long delGen; //  不为-1，则说明这个segment有删除。有termQuery类型的删除，就会>-1
 
   // Normally 1+delGen, unless an exception was hit on last
   // attempt to write:
-  private long nextWriteDelGen;
+  private long nextWriteDelGen;// liv文件也有版本号这一说法
 
   // Generation number of the FieldInfos (-1 if there are no updates)
   private long fieldInfosGen;
@@ -69,7 +69,7 @@ public class SegmentCommitInfo {
   private long nextWriteDocValuesGen;
 
   // Track the per-field DocValues update files
-  private final Map<Integer, Set<String>> dvUpdatesFiles = new HashMap<>();
+  private final Map<Integer, Set<String>> dvUpdatesFiles = new HashMap<>();// 保存soft-deletes对应的dvd和dvm文件
 
   // TODO should we add .files() to FieldInfosFormat, like we have on
   // LiveDocsFormat?
@@ -80,7 +80,7 @@ public class SegmentCommitInfo {
 
   // NOTE: only used in-RAM by IW to track buffered deletes;
   // this is never written to/read from the Directory
-  private long bufferedDeletesGen = -1;
+  private long bufferedDeletesGen = -1;// 哪个deleteGen有效。
 
   /**
    * Sole constructor.
@@ -148,10 +148,10 @@ public class SegmentCommitInfo {
   }
 
   /** Called when we succeed in writing deletes */
-  void advanceDelGen() {
-    delGen = nextWriteDelGen;
+  void advanceDelGen() {// 每次产生一个live文件，都会调用该函数
+    delGen = nextWriteDelGen; // 那么这个segment再产生新的liv文件，liv文件版本号都要变
     nextWriteDelGen = delGen + 1;
-    generationAdvanced();
+    generationAdvanced();// 产生这个segment_id
   }
 
   /**
@@ -245,7 +245,7 @@ public class SegmentCommitInfo {
 
     // Must separately add any live docs files:
     if (hasDeletions()) {
-      info.getCodec().liveDocsFormat().files(this, files);
+      info.getCodec().liveDocsFormat().files(this, files);// files()将跑到Lucene50LiveDocsFormat，添加.liv文件
     }
 
     // must separately add any field updates files
@@ -266,7 +266,7 @@ public class SegmentCommitInfo {
   void setBufferedDeletesGen(long v) {
     if (bufferedDeletesGen == -1) {
       bufferedDeletesGen = v;
-      generationAdvanced();
+      generationAdvanced();// 随机产生一个segmentId
     } else {
       throw new IllegalStateException("buffered deletes gen should only be set once");
     }
@@ -319,12 +319,12 @@ public class SegmentCommitInfo {
 
   /** Returns the number of deleted docs in the segment. */
   public int getDelCount() {
-    return delCount;
+    return delCount;// 硬删除的文档数
   }
 
   /** Returns the number of only soft-deleted docs. */
   public int getSoftDelCount() {
-    return softDelCount;
+    return softDelCount;// 软删除的文档数
   }
 
   void setDelCount(int delCount) {
@@ -393,7 +393,7 @@ public class SegmentCommitInfo {
     other.nextWriteDocValuesGen = nextWriteDocValuesGen;
 
     // deep clone
-    for (Entry<Integer, Set<String>> e : dvUpdatesFiles.entrySet()) {
+    for (Entry<Integer, Set<String>> e : dvUpdatesFiles.entrySet()) {// dvd文件复制
       other.dvUpdatesFiles.put(e.getKey(), new HashSet<>(e.getValue()));
     }
 
@@ -408,7 +408,7 @@ public class SegmentCommitInfo {
 
   private void generationAdvanced() {
     sizeInBytes = -1;
-    id = StringHelper.randomId();
+    id = StringHelper.randomId();//针对该segment，随机产生一个
   }
 
   /**

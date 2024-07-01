@@ -79,26 +79,26 @@ public class BytesRefBlockPool implements Accountable {
    * used to read back the value using {@link #fillBytesRef(BytesRef, int)}.
    *
    * @see #fillBytesRef(BytesRef, int)
-   */
+   */// 存储的时候，在ByteBlockPool中的结构是：长度+具体的term。至少预留2byte存放长度
   public int addBytesRef(BytesRef bytes) {
     final int length = bytes.length;
-    final int len2 = 2 + bytes.length;
+    final int len2 = 2 + bytes.length;// lucene支持的term长度不超过2个字节，长度采用变长整数表示，因此需要申请的存储空间为2 + bytes.length。(申请俩不定用俩)
     if (len2 + byteBlockPool.byteUpto > BYTE_BLOCK_SIZE) {
       if (len2 > BYTE_BLOCK_SIZE) {
-        throw new BytesRefHash.MaxBytesLengthExceededException(
+        throw new BytesRefHash.MaxBytesLengthExceededException(// 这里报的我们经常见到的异样
             "bytes can be at most " + (BYTE_BLOCK_SIZE - 2) + " in length; got " + bytes.length);
       }
       byteBlockPool.nextBuffer();
     }
     final byte[] buffer = byteBlockPool.buffer;
-    final int bufferUpto = byteBlockPool.byteUpto;
+    final int bufferUpto = byteBlockPool.byteUpto;// 获取内存池的起始可用位置
     final int textStart = bufferUpto + byteBlockPool.byteOffset;
 
     // We first encode the length, followed by the
     // bytes. Length is encoded as vInt, but will consume
     // 1 or 2 bytes at most (we reject too-long terms,
     // above).
-    if (length < 128) {
+    if (length < 128) { // 长度小于128，则长度用一个字节的vInt即可存储。
       // 1 byte to store length
       buffer[bufferUpto] = (byte) length;
       byteBlockPool.byteUpto += length + 1;
@@ -106,7 +106,7 @@ public class BytesRefBlockPool implements Accountable {
       System.arraycopy(bytes.bytes, bytes.offset, buffer, bufferUpto + 1, length);
     } else {
       // 2 byte to store length
-      BitUtil.VH_BE_SHORT.set(buffer, bufferUpto, (short) (length | 0x8000));
+      BitUtil.VH_BE_SHORT.set(buffer, bufferUpto, (short) (length | 0x8000));// 高位为1
       byteBlockPool.byteUpto += length + 2;
       System.arraycopy(bytes.bytes, bytes.offset, buffer, bufferUpto + 2, length);
     }

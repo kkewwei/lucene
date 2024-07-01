@@ -109,13 +109,13 @@ public final class ByteBuffersDataOutput extends DataOutput implements Accountab
   private int blockBits;
 
   /** Blocks storing data. */
-  private final ArrayDeque<ByteBuffer> blocks = new ArrayDeque<>();
+  private final ArrayDeque<ByteBuffer> blocks = new ArrayDeque<>();// 实际存储数据的地方，每个元数据32kb
 
   /** Cumulative RAM usage across all blocks. */
   private long ramBytesUsed;
 
   /** The current-or-next write block. */
-  private ByteBuffer currentBlock = EMPTY;
+  private ByteBuffer currentBlock = EMPTY; // 当前正在写入的byte[]。
 
   /**
    * Create a new output, suitable for writing a file of around {@code expectedSize} bytes.
@@ -125,7 +125,7 @@ public final class ByteBuffersDataOutput extends DataOutput implements Accountab
    *
    * @param expectedSize estimated size of the output file
    */
-  public ByteBuffersDataOutput(long expectedSize) {
+  public ByteBuffersDataOutput(long expectedSize) {// 默认15位
     this(
         computeBlockSizeBitsFor(expectedSize),
         DEFAULT_MAX_BITS_PER_BLOCK,
@@ -176,14 +176,14 @@ public final class ByteBuffersDataOutput extends DataOutput implements Accountab
               maxBitsPerBlock));
     }
     this.maxBitsPerBlock = maxBitsPerBlock;
-    this.blockBits = minBitsPerBlock;
+    this.blockBits = minBitsPerBlock; // 个数组的长度，15位，32kb
     this.blockAllocate = Objects.requireNonNull(blockAllocate, "Block allocator must not be null.");
     this.blockReuse = Objects.requireNonNull(blockReuse, "Block reuse must not be null.");
   }
 
   @Override
   public void writeByte(byte b) {
-    if (!currentBlock.hasRemaining()) {
+    if (!currentBlock.hasRemaining()) { // 写到了一个block，则数组扩容
       appendBlock();
     }
     currentBlock.put(b);
@@ -349,8 +349,8 @@ public final class ByteBuffersDataOutput extends DataOutput implements Accountab
   public long size() {
     long size = 0;
     int blockCount = blocks.size();
-    if (blockCount >= 1) {
-      long fullBlockSize = (blockCount - 1L) * blockSize();
+    if (blockCount >= 1) {// 至少有一个
+      long fullBlockSize = (blockCount - 1L) * blockSize();// 满block
       long lastBlockSize = blocks.getLast().position();
       size = fullBlockSize + lastBlockSize;
     }

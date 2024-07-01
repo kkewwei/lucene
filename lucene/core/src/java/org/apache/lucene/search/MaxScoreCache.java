@@ -32,13 +32,13 @@ import org.apache.lucene.util.ArrayUtil;
  *
  * @lucene.internal
  */
-public final class MaxScoreCache {
+public final class MaxScoreCache {// 这个函数是干啥？缓存在不大于某个文档的最大score？
 
   private final ImpactsSource impactsSource;
   private final BulkSimScorer bulkScorer;
-  private final float globalMaxScore;
-  private float[] maxScoreCache;
-  private int[] maxScoreCacheUpTo;
+  private final float globalMaxScore;// Integer.max的最大的分
+  private float[] maxScoreCache;// 这个level最大频率算出的得分，只要最大的分满足，那么这段doc都必须要遍历
+  private int[] maxScoreCacheUpTo;// 最大的分截止位置（这个block的最大docId）
   private float[] spare = FloatArrayList.EMPTY_ARRAY;
 
   /** Sole constructor. */
@@ -57,9 +57,9 @@ public final class MaxScoreCache {
    * @see Scorer#advanceShallow(int)
    */
   public int advanceShallow(int target) throws IOException {
-    impactsSource.advanceShallow(target);
+    impactsSource.advanceShallow(target);// Lucene101PostingsReader$BlockPostingsEnum
     Impacts impacts = impactsSource.getImpacts();
-    return impacts.getDocIdUpTo(0);
+    return impacts.getDocIdUpTo(0);// 获取此时level0的最大值
   }
 
   private void ensureCacheSize(int size) {
@@ -94,9 +94,9 @@ public final class MaxScoreCache {
    * @see Scorer#getMaxScore(int)
    */
   public float getMaxScore(int upTo) throws IOException {
-    final int level = getLevel(upTo);
+    final int level = getLevel(upTo);// 当前level
     if (level == -1) {
-      return globalMaxScore;
+      return globalMaxScore;// 直接说明取得是upTo，取最大的分
     }
     return getMaxScoreForLevel(level);
   }
@@ -105,7 +105,7 @@ public final class MaxScoreCache {
    * Return the first level that includes all doc IDs up to {@code upTo}, or -1 if there is no such
    * level.
    */
-  private int getLevel(int upTo) throws IOException {
+  private int getLevel(int upTo) throws IOException {// 看是几级别可以覆盖
     final Impacts impacts = impactsSource.getImpacts();
     for (int level = 0, numLevels = impacts.numLevels(); level < numLevels; ++level) {
       final int impactsUpTo = impacts.getDocIdUpTo(level);
@@ -125,9 +125,9 @@ public final class MaxScoreCache {
     assert level >= 0 : "level must not be a negative integer; got " + level;
     final Impacts impacts = impactsSource.getImpacts();
     ensureCacheSize(level + 1);
-    final int levelUpTo = impacts.getDocIdUpTo(level);
+    final int levelUpTo = impacts.getDocIdUpTo(level);// 这个level的最大值
     if (maxScoreCacheUpTo[level] < levelUpTo) {
-      maxScoreCache[level] = computeMaxScore(impacts.getImpacts(level));
+      maxScoreCache[level] = computeMaxScore(impacts.getImpacts(level));//打分机制
       maxScoreCacheUpTo[level] = levelUpTo;
     }
     return maxScoreCache[level];

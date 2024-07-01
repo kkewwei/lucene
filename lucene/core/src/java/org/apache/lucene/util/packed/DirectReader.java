@@ -219,7 +219,7 @@ public class DirectReader {
     public long get(long index) {
       try {
         int shift = ((int) (index & 3)) << 1;
-        return (in.readByte(offset + (index >>> 2)) >>> shift) & 0x3;
+        return (in.readByte(offset + (index >>> 2)) >>> shift) & 0x3;// 从dvd中哪个文件读取原始值
       } catch (IOException e) {
         throw new RuntimeException(e);
       }
@@ -256,7 +256,7 @@ public class DirectReader {
     }
 
     @Override
-    public long get(long index) {
+    public long get(long index) {// 直接8 bit读取
       try {
         return in.readByte(offset + index) & 0xFF;
       } catch (IOException e) {
@@ -279,7 +279,7 @@ public class DirectReader {
       try {
         long offset = (index * 12) >>> 3;
         int shift = (int) (index & 1) << 2;
-        return (in.readShort(this.offset + offset) >>> shift) & 0xFFF;
+        return (in.readShort(this.offset + offset) >>> shift) & 0xFFF; // in=fdx
       } catch (IOException e) {
         throw new RuntimeException(e);
       }

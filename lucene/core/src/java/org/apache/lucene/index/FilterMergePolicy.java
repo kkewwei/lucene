@@ -25,11 +25,11 @@ import org.apache.lucene.util.Unwrappable;
  * A wrapper for {@link MergePolicy} instances.
  *
  * @lucene.experimental
- */
+ */ // FilterMergePolicy 是EsTieredMergePolicy基类
 public class FilterMergePolicy extends MergePolicy implements Unwrappable<MergePolicy> {
 
   /** The wrapped {@link MergePolicy}. */
-  protected final MergePolicy in;
+  protected final MergePolicy in; // RecoverySourcePruneMergePolicy.
 
   /**
    * Creates a new filter merge policy instance wrapping another.
@@ -45,8 +45,8 @@ public class FilterMergePolicy extends MergePolicy implements Unwrappable<MergeP
       MergeTrigger mergeTrigger, SegmentInfos segmentInfos, MergeContext mergeContext)
       throws IOException {
     return in.findMerges(mergeTrigger, segmentInfos, mergeContext);
-  }
-
+  } // in=ShuffleForcedMergePolicy，里面的in=RecoverySourcePruneMergePolicy，实际进入的是OneMergeWrappingMergePolicy, 第二次是 TieredMergePolicy
+  // in=ShuffleForcedMergePolicy时，此时this=ElasticsearchMergePolicy。第二次in=RecoverySourcePruneMergePolicy，此时this=ShuffleForcedMergePolicy时
   @Override
   public MergeSpecification findMerges(CodecReader... readers) throws IOException {
     return in.findMerges(readers);
@@ -119,7 +119,7 @@ public class FilterMergePolicy extends MergePolicy implements Unwrappable<MergeP
   }
 
   @Override
-  public int numDeletesToMerge(
+  public int numDeletesToMerge(//delCount: 硬删除+软删除+pendingdelete的doc个数
       SegmentCommitInfo info, int delCount, IOSupplier<CodecReader> readerSupplier)
       throws IOException {
     return in.numDeletesToMerge(info, delCount, readerSupplier);

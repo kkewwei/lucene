@@ -183,17 +183,17 @@ public class IndexSortSortedNumericDocValuesRangeQuery extends NumericDocValuesR
           NumericDocValues numericValues = DocValues.unwrapSingleton(sortedNumericValues);
           PointValues pointValues = reader.getPointValues(field);
           if (pointValues != null && pointValues.getDocCount() == reader.maxDoc()) {
-            itAndCount = getDocIdSetIteratorOrNullFromBkd(context, numericValues);
+            itAndCount = getDocIdSetIteratorOrNullFromBkd(context, numericValues);//先从bkd查询
           }
           if (itAndCount != null && itAndCount.count != -1) {
             return itAndCount.count;
           }
 
           // use index sort optimization if possible
-          Sort indexSort = reader.getMetaData().sort();
+          Sort indexSort = reader.getMetaData().sort();// 基于doc_value查询
           if (indexSort != null
               && indexSort.getSort().length > 0
-              && indexSort.getSort()[0].getField().equals(field)) {
+              && indexSort.getSort()[0].getField().equals(field)) {// 统计个数
             final SortField sortField = indexSort.getSort()[0];
             final SortField.Type sortFieldType = getSortFieldType(sortField);
             // The index sort optimization is only supported for Type.INT and Type.LONG
@@ -239,17 +239,17 @@ public class IndexSortSortedNumericDocValuesRangeQuery extends NumericDocValuesR
     if (cmp < 0 || (cmp == 0 && allowEqual == false)) {
       return null;
     }
-    if (pointTree.moveToChild() == false) {
-      ValueAndDoc vd = new ValueAndDoc();
+    if (pointTree.moveToChild() == false) {// 就是叶子节点
+      ValueAndDoc vd = new ValueAndDoc();// 全部使用一个
       pointTree.visitDocValues(
           new IntersectVisitor() {
 
             @Override
-            public void visit(int docID, byte[] packedValue) throws IOException {
+            public void visit(int docID, byte[] packedValue) throws IOException {// 会逐个遍历每个文档
               if (vd.value == null) {
                 int cmp = comparator.compare(packedValue, 0, value, 0);
                 if (cmp > 0 || (cmp == 0 && allowEqual)) {
-                  vd.value = packedValue.clone();
+                  vd.value = packedValue.clone();//找到比目标值更小的值
                   vd.docID = docID;
                 }
               } else if (lastDoc && vd.done == false) {
@@ -281,7 +281,7 @@ public class IndexSortSortedNumericDocValuesRangeQuery extends NumericDocValuesR
     }
 
     // Recurse
-    do {
+    do {// 还有叶子节点
       ValueAndDoc vd = findNextValue(pointTree, value, allowEqual, comparator, lastDoc);
       if (vd != null) {
         return vd;
@@ -298,14 +298,14 @@ public class IndexSortSortedNumericDocValuesRangeQuery extends NumericDocValuesR
    * its first doc ID or last doc ID depending on {@code lastDoc}. This method returns -1 if there
    * is no greater value in the dataset.
    */
-  private static int nextDoc(
+  private static int nextDoc(// //通过bkd树，确定min文档/max文档id
       PointTree pointTree,
       byte[] value,
       boolean allowEqual,
       ByteArrayComparator comparator,
       boolean lastDoc)
       throws IOException {
-    ValueAndDoc vd = findNextValue(pointTree, value, allowEqual, comparator, lastDoc);
+    ValueAndDoc vd = findNextValue(pointTree, value, allowEqual, comparator, lastDoc);// 取两者的交集
     if (vd == null) {
       return -1;
     }
@@ -424,16 +424,16 @@ public class IndexSortSortedNumericDocValuesRangeQuery extends NumericDocValuesR
         || indexSort.getSort().length == 0
         || indexSort.getSort()[0].getField().equals(field) == false) {
       return null;
-    }
+    }// 基于主键排序
 
     final boolean reverse = indexSort.getSort()[0].getReverse();
 
-    PointValues points = context.reader().getPointValues(field);
+    PointValues points = context.reader().getPointValues(field); // point结构
     if (points == null) {
       return null;
     }
 
-    if (points.getNumDimensions() != 1) {
+    if (points.getNumDimensions() != 1) {// 只管1纬
       return null;
     }
 
@@ -442,13 +442,13 @@ public class IndexSortSortedNumericDocValuesRangeQuery extends NumericDocValuesR
       return null;
     }
 
-    if (points.size() != points.getDocCount()) {
+    if (points.size() != points.getDocCount()) {// 文档数不一致，不能用
       return null;
     }
 
     assert lowerValue <= upperValue;
-    byte[] queryLowerPoint;
-    byte[] queryUpperPoint;
+    byte[] queryLowerPoint;// 用户的范围
+    byte[] queryUpperPoint;// 用户的范围
     if (points.getBytesPerDimension() == Integer.BYTES) {
       queryLowerPoint = IntPoint.pack((int) lowerValue).bytes;
       queryUpperPoint = IntPoint.pack((int) upperValue).bytes;
@@ -456,10 +456,10 @@ public class IndexSortSortedNumericDocValuesRangeQuery extends NumericDocValuesR
       queryLowerPoint = LongPoint.pack(lowerValue).bytes;
       queryUpperPoint = LongPoint.pack(upperValue).bytes;
     }
-    if (matchNone(points, queryLowerPoint, queryUpperPoint)) {
+    if (matchNone(points, queryLowerPoint, queryUpperPoint)) {//全部不匹配
       return IteratorAndCount.empty();
     }
-    if (matchAll(points, queryLowerPoint, queryUpperPoint)) {
+    if (matchAll(points, queryLowerPoint, queryUpperPoint)) {// 也不是全部匹配
       int maxDoc = context.reader().maxDoc();
       if (points.getDocCount() == maxDoc) {
         return IteratorAndCount.all(maxDoc);
@@ -471,7 +471,7 @@ public class IndexSortSortedNumericDocValuesRangeQuery extends NumericDocValuesR
     int minDocId, maxDocId;
     final ByteArrayComparator comparator =
         ArrayUtil.getUnsignedComparator(points.getBytesPerDimension());
-
+     //通过bkd树，确定min文档
     if (reverse) {
       minDocId = nextDoc(points.getPointTree(), queryUpperPoint, false, comparator, true) + 1;
     } else {
@@ -482,14 +482,14 @@ public class IndexSortSortedNumericDocValuesRangeQuery extends NumericDocValuesR
       }
     }
 
-    if (reverse) {
-      maxDocId = nextDoc(points.getPointTree(), queryLowerPoint, true, comparator, true) + 1;
+    if (reverse) {// 用户的范围，发送的最小值
+      maxDocId = nextDoc(points.getPointTree(), queryLowerPoint, true, comparator, true) + 1;//  //通过bkd树，确定min文档/max文档id
       if (maxDocId == 0) {
         // No matches
         return IteratorAndCount.empty();
       }
     } else {
-      maxDocId = nextDoc(points.getPointTree(), queryUpperPoint, false, comparator, false);
+      maxDocId = nextDoc(points.getPointTree(), queryUpperPoint, false, comparator, false); //通过bkd树，确定min文档/max文档id
       if (maxDocId == -1) {
         maxDocId = context.reader().maxDoc();
       }
@@ -500,7 +500,7 @@ public class IndexSortSortedNumericDocValuesRangeQuery extends NumericDocValuesR
     }
 
     if ((points.getDocCount() == context.reader().maxDoc())) {
-      return IteratorAndCount.denseRange(minDocId, maxDocId);
+      return IteratorAndCount.denseRange(minDocId, maxDocId);//确定了这个的最大值和最小docId
     } else {
       return IteratorAndCount.sparseRange(minDocId, maxDocId, delegate);
     }
@@ -511,23 +511,23 @@ public class IndexSortSortedNumericDocValuesRangeQuery extends NumericDocValuesR
       return IteratorAndCount.empty();
     }
 
-    SortedNumericDocValues sortedNumericValues =
+    SortedNumericDocValues sortedNumericValues = // 仅仅弄sorted的
         DocValues.getSortedNumeric(context.reader(), field);
     NumericDocValues numericValues = DocValues.unwrapSingleton(sortedNumericValues);
-    if (numericValues != null) {
-      IteratorAndCount itAndCount = getDocIdSetIteratorOrNullFromBkd(context, numericValues);
-      if (itAndCount != null) {
+    if (numericValues != null) {//
+      IteratorAndCount itAndCount = getDocIdSetIteratorOrNullFromBkd(context, numericValues);//根据bkd树，确定最小和最大docId
+      if (itAndCount != null) {// 若没有bkd，并且有排序，排序第一个字段为range指定字段
         return itAndCount;
       }
-      Sort indexSort = context.reader().getMetaData().sort();
+      Sort indexSort = context.reader().getMetaData().sort();// 直接基于sort时使用doc_value来对比
       if (indexSort != null
           && indexSort.getSort().length > 0
-          && indexSort.getSort()[0].getField().equals(field)) {
+          && indexSort.getSort()[0].getField().equals(field)) {// 若没有bkd，并且有排序，排序第一个字段为range指定字段
 
         final SortField sortField = indexSort.getSort()[0];
         final SortField.Type sortFieldType = getSortFieldType(sortField);
         // The index sort optimization is only supported for Type.INT and Type.LONG
-        if (sortFieldType == Type.INT || sortFieldType == Type.LONG) {
+        if (sortFieldType == Type.INT || sortFieldType == Type.LONG) {// 仅基于这两种
           return getDocIdSetIterator(sortField, sortFieldType, context, numericValues);
         }
       }
@@ -547,7 +547,7 @@ public class IndexSortSortedNumericDocValuesRangeQuery extends NumericDocValuesR
    * {@link DocIdSetIterator} makes sure to wrap the original docvalues to skip over documents with
    * no value.
    */
-  private IteratorAndCount getDocIdSetIterator(
+  private IteratorAndCount getDocIdSetIterator(// 基于doc_value查询
       SortField sortField,
       SortField.Type sortFieldType,
       LeafReaderContext context,
@@ -562,7 +562,7 @@ public class IndexSortSortedNumericDocValuesRangeQuery extends NumericDocValuesR
     int low = 0;
     int high = maxDoc - 1;
 
-    while (low <= high) {
+    while (low <= high) {// 基于分查找
       int mid = (low + high) >>> 1;
       if (comparator.compare(mid) <= 0) {
         high = mid - 1;
@@ -626,7 +626,7 @@ public class IndexSortSortedNumericDocValuesRangeQuery extends NumericDocValuesR
       // Since we support only Type.INT and Type.LONG, assuming LONG for all other cases
       fieldComparator.setTopValue(topValue);
     }
-
+   // 基于doc_value来对比
     LeafFieldComparator leafFieldComparator = fieldComparator.getLeafComparator(context);
     int direction = sortField.getReverse() ? -1 : 1;
 
@@ -659,11 +659,11 @@ public class IndexSortSortedNumericDocValuesRangeQuery extends NumericDocValuesR
       return new IteratorAndCount(DocIdSetIterator.all(maxDoc), maxDoc);
     }
 
-    static IteratorAndCount denseRange(int minDoc, int maxDoc) {
+    static IteratorAndCount denseRange(int minDoc, int maxDoc) {// 全部匹配
       return new IteratorAndCount(DocIdSetIterator.range(minDoc, maxDoc), maxDoc - minDoc);
     }
 
-    static IteratorAndCount sparseRange(int minDoc, int maxDoc, DocIdSetIterator delegate) {
+    static IteratorAndCount sparseRange(int minDoc, int maxDoc, DocIdSetIterator delegate) {//  部分匹配
       return new IteratorAndCount(new BoundedDocIdSetIterator(minDoc, maxDoc, delegate), -1);
     }
   }

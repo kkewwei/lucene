@@ -32,10 +32,10 @@ public class MatchingReaders {
    * {@link SegmentReader}s that have identical field name/number mapping, so their stored fields
    * and term vectors may be bulk merged.
    */
-  public final boolean[] matchingReaders;
+  public final boolean[] matchingReaders; // 是否有相同的
 
   /** How many {@link #matchingReaders} are set. */
-  final int count;
+  final int count; // 多少个段的字段顺序一样的
 
   public MatchingReaders(MergeState mergeState) {
     // If the i'th reader is a SegmentReader and has
@@ -52,13 +52,13 @@ public class MatchingReaders {
 
     nextReader:
     for (int i = 0; i < numReaders; i++) {
-      for (FieldInfo fi : mergeState.fieldInfos[i]) {
+      for (FieldInfo fi : mergeState.fieldInfos[i]) { // 此segment有几个字段
         FieldInfo other = mergeState.mergeFieldInfos.fieldInfo(fi.number);
         if (other == null || !other.name.equals(fi.name)) {
           continue nextReader;
         }
       }
-      matchingReaders[i] = true;
+      matchingReaders[i] = true; // 判断两个segment中mergeFieldInfos的段所有字段排列顺序是不是一样的
       matchedCount++;
     }
 

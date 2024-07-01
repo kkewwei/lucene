@@ -66,8 +66,8 @@ import java.util.Objects;
  *     exceeds {@link #sumTotalTermFreq()}. @see Terms#getSumDocFreq()
  * @lucene.experimental
  */
-public record CollectionStatistics(
-    String field, long maxDoc, long docCount, long sumTotalTermFreq, long sumDocFreq) {
+public record CollectionStatistics(//
+    String field, long maxDoc, long docCount, long sumTotalTermFreq, long sumDocFreq) {// sumTotalTermFreq=字段
   /**
    * Creates statistics instance for a collection (field).
    *

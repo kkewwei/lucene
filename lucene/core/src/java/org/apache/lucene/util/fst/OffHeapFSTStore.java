@@ -26,22 +26,22 @@ import org.apache.lucene.util.RamUsageEstimator;
  * byte store on heap
  *
  * @lucene.experimental
- */
+ */// 在启动的时候，作为segment基本内容给初始化了
 public final class OffHeapFSTStore implements FSTReader {
 
   private static final long BASE_RAM_BYTES_USED =
       RamUsageEstimator.shallowSizeOfInstance(OffHeapFSTStore.class);
 
   private final IndexInput in;
-  private final long offset;
+  private final long offset; // 时刻从offset区读取
   private final long numBytes;
 
   public OffHeapFSTStore(IndexInput in, long offset, FST.FSTMetadata<?> metadata) {
-    this.in = in;
+    this.in = in;// ByteBufferIndexInput$SingleBufferImpl,里面buffer使用的DirestByteBufferR
     this.offset = offset;
     this.numBytes = metadata.numBytes;
   }
-
+  //这里就是内存优势，
   @Override
   public long ramBytesUsed() {
     return BASE_RAM_BYTES_USED;
@@ -52,7 +52,7 @@ public final class OffHeapFSTStore implements FSTReader {
   }
 
   @Override
-  public FST.BytesReader getReverseBytesReader() {
+  public FST.BytesReader getReverseBytesReader() {// 从这里读取倒叙的FST结构
     try {
       return new ReverseRandomAccessReader(in.randomAccessSlice(offset, numBytes));
     } catch (IOException e) {

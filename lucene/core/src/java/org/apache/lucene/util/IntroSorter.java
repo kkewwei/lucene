@@ -51,14 +51,14 @@ public abstract class IntroSorter extends Sorter {
    * case. Selects the pivot with medians and partitions with the Bentley-McIlroy fast 3-ways
    * algorithm (Engineering a Sort Function, Bentley-McIlroy).
    */
-  void sort(int from, int to, int maxDepth) {
+  void sort(int from, int to, int maxDepth) {// 文档下标
     // Sort small ranges with insertion sort.
     int size;
     while ((size = to - from) > INSERTION_SORT_THRESHOLD) {
 
       if (--maxDepth < 0) {
         // Max recursion depth exceeded: fallback to heap sort.
-        heapSort(from, to);
+        heapSort(from, to);// 大点了用堆排序
         return;
       }
 

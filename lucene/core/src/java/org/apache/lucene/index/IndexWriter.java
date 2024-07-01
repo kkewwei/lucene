@@ -193,10 +193,10 @@ import org.apache.lucene.util.Version;
  * (files that were created since the last commit, but are no longer
  * referenced by the "front" of the index). For this, IndexFileDeleter
  * keeps track of the last non commit checkpoint.
- */
+ */// Lucene学习比较牛逼的材料：https://www.amazingkoala.com.cn/Lucene/Index/2020/1209/184.html
 public class IndexWriter
-    implements Closeable, TwoPhaseCommit, Accountable, MergePolicy.MergeContext {
-
+    implements Closeable, TwoPhaseCommit, Accountable, MergePolicy.MergeContext {// 一个shard,只有一个IndexWriter
+//IndexWriter通过调用DocumentWriter的方法，来操作写索引。初始化时，只是加载了segment元数据，索引内容并没有被Reader
   /**
    * Hard limit on maximum number of documents that may be added to the index. If you try to add
    * more than this you'll hit {@code IllegalArgumentException}.
@@ -204,10 +204,10 @@ public class IndexWriter
   // We defensively subtract 128 to be well below the lowest
   // ArrayUtil.MAX_ARRAY_LENGTH on "typical" JVMs.  We don't just use
   // ArrayUtil.MAX_ARRAY_LENGTH here because this can vary across JVMs:
-  public static final int MAX_DOCS = Integer.MAX_VALUE - 128;
+  public static final int MAX_DOCS = Integer.MAX_VALUE - 128; // 2147483519
 
   /** Maximum value of the token position in an indexed field. */
-  public static final int MAX_POSITION = Integer.MAX_VALUE - 128;
+  public static final int MAX_POSITION = Integer.MAX_VALUE - 128; // 最大偏移量
 
   // Use package-private instance var to enforce the limit so testing
   // can use less electricity:
@@ -265,27 +265,27 @@ public class IndexWriter
   private final AtomicReference<Throwable> tragedy = new AtomicReference<>(null);
 
   private final Directory directoryOrig; // original user directory
-  private final Directory directory; // wrapped with additional checks
-
+  private final Directory directory; // wrapped with additional checks  指向索引文件夹
+  // 当前lucene写入数据的段就是changeCount变量维护的
   // increments every time a change is completed
   private final AtomicLong changeCount = new AtomicLong();
   private volatile long lastCommitChangeCount; // last changeCount that was committed
 
   // list of segmentInfo we will fallback to if the commit fails
   private List<SegmentCommitInfo> rollbackSegments;
-
+  // 这个是新陈胜的SegmentInfos
   // set when a commit is pending (after prepareCommit() & before commit())
   private volatile SegmentInfos pendingCommit;
   private volatile long pendingSeqNo;
   private volatile long pendingCommitChangeCount;
 
-  private Collection<String> filesToCommit;
-
-  private final SegmentInfos segmentInfos;
+  private Collection<String> filesToCommit;// 最新的这个segmentInfos，里面包含的多少个文件
+  // 在类初始话的时候，会去检查是否直接使用之前存在的段。shard恢复时会用之前的
+  private final SegmentInfos segmentInfos; // 目前这个shard维持的所有的段信息。ES中Refresh产生的字段会首先加入到这里面，加入了就代表将段公开可以查询了。然后通过StandardDirectoryReader.open(segmentInfos)构建StandardDirectoryReader，放入StandardDirectoryReader中，替换es的StandardDirectoryReader
   final FieldNumbers globalFieldNumberMap;
 
-  final DocumentsWriter docWriter;
-  private final EventQueue eventQueue = new EventQueue(this);
+  final DocumentsWriter docWriter;// DocumentsWriter， 一个shard，也只有一个DocumentsWriter
+  private final EventQueue eventQueue = new EventQueue(this);// 定义的一个事件queue，刷盘过程中的的一些必要操作会被封装为Event并放入eventQueue中国，这些事件会在刷盘完成之后进行处理。比如合并成复合文件后，需要删掉单个的文件。
   private final MergeScheduler.MergeSource mergeSource = new IndexWriterMergeSource(this);
   private final AddIndexesMergeSource addIndexesMergeSource = new AddIndexesMergeSource(this);
 
@@ -315,7 +315,7 @@ public class IndexWriter
     }
 
     boolean add(Event event) {
-      acquire();
+      acquire();// 读写锁
       try {
         return queue.add(event);
       } finally {
@@ -337,9 +337,9 @@ public class IndexWriter
           : "must acquire a permit before processing events";
       Event event;
       while ((event = queue.poll()) != null) {
-        event.process(writer);
-      }
-    }
+        event.process(writer); // 1.会有segment通过mmap可查，靠这里。实际会进入FrozenBufferedUpdates.publishFrozenUpdates()里面的tryApply
+      } // 当refresh时第二次过来时候的才会对新的segment进行mmap操作
+    } //1:删除废弃不是couple的文件。2.对存量segment进行删除操作。3也会publish，但是实际实在每个segment已经调用publish了
 
     @Override
     public synchronized void close() throws IOException { // synced to prevent double closing
@@ -371,7 +371,7 @@ public class IndexWriter
   private final Map<SegmentCommitInfo, Boolean> segmentsToMerge = new HashMap<>();
   private int mergeMaxNumSegments;
 
-  private Lock writeLock;
+  private Lock writeLock; // NativeFSLock  每一个索引文件夹只能打开一个 IndexWriter,所以需要锁
 
   private volatile boolean closed;
   private volatile boolean closing;
@@ -382,19 +382,19 @@ public class IndexWriter
 
   // Holds all SegmentInfo instances currently involved in
   // merges
-  private final HashSet<SegmentCommitInfo> mergingSegments = new HashSet<>();
-  private final MergeScheduler mergeScheduler;
+  private final HashSet<SegmentCommitInfo> mergingSegments = new HashSet<>(); // 正在合并的segment
+  private final MergeScheduler mergeScheduler; // InternalEngine$EngineMergeScheduler
   private final Set<SegmentMerger> runningAddIndexesMerges = new HashSet<>();
-  private final Deque<MergePolicy.OneMerge> pendingMerges = new ArrayDeque<>();
+  private final Deque<MergePolicy.OneMerge> pendingMerges = new ArrayDeque<>();// 合并时从这里取，放入runningMerges中
   private final Set<MergePolicy.OneMerge> runningMerges = new HashSet<>();
   private final List<MergePolicy.OneMerge> mergeExceptions = new ArrayList<>();
   private final Merges merges = new Merges();
   private long mergeGen;
   private boolean didMessageState;
-  private final AtomicInteger flushCount = new AtomicInteger();
+  private final AtomicInteger flushCount = new AtomicInteger();// 多少个DocumentsWriterPerThread完成了flush,放入了segmentInfos中
   private final AtomicInteger flushDeletesCount = new AtomicInteger();
   private final ReaderPool readerPool;
-  private final BufferedUpdatesStream bufferedUpdatesStream;
+  private final BufferedUpdatesStream bufferedUpdatesStream; // 也是全局惟一的
 
   private final IndexWriterEventListener eventListener;
 
@@ -403,7 +403,7 @@ public class IndexWriter
    * #forceApply(FrozenBufferedUpdates)} to handle concurrently apply deletes/updates with merges
    * completing.
    */
-  private final AtomicLong mergeFinishedGen = new AtomicLong();
+  private final AtomicLong mergeFinishedGen = new AtomicLong();// 记录merge导致的gen变化
 
   // The instance that was passed to the constructor. It is saved only in order
   // to allow users to query an IndexWriter settings.
@@ -421,12 +421,12 @@ public class IndexWriter
    * change the index, much like how hotels place an "authorization hold" on your credit card to
    * make sure they can later charge you when you check out.
    */
-  private final AtomicLong pendingNumDocs = new AtomicLong();
+  private final AtomicLong pendingNumDocs = new AtomicLong();// 是全局变量，统计多少还未刷盘构建semgnet的文档数
 
   private final boolean softDeletesEnabled;
 
-  private final DocumentsWriter.FlushNotifications flushNotifications =
-      new DocumentsWriter.FlushNotifications() {
+  private final DocumentsWriter.FlushNotifications flushNotifications =// 这里是先放进来，并没有去删除
+      new DocumentsWriter.FlushNotifications() { // 删除掉单独的segent文件
         @Override
         public void deleteUnusedFiles(Collection<String> files) {
           eventQueue.add(w -> w.deleteNewFiles(files));
@@ -438,7 +438,7 @@ public class IndexWriter
         }
 
         @Override
-        public void afterSegmentsFlushed() throws IOException {
+        public void afterSegmentsFlushed() throws IOException {//  这里是立马去执行了
           publishFlushedSegments(false);
         }
 
@@ -458,10 +458,10 @@ public class IndexWriter
                 }
               });
         }
-
+        // 这个会作为IndexWriter.eventQueue里面第2个event,在刷新完所有flush时会调用（见IndexWriter.doFlush()里面的processEvents）
         @Override
-        public void onTicketBacklog() {
-          eventQueue.add(w -> w.publishFlushedSegments(true));
+        public void onTicketBacklog() {// 帮忙刷新
+          eventQueue.add(w -> w.publishFlushedSegments(true)); // w=IndexWriter
         }
       };
 
@@ -471,13 +471,13 @@ public class IndexWriter
    * session can be quickly made available for searching without closing the writer nor calling
    * {@link #commit}.
    *
-   * <p>Note that this is functionally equivalent to calling {@link #commit} and then opening a new
+   * <p>Note that this is functionally equivalent to calling {@link #commit} and then opening a new这个函数等价于调用flush，然后打开一个新的reader
    * reader. But the turnaround time of this method should be faster since it avoids the potentially
    * costly {@link #commit}.
    *
-   * <p>You must close the {@link IndexReader} returned by this method once you are done using it.
+   * <p>You must close the {@link IndexReader} returned by this method once you are done using it.// 当用完时必须主动调用close函数
    *
-   * <p>It's <i>near</i> real-time because there is no hard guarantee on how quickly you can get a
+   * <p>It's <i>near</i> real-time because there is no hard guarantee on how quickly you can get a  接近近实时搜索，是因为没有强制保存非常快的得到新的reader
    * new reader after making changes with IndexWriter. You'll have to experiment in your situation
    * to determine if it's fast enough. As this is a new and experimental feature, please report back
    * on your findings so we can learn, improve and iterate.
@@ -507,7 +507,7 @@ public class IndexWriter
    * @throws IOException If there is a low-level I/O error
    */
   DirectoryReader getReader(boolean applyAllDeletes, boolean writeAllDeletes) throws IOException {
-    ensureOpen();
+    ensureOpen(); // 新创建的索引，都是从InternalEngine.createReaderManager的DirectoryReader.open(indexWriter)里面进来，applyAllDeletes为true,writeAllDeletes为false
 
     if (writeAllDeletes && applyAllDeletes == false) {
       throw new IllegalArgumentException("applyAllDeletes must be true when writeAllDeletes=true");
@@ -522,8 +522,8 @@ public class IndexWriter
     // obtained during this flush are pooled, the first time
     // this method is called:
     readerPool.enableReaderPooling();
-    StandardDirectoryReader r = null;
-    doBeforeFlush();
+    StandardDirectoryReader r = null; // StandardDirectoryReader，近实时搜索
+    doBeforeFlush(); //啥都不做
     boolean anyChanges;
     final long maxFullFlushMergeWaitMillis = config.getMaxFullFlushMergeWaitMillis();
     /*
@@ -544,7 +544,7 @@ public class IndexWriter
           final ReadersAndUpdates rld = getPooledInstance(sci, true);
           try {
             assert Thread.holdsLock(IndexWriter.this);
-            SegmentReader segmentReader = rld.getReadOnlyClone(IOContext.DEFAULT);
+            SegmentReader segmentReader = rld.getReadOnlyClone(IOContext.DEFAULT);// 回去读取硬删除+软删除文件
             // only track this if we actually do fullFlush merges
             if (maxFullFlushMergeWaitMillis > 0) {
               openedReadOnlyClones.put(sci.info.name, segmentReader);
@@ -575,20 +575,20 @@ public class IndexWriter
        * the corresponding added documents (in the update case) are flushed and visible when opening a SDR.
        */
       boolean success = false;
-      synchronized (fullFlushLock) {
+      synchronized (fullFlushLock) { // 全部锁住了，es refresh时，只有一个节点会进来
         try {
           // TODO: should we somehow make the seqNo available in the returned NRT reader?
-          anyChanges = docWriter.flushAllThreads() < 0;
+          anyChanges = docWriter.flushAllThreads() < 0;// 会去刷新所有Thread,产生segment。仅仅是产生新的segment复合文件，并放入
           if (anyChanges == false) {
             // prevent double increment since docWriter#doFlush increments the flushcount
             // if we flushed anything.
             flushCount.incrementAndGet();
           }
-          publishFlushedSegments(true);
-          processEvents(false);
+          publishFlushedSegments(true); // 在进行fullflush后，会掉一次.这里再调用一次刷新操作，基本没啥用
+          processEvents(false); // 接着把事件处理完，包括删除14个单个类型索引文件。通过mmap将新的文件打开，以供实时查询
 
-          if (applyAllDeletes) {
-            applyAllDeletesAndUpdates();
+          if (applyAllDeletes) { // 开始更新删除的文档
+            applyAllDeletesAndUpdates(); // 全部变更完成
           }
           synchronized (this) {
 
@@ -600,11 +600,11 @@ public class IndexWriter
             // then do this w/o IW's lock?
             // Must do this sync'd on IW to prevent a merge from completing at the last second and
             // failing to write its DV updates:
-            writeReaderPool(writeAllDeletes);
+            writeReaderPool(writeAllDeletes); // 对于存量segment来说，来将更新的文档写入DocValue，以及内存中的SegmentReader（createNewReaderWithLatestLiveDocs）
 
             // Prevent segmentInfos from changing while opening the
             // reader; in theory we could instead do similar retry logic,
-            // just like we do when loading segments_N
+            // just like we do when loading segments_N // 又重新打开了(会对segment文件进行mmap)
             r =
                 StandardDirectoryReader.open(
                     this, readerFactory, segmentInfos, applyAllDeletes, writeAllDeletes);
@@ -671,10 +671,10 @@ public class IndexWriter
         } finally {
           // Done: finish the full flush!
           assert Thread.holdsLock(fullFlushLock);
-          docWriter.finishFullFlush(success);
-          if (success) {
+          docWriter.finishFullFlush(success); // 会将blockedFlushes里的DWPT转到flushQueue中
+          if (success) {// 再次检查有啥事情需要我们干的
             processEvents(false);
-            doAfterFlush();
+            doAfterFlush(); // 这里没有带具体的segment
           } else {
             if (infoStream.isEnabled("IW")) {
               infoStream.message("IW", "hit exception during NRT reader");
@@ -703,7 +703,7 @@ public class IndexWriter
       }
 
       anyChanges |= maybeMerge.getAndSet(false);
-      if (anyChanges) {
+      if (anyChanges) { // 这里会触发merge线程，比较重要的操作
         maybeMerge(config.getMergePolicy(), MergeTrigger.FULL_FLUSH, UNBOUNDED_MAX_MERGE_SEGMENTS);
       }
       if (infoStream.isEnabled("IW")) {
@@ -815,7 +815,7 @@ public class IndexWriter
         if (ramBufferSizeMB != IndexWriterConfig.DISABLE_AUTO_FLUSH) {
           long startNS = System.nanoTime();
 
-          long ramBytesUsed = readerPool.ramBytesUsed();
+          long ramBytesUsed = readerPool.ramBytesUsed();// 若使用内存太堵了，那么就先落盘一下。
           if (ramBytesUsed > 0.5 * ramBufferSizeMB * 1024 * 1024) {
             if (infoStream.isEnabled("BD")) {
               infoStream.message(
@@ -955,36 +955,36 @@ public class IndexWriter
     eventListener = config.getIndexWriterEventListener();
     // obtain the write.lock. If the user configured a timeout,
     // we wrap with a sleeper and this might take some time.
-    writeLock = d.obtainLock(WRITE_LOCK_NAME);
+    writeLock = d.obtainLock(WRITE_LOCK_NAME);  // NativeFSLock
 
     boolean success = false;
     try {
-      directoryOrig = d;
+      directoryOrig = d; // MMapDirectory
       directory = new LockValidatingDirectoryWrapper(d, writeLock);
       mergeScheduler = config.getMergeScheduler();
       mergeScheduler.initialize(infoStream, directoryOrig);
-      OpenMode mode = config.getOpenMode();
-      final boolean indexExists;
+      OpenMode mode = config.getOpenMode();//es create默认Append
+      final boolean indexExists;//是否存在段信息
       final boolean create;
       if (mode == OpenMode.CREATE) {
         indexExists = DirectoryReader.indexExists(directory);
         create = true;
-      } else if (mode == OpenMode.APPEND) {
+      } else if (mode == OpenMode.APPEND) { // ES一般跑这里
         indexExists = true;
         create = false;
       } else {
         // CREATE_OR_APPEND - create only if an index does not exist
-        indexExists = DirectoryReader.indexExists(directory);
-        create = !indexExists;
+        indexExists = DirectoryReader.indexExists(directory); // 找segments_N文件
+        create = !indexExists; // 若segments_N索引文件不在，那么就创建这个索引文件
       }
 
       // If index is too old, reading the segments will throw
       // IndexFormatTooOldException.
 
-      String[] files = directory.listAll();
+      String[] files = directory.listAll(); // 列举indexId/index/里面的所有文件
 
       // Set up our initial SegmentInfos:
-      IndexCommit commit = config.getIndexCommit();
+      IndexCommit commit = config.getIndexCommit(); // 主副分片恢复，都是安全提交点
 
       // Set up our initial SegmentInfos:
       StandardDirectoryReader reader;
@@ -993,8 +993,8 @@ public class IndexWriter
       } else {
         reader = commit.getReader();
       }
-
-      if (create) {
+      // 若Segments_N不存在，就创建
+      if (create) {// 节点重启，集群元数据恢复跑到这里
 
         if (config.getIndexCommit() != null) {
           // We cannot both open from a commit point and create:
@@ -1011,12 +1011,12 @@ public class IndexWriter
         // against an index that's currently open for
         // searching.  In this case we write the next
         // segments_N file with no segments:
-        final SegmentInfos sis = new SegmentInfos(config.getIndexCreatedVersionMajor());
-        if (indexExists) {
-          final SegmentInfos previous = SegmentInfos.readLatestCommit(directory);
-          sis.updateGenerationVersionAndCounter(previous);
+        final SegmentInfos sis = new SegmentInfos(config.getIndexCreatedVersionMajor()); // 仅仅确定了segments使用的版本号
+        if (indexExists) { // 这个文件是否有段信息
+          final SegmentInfos previous = SegmentInfos.readLatestCommit(directory);// 这个是之前的，读取出来没啥用呀
+          sis.updateGenerationVersionAndCounter(previous); // 初始化了本轮的generation
         }
-        segmentInfos = sis;
+        segmentInfos = sis; // 并没有把旧的semgents_1给用上，基本直接把旧的segments_1给丢弃了。
         rollbackSegments = segmentInfos.createBackupSegmentInfos();
 
         // Record that we have a change (zero out all
@@ -1076,9 +1076,9 @@ public class IndexWriter
         }
 
         rollbackSegments = lastCommit.createBackupSegmentInfos();
-      } else {
+      } else { // 节点重启，shard恢复跑到这里
         // Init from either the latest commit point, or an explicit prior commit point:
-
+        //从读取Segments_n文件的数据
         String lastSegmentsFile = SegmentInfos.getLastCommitSegmentsFileName(files);
         if (lastSegmentsFile == null) {
           throw new IndexNotFoundException(
@@ -1087,9 +1087,9 @@ public class IndexWriter
 
         // Do not use SegmentInfos.read(Directory) since the spooky
         // retrying it does is not necessary here (we hold the write lock):
-        segmentInfos = SegmentInfos.readCommit(directoryOrig, lastSegmentsFile);
+        segmentInfos = SegmentInfos.readCommit(directoryOrig, lastSegmentsFile); // 从最近的segments_1中读取所有存量的segment
 
-        if (commit != null) {
+        if (commit != null) {// 改造最新的SegmentInfos，替换掉全部的segment，仅仅保留medtadate
           // Swap out all segments, but, keep metadata in
           // SegmentInfos, like version & generation, to
           // preserve write-once.  This is important if
@@ -1104,8 +1104,8 @@ public class IndexWriter
           }
 
           SegmentInfos oldInfos =
-              SegmentInfos.readCommit(directoryOrig, commit.getSegmentsFileName());
-          segmentInfos.replace(oldInfos);
+              SegmentInfos.readCommit(directoryOrig, commit.getSegmentsFileName());// 安全提交点的SegmentInfos
+          segmentInfos.replace(oldInfos);// 保留最新的SegmentInfos元数据，使用旧的segment全部替换掉(generation也交换了)
           changed();
 
           if (infoStream.isEnabled("IW")) {
@@ -1119,14 +1119,14 @@ public class IndexWriter
       if (infoStream.isEnabled("IW")) {
         infoStream.message("IW", "init " + segmentInfos.toStringVerbose());
       }
-      commitUserData = new HashMap<>(segmentInfos.getUserData()).entrySet();
+      commitUserData = new HashMap<>(segmentInfos.getUserData()).entrySet();// 最新那个的commitUserData(外面会替换掉)
 
-      pendingNumDocs.set(segmentInfos.totalMaxDoc());
+      pendingNumDocs.set(segmentInfos.totalMaxDoc());// 遍历旧的每个segment,放入pendingNumDocs中,需要待重新写入
 
       // start with previous field numbers, but new FieldInfos
       // NOTE: this is correct even for an NRT reader because we'll pull FieldInfos even for the
       // un-committed segments:
-      globalFieldNumberMap = getFieldNumberMap();
+      globalFieldNumberMap = getFieldNumberMap();// 读取每个存量字段的配置信息
       if (create == false
           && conf.getParentField() != null
           && globalFieldNumberMap.getFieldNames().isEmpty() == false
@@ -1167,7 +1167,7 @@ public class IndexWriter
       // KeepOnlyLastCommitDeleter:
 
       // Sync'd is silly here, but IFD asserts we sync'd on the IW instance:
-      synchronized (this) {
+      synchronized (this) { // 这里比较重要的，会删除一些已经刷新到磁盘了，但是还没有写入segments_n中的segment（后期通过translog文件恢复 ）
         deleter =
             new IndexFileDeleter(
                 files,
@@ -1245,13 +1245,13 @@ public class IndexWriter
     }
     return Arrays.asList(fields1).equals(Arrays.asList(fields2).subList(0, fields1.length));
   }
-
+   // 读取字段配置信息
   // reads latest field infos for the commit
   // this is used on IW init and addIndexes(Dir) to create/update the global field map.
   // TODO: fix tests abusing this method!
   static FieldInfos readFieldInfos(SegmentCommitInfo si) throws IOException {
     Codec codec = si.info.getCodec();
-    FieldInfosFormat reader = codec.fieldInfosFormat();
+    FieldInfosFormat reader = codec.fieldInfosFormat();//Lucene60FieldInfosFormat
 
     if (si.hasFieldUpdates()) {
       // there are updates, we read latest (always outside of CFS)
@@ -1276,9 +1276,9 @@ public class IndexWriter
     final FieldNumbers map =
         new FieldNumbers(config.getSoftDeletesField(), config.getParentField());
 
-    for (SegmentCommitInfo info : segmentInfos) {
+    for (SegmentCommitInfo info : segmentInfos) {// 每个segment遍历
       FieldInfos fis = readFieldInfos(info);
-      for (FieldInfo fi : fis) {
+      for (FieldInfo fi : fis) {// 每个域过滤，获取全局的字段类型信息
         map.addOrGet(fi);
       }
     }
@@ -1495,9 +1495,9 @@ public class IndexWriter
    * @return The <a href="#sequence_number">sequence number</a> for this operation
    * @throws CorruptIndexException if the index is corrupt
    * @throws IOException if there is a low-level IO error
-   */
+   */ // 比较纯粹的一个API，就是向Lucene内新增一个文档。Lucene内部没有主键索引，所有新增文档都会被认为一个新的文档，分配一个独立的docId。
   public long addDocument(Iterable<? extends IndexableField> doc) throws IOException {
-    return updateDocument(null, doc);
+    return updateDocument(null, doc);// // 主键覆盖写&删除逻辑：softUpdateDocument，纯粹新增：addDocument
   }
 
   /**
@@ -1616,7 +1616,7 @@ public class IndexWriter
     return updateDocuments(
         delTerm == null ? null : DocumentsWriterDeleteQueue.newNode(delTerm), docs);
   }
-
+  // 更新文档，但是和数据库的更新不太一样。数据库的更新是查询后更新，Lucene的更新是查询后删除再新增。流程是先delete by term，后add document。但是这个流程又和直接先调用delete后调用add效果不一样，只有update能够保证在Thread内部删除和新增保证原子性，详细流程在下一章节会细说。
   /**
    * Similar to {@link #updateDocuments(Term, Iterable)}, but take a query instead of a term to
    * identify the documents to be updated
@@ -1676,7 +1676,7 @@ public class IndexWriter
   public long softUpdateDocuments(
       Term term, Iterable<? extends Iterable<? extends IndexableField>> docs, Field... softDeletes)
       throws IOException {
-    if (term == null) {
+    if (term == null) {// delete和主键update都将跑到这里。其中主键更新的话，doc中没有__soft_deletes字段。delete时候doc里面仅包含_tombstone, _doft_deletes, _id,_seq_no _primary_term, _version,
       throw new IllegalArgumentException("term must not be null");
     }
     if (softDeletes == null || softDeletes.length == 0) {
@@ -1872,7 +1872,7 @@ public class IndexWriter
    * @param terms array of terms to identify the documents to be deleted
    * @throws CorruptIndexException if the index is corrupt
    * @throws IOException if there is a low-level IO error
-   */
+   */ // 删除文档，支持两种类型删除，by term和by query。在IndexWriter内部这两种删除的流程不太一样，
   public long deleteDocuments(Term... terms) throws IOException {
     ensureOpen();
     try {
@@ -1896,7 +1896,7 @@ public class IndexWriter
     ensureOpen();
 
     // LUCENE-6379: Specialize MatchAllDocsQuery
-    for (Query query : queries) {
+    for (Query query : queries) {// 全部删除
       if (query.getClass() == MatchAllDocsQuery.class) {
         return deleteAll();
       }
@@ -1920,7 +1920,7 @@ public class IndexWriter
    * @param doc the document to be added
    * @throws CorruptIndexException if the index is corrupt
    * @throws IOException if there is a low-level IO error
-   */
+   */ // 删除包含term的文档，使用新的代理
   public long updateDocument(Term term, Iterable<? extends IndexableField> doc) throws IOException {
     return updateDocuments(
         term == null ? null : DocumentsWriterDeleteQueue.newNode(term), List.of(doc));
@@ -1946,9 +1946,9 @@ public class IndexWriter
    * @throws IOException if there is a low-level IO error
    * @lucene.experimental
    */
-  public long softUpdateDocument(
+  public long softUpdateDocument(// 主键覆盖写&删除逻辑：softUpdateDocument，纯粹新增：addDocument
       Term term, Iterable<? extends IndexableField> doc, Field... softDeletes) throws IOException {
-    if (term == null) {
+    if (term == null) { // 主键覆盖写就是硬删除，term: "_id:dddd"
       throw new IllegalArgumentException("term must not be null");
     }
     if (softDeletes == null || softDeletes.length == 0) {
@@ -2040,11 +2040,11 @@ public class IndexWriter
       throw tragedy;
     }
   }
-
+  //Term： _id: id1 在调delete文档时会使用， updates="_soft_deletes:1"
   private DocValuesUpdate[] buildDocValuesUpdate(Term term, Field[] updates) {
     DocValuesUpdate[] dvUpdates = new DocValuesUpdate[updates.length];
     for (int i = 0; i < updates.length; i++) {
-      final Field f = updates[i];
+      final Field f = updates[i];// 就是__soft_deletes字段 number
       final DocValuesType dvType = f.fieldType().docValuesType();
       if (dvType == null) {
         throw new NullPointerException(
@@ -2068,8 +2068,8 @@ public class IndexWriter
 
       switch (dvType) {
         case NUMERIC:
-          Long value = (Long) f.numericValue();
-          dvUpdates[i] = new NumericDocValuesUpdate(term, f.name(), value);
+          Long value = (Long) f.numericValue(); //  __soft_deletes跑这里
+          dvUpdates[i] = new NumericDocValuesUpdate(term, f.name(), value);// term:  _id:dd, f.name= __soft_deletes
           break;
         case BINARY:
           dvUpdates[i] = new BinaryDocValuesUpdate(term, f.name(), f.binaryValue());
@@ -2126,7 +2126,7 @@ public class IndexWriter
     return flushDeletesCount.get();
   }
 
-  private final String newSegmentName() {
+  private final String newSegmentName() {// 获取新的segment名称
     // Cannot synchronize on IndexWriter because that causes
     // deadlock
     synchronized (segmentInfos) {
@@ -2136,7 +2136,7 @@ public class IndexWriter
       // name that was previously returned which can cause
       // problems at least with ConcurrentMergeScheduler.
       changeCount.incrementAndGet();
-      segmentInfos.changed();
+      segmentInfos.changed(); // 这里也会导致
       return "_" + Long.toString(segmentInfos.counter++, Character.MAX_RADIX);
     }
   }
@@ -2394,23 +2394,23 @@ public class IndexWriter
    * policy parameters have changed.
    *
    * <p>This method will call the {@link MergePolicy} with {@link MergeTrigger#EXPLICIT}.
-   */
+   */// 一切开始的地方
   public final void maybeMerge() throws IOException {
     maybeMerge(config.getMergePolicy(), MergeTrigger.EXPLICIT, UNBOUNDED_MAX_MERGE_SEGMENTS);
   }
-
+  // IndexWriter.fluhs()会触发，mergePolicy=ElasticsearchMergePolicy(ShuffleForcedMergePolicy(RecoverySourcePruneMergePolicy(SoftDeletesRetentionMergePolicy(PrunePostingsMergePolicy(EsTieredMergePolicy([TieredMergePolicy: maxMergeAtOnce=10, maxMergeAtOnceExplicit=30, maxMergedSegmentMB=5120.0, floorSegmentMB=2.0, forceMergeDeletesPctAllowed=10.0, segmentsPerTier=10.0, maxCFSSegmentSizeMB=8.796093022207999E12, noCFSRatio=0.1, deletesPctAllowed=33.0))))))， MergeTrigger=FULL_FLUSH
   private final void maybeMerge(MergePolicy mergePolicy, MergeTrigger trigger, int maxNumSegments)
       throws IOException {
     ensureOpen(false);
-    if (updatePendingMerges(mergePolicy, trigger, maxNumSegments) != null) {
+    if (updatePendingMerges(mergePolicy, trigger, maxNumSegments) != null) { // 检查是否有需要合并的merge
       executeMerge(trigger);
     }
   }
 
   final void executeMerge(MergeTrigger trigger) throws IOException {
-    mergeScheduler.merge(mergeSource, trigger);
+    mergeScheduler.merge(mergeSource, trigger); //mergeScheduler=InternalEngine$EngineMergeScheduler
   }
-
+  // EsTieredMergePolicy
   private synchronized MergePolicy.MergeSpecification updatePendingMerges(
       MergePolicy mergePolicy, MergeTrigger trigger, int maxNumSegments) throws IOException {
 
@@ -2431,7 +2431,7 @@ public class IndexWriter
 
     final MergePolicy.MergeSpecification spec;
     final CachingMergeContext cachingMergeContext = new CachingMergeContext(this);
-    if (maxNumSegments != UNBOUNDED_MAX_MERGE_SEGMENTS) {
+    if (maxNumSegments != UNBOUNDED_MAX_MERGE_SEGMENTS) { // 是强制合并merge
       assert trigger == MergeTrigger.EXPLICIT || trigger == MergeTrigger.MERGE_FINISHED
           : "Expected EXPLICT or MERGE_FINISHED as trigger even with maxNumSegments set but was: "
               + trigger.name();
@@ -2449,11 +2449,11 @@ public class IndexWriter
           merge.maxNumSegments = maxNumSegments;
         }
       }
-    } else {
+    } else {// 是主动merge, 那么就去选择
       switch (trigger) {
         case GET_READER:
-        case COMMIT:
-          spec = mergePolicy.findFullFlushMerges(trigger, segmentInfos, cachingMergeContext);
+        case COMMIT:// 当主动commit时，会跑这里
+          spec = mergePolicy.findFullFlushMerges(trigger, segmentInfos, cachingMergeContext);// ElasticsearchMergePolicy，实际进入的实际
           break;
         case ADD_INDEXES:
           throw new IllegalStateException(
@@ -2464,14 +2464,14 @@ public class IndexWriter
         case MERGE_FINISHED:
         case SEGMENT_FLUSH:
         case CLOSING:
-        default:
+        default:// 首先跑到的是FilterMergePolicy(类是ElasticsearchMergePolicy)
           spec = mergePolicy.findMerges(trigger, segmentInfos, cachingMergeContext);
       }
     }
     if (spec != null) {
-      final int numMerges = spec.merges.size();
+      final int numMerges = spec.merges.size(); // 从中选出的一组
       for (int i = 0; i < numMerges; i++) {
-        registerMerge(spec.merges.get(i));
+        registerMerge(spec.merges.get(i));// 把需要merge的段放带merge的段中
       }
     }
     return spec;
@@ -2612,7 +2612,7 @@ public class IndexWriter
         // Keep the same segmentInfos instance but replace all
         // of its SegmentInfo instances so IFD below will remove
         // any segments we flushed since the last commit:
-        segmentInfos.rollbackSegmentInfos(rollbackSegments);
+        segmentInfos.rollbackSegmentInfos(rollbackSegments);// 全部删掉
         int rollbackMaxDoc = segmentInfos.totalMaxDoc();
         // now we need to adjust this back to the rolled back SI but don't set it to the absolute
         // value
@@ -2745,7 +2745,7 @@ public class IndexWriter
               }
               adjustPendingNumDocs(-segmentInfos.totalMaxDoc());
               // Remove all segments
-              segmentInfos.clear();
+              segmentInfos.clear(); // 清空该segment下所有segment
               // Ask deleter to locate unreferenced files & remove them:
               deleter.checkpoint(segmentInfos, false);
 
@@ -2887,23 +2887,23 @@ public class IndexWriter
   }
 
   /** Called internally if any index state has changed. */
-  private synchronized void changed() {
+  private synchronized void changed() { // 任何写入删除，都会调用
     changeCount.incrementAndGet();
-    segmentInfos.changed();
+    segmentInfos.changed(); // segementInfos version总体+1
   }
 
-  private synchronized long publishFrozenUpdates(FrozenBufferedUpdates packet) {
+  private synchronized long publishFrozenUpdates(FrozenBufferedUpdates packet) { // 加锁了
     assert packet != null && packet.any();
     long nextGen = bufferedUpdatesStream.push(packet);
     // Do this as an event so it applies higher in the stack when we are not holding
     // DocumentsWriterFlushQueue.purgeLock:
-    eventQueue.add(
+    eventQueue.add(// 放入一个event,将调用FrozenBufferedUpdates.apply(IndexWriter)方法。最终会在IndexWriter.doFlush结束docWriter.flushAllThreads()之后调用processEvents(false)进行处理：
         w -> {
           try {
             // we call tryApply here since we don't want to block if a refresh or a flush is already
             // applying the
             // packet. The flush will retry this packet anyway to ensure all of them are applied
-            tryApply(packet);
+            tryApply(packet); // 首先是FrozenBufferedUpdates，其次是DWPT线程本身的。就会执行真正的QueryDelete和TermDelete
           } catch (Throwable t) {
             try {
               w.onTragicEvent(t, "applyUpdatesPacket");
@@ -2920,12 +2920,12 @@ public class IndexWriter
   /**
    * Atomically adds the segment private delete packet and publishes the flushed segments
    * SegmentInfo to the index writer.
-   */
+   */// flush里面，将新增产生的段加入IndexWriter中，
   private synchronized void publishFlushedSegment(
       SegmentCommitInfo newSegment,
       FieldInfos fieldInfos,
       FrozenBufferedUpdates packet,
-      FrozenBufferedUpdates globalPacket,
+      FrozenBufferedUpdates globalPacket,// packet是本DocumentsWriterPerThread内的， globalPacket是全局
       Sorter.DocMap sortMap)
       throws IOException {
     boolean published = false;
@@ -2936,17 +2936,17 @@ public class IndexWriter
       if (infoStream.isEnabled("IW")) {
         infoStream.message("IW", "publishFlushedSegment " + newSegment.toStringVerbose());
       }
-
-      if (globalPacket != null && globalPacket.any()) {
-        publishFrozenUpdates(globalPacket);
-      }
+      //第一个lucene flush的线程会去向存量segment给"有删除时的更新操作"applied掉。
+      if (globalPacket != null && globalPacket.any()) {// 全局删除操作，里面会有setDeleteGen动作，后面会会根据这列表确定应用到范围。
+        publishFrozenUpdates(globalPacket); //         //这里处理DWPT刷新时冻结的globalBufferedUpdates。。没有真正处理
+      } //这里是
 
       // Publishing the segment must be sync'd on IW -> BDS to make the sure
       // that no merge prunes away the seg. private delete packet
       final long nextGen;
-      if (packet != null && packet.any()) {
+      if (packet != null && packet.any()) { // DocumentsWriterPerThread粒度的删除，目前只有QueryDelete
         nextGen = publishFrozenUpdates(packet);
-      } else {
+      } else { // 跑这里
         // Since we don't have a delete packet to apply we can get a new
         // generation right away
         nextGen = bufferedUpdatesStream.getNextGen();
@@ -2956,18 +2956,18 @@ public class IndexWriter
       if (infoStream.isEnabled("IW")) {
         infoStream.message(
             "IW", "publish sets newSegment delGen=" + nextGen + " seg=" + segString(newSegment));
-      }
-      newSegment.setBufferedDeletesGen(nextGen);
-      segmentInfos.add(newSegment);
+      }// 详见https://www.jianshu.com/p/dc8e8f3c0d29的解释
+      newSegment.setBufferedDeletesGen(nextGen);//根据上面的注释也发现了globalBufferedUpdates优先级要小于pendingUpdates。新产生的这个segment版本是大于本身DWPT对应的FrozenBufferedUpdates
+      segmentInfos.add(newSegment);// 虽然每个segment放入有先后，但是可见行是一样的。全部segment刷完后，才会去替换es的StandardDirectoryReader
       published = true;
-      checkpoint();
+      checkpoint();// 每个segment产生时都快照当前segmentInfos文件（保存最新的全部文件快照）
       if (packet != null && packet.any() && sortMap != null) {
         // TODO: not great we do this heavyish op while holding IW's monitor lock,
         // but it only applies if you are using sorted indices and updating doc values:
         ReadersAndUpdates rld = getPooledInstance(newSegment, true);
         rld.sortMap = sortMap;
         // DON't release this ReadersAndUpdates we need to stick with that sortMap
-      }
+      }// 没有需要删除的文档
       FieldInfo fieldInfo =
           fieldInfos.fieldInfo(
               config.softDeletesField); // will return null if no soft deletes are present
@@ -2975,11 +2975,11 @@ public class IndexWriter
       // build delete tombstones etc. in this case we haven't seen any updates to the DV in this
       // fresh flushed segment.
       // if we have seen updates the update code checks if the segment is fully deleted.
-      boolean hasInitialSoftDeleted =
-          (fieldInfo != null
+      boolean hasInitialSoftDeleted = //more为true
+          (fieldInfo != null // 默认为null
               && fieldInfo.getDocValuesGen() == -1
               && fieldInfo.getDocValuesType() != DocValuesType.NONE);
-      final boolean isFullyHardDeleted = newSegment.getDelCount() == newSegment.info.maxDoc();
+      final boolean isFullyHardDeleted = newSegment.getDelCount() == newSegment.info.maxDoc(); // 新segment是否全部硬删除
       // we either have a fully hard-deleted segment or one or more docs are soft-deleted. In both
       // cases we need
       // to go and check if they are fully deleted. This has the nice side-effect that we now have
@@ -3005,7 +3005,7 @@ public class IndexWriter
         adjustPendingNumDocs(-newSegment.info.maxDoc());
       }
       flushCount.incrementAndGet();
-      doAfterFlush();
+      doAfterFlush(); // 啥都不做
     }
   }
 
@@ -3709,7 +3709,7 @@ public class IndexWriter
    *     not.
    */
   @Override
-  public final long prepareCommit() throws IOException {
+  public final long prepareCommit() throws IOException {// commit后数据才可被搜索，commit是一个二阶段操作，prepareCommit是二阶段操作的第一个阶段，也可以通过调用commit一步完成，rollback提供了回滚到last commit的操作。
     ensureOpen();
     pendingSeqNo = prepareCommitInternal();
     // we must do this outside of the commitLock else we can deadlock:
@@ -3746,7 +3746,7 @@ public class IndexWriter
       maybeCloseOnTragicEvent();
     }
   }
-
+  // flush和commit，每个commit都有个Id,将从commitInternal()进来
   private long prepareCommitInternal() throws IOException {
     startCommitTime = System.nanoTime();
     synchronized (commitLock) {
@@ -3766,7 +3766,7 @@ public class IndexWriter
             "prepareCommit was already called with no corresponding call to commit");
       }
 
-      doBeforeFlush();
+      doBeforeFlush(); // 啥都没做，看起来先lucene flush
       testPoint("startDoFlush");
       SegmentInfos toCommit = null;
       boolean anyChanges = false;
@@ -3779,13 +3779,13 @@ public class IndexWriter
       // sync block:
 
       try {
-
+        // 先lucene flush
         synchronized (fullFlushLock) {
           boolean flushSuccess = false;
           boolean success = false;
           try {
             seqNo = docWriter.flushAllThreads();
-            if (seqNo < 0) {
+            if (seqNo < 0) { // 有变化
               anyChanges = true;
               seqNo = -seqNo;
             }
@@ -3794,15 +3794,15 @@ public class IndexWriter
               // if we flushed anything.
               flushCount.incrementAndGet();
             }
-            publishFlushedSegments(true);
+            publishFlushedSegments(true); // 里面每个segment此前已经调用publish了
             // cannot pass triggerMerges=true here else it can lead to deadlock:
-            processEvents(false);
+            processEvents(false);// 很重要，会有软删除的计算动作
 
             flushSuccess = true;
 
-            applyAllDeletesAndUpdates();
+            applyAllDeletesAndUpdates();// 没啥用
             synchronized (this) {
-              writeReaderPool(true);
+              writeReaderPool(true);//  1.提交_n.live文件   2.提交docValueUpdate文件修改，。3.同时打开新的SegmentReader，以便软删除生效
               if (changeCount.get() != lastCommitChangeCount) {
                 // There are changes to commit, so we will write a new segments_N in startCommit.
                 // The act of committing is itself an NRT-visible change (an NRT reader that was
@@ -3814,10 +3814,10 @@ public class IndexWriter
 
               if (commitUserData != null) {
                 Map<String, String> userData = new HashMap<>();
-                for (Map.Entry<String, String> ent : commitUserData) {
+                for (Map.Entry<String, String> ent : commitUserData) {//这里才真正执行
                   userData.put(ent.getKey(), ent.getValue());
                 }
-                segmentInfos.setUserData(userData, false);
+                segmentInfos.setUserData(userData, false); // 更新segmentInfos里面的userData
               }
 
               // Must clone the segmentInfos while we still
@@ -3825,14 +3825,14 @@ public class IndexWriter
               // no partial changes (eg a delete w/o
               // corresponding add from an updateDocument) can
               // sneak into the commit point:
-              toCommit = segmentInfos.clone();
+              toCommit = segmentInfos.clone();//首先复制当前segmentInfos
               pendingCommitChangeCount = changeCount.get();
               // This protects the segmentInfos we are now going
               // to commit.  This is important in case, eg, while
               // we are trying to sync all referenced files, a
               // merge completes which would otherwise have
               // removed the files we are now syncing.
-              deleter.incRef(toCommit.files(false));
+              deleter.incRef(toCommit.files(false));//所有文件引用+1。后面回去自动-1
               if (maxCommitMergeWaitMillis > 0) {
                 // we can safely call preparePointInTimeMerge since writeReaderPool(true) above
                 // wrote all
@@ -3852,7 +3852,7 @@ public class IndexWriter
             assert Thread.holdsLock(fullFlushLock);
             // Done: finish the full flush!
             docWriter.finishFullFlush(flushSuccess);
-            doAfterFlush();
+            doAfterFlush(); // 啥都没做
           }
         }
       } catch (Error tragedy) {
@@ -3889,9 +3889,9 @@ public class IndexWriter
       filesToCommit = toCommit.files(false);
       try {
         if (anyChanges) {
-          maybeMerge.set(true);
+          maybeMerge.set(true); // 这里说可能需要合并，后面会去检查
         }
-        startCommit(toCommit);
+        startCommit(toCommit); // 开始进行IndexCommit产生提交点
         if (pendingCommit == null) {
           return -1;
         } else {
@@ -4100,25 +4100,25 @@ public class IndexWriter
   private void writeReaderPool(boolean writeDeletes) throws IOException {
     assert Thread.holdsLock(this);
     if (writeDeletes) {
-      if (readerPool.commit(segmentInfos)) {
+      if (readerPool.commit(segmentInfos)) { //  1.提交产生新的_n_4.live文件   2.提交docValueUpdate文件修改，同时打开新的SegmentReader，以便软删除生效
         checkpointNoSIS();
       }
     } else { // only write the docValues
-      if (readerPool.writeAllDocValuesUpdates()) {
+      if (readerPool.writeAllDocValuesUpdates()) {// 将软删除docValue全部落盘，同时打开新的SegmentReader，以便软删除生效
         checkpoint();
       }
     }
     // now do some best effort to check if a segment is fully deleted
     List<SegmentCommitInfo> toDrop = new ArrayList<>(); // don't modify segmentInfos in-place
-    for (SegmentCommitInfo info : segmentInfos) {
-      ReadersAndUpdates readersAndUpdates = readerPool.get(info, false);
+    for (SegmentCommitInfo info : segmentInfos) { // 遍历Segment
+      ReadersAndUpdates readersAndUpdates = readerPool.get(info, false); // 没有会去创建。刚启动的节点
       if (readersAndUpdates != null) {
         if (isFullyDeleted(readersAndUpdates)) {
           toDrop.add(info);
         }
       }
     }
-    for (SegmentCommitInfo info : toDrop) {
+    for (SegmentCommitInfo info : toDrop) { // 删除整个semgent文件
       dropDeletedSegment(info);
     }
     if (toDrop.isEmpty() == false) {
@@ -4134,10 +4134,10 @@ public class IndexWriter
    *
    * <p><b>NOTE:</b> the iterator is late-binding: it is only visited once all documents for the
    * commit have been written to their segments, before the next segments_N file is written
-   */
+   */// 在IndexWriter.commitIndexWriter()调用会赋值最新的
   public final synchronized void setLiveCommitData(
       Iterable<Map.Entry<String, String>> commitUserData) {
-    setLiveCommitData(commitUserData, true);
+    setLiveCommitData(commitUserData, true);//这里supplier并没有真正执行，在遍历的时候才真正执行
   }
 
   /**
@@ -4166,7 +4166,7 @@ public class IndexWriter
 
   // Used only by commit and prepareCommit, below; lock
   // order is commitLock -> IW
-  private final Object commitLock = new Object();
+  private final Object commitLock = new Object(); // 调用IndexWriter.commit()时会锁起来
 
   /**
    * Commits all pending changes (added and deleted documents, segment merges, added indexes, etc.)
@@ -4180,7 +4180,7 @@ public class IndexWriter
    * the OS's fsync. But, beware: some hardware devices may in fact cache writes even during fsync,
    * and return before the bits are actually on stable storage, to give the appearance of faster
    * performance. If you have such a device, and it does not have a battery backup (for example)
-   * then on power loss it may still lose data. Lucene cannot guarantee consistency on such devices.
+   * then on power loss it may still lose data. Lucene cannot guarantee consistency on such devices.// 若你自己添加了一个磁盘缓存文件，尽管调用刷盘，但是实际还没在盘中
    *
    * <p>If nothing was committed, because there were no pending changes, this returns -1. Otherwise,
    * it returns the sequence number such that all indexing operations prior to this sequence will be
@@ -4190,10 +4190,10 @@ public class IndexWriter
    * @return The <a href="#sequence_number">sequence number</a> of the last operation in the commit.
    *     All sequence numbers &lt;= this value will be reflected in the commit, and all others will
    *     not.
-   */
-  @Override
-  public final long commit() throws IOException {
-    ensureOpen();
+   */ //  commit后数据才可被搜索，commit是一个二阶段操作，prepareCommit是二阶段操作的第一个阶段，也可以通过调用commit一步完成，rollback提供了回滚到last commit的操作。
+  @Override// lucene flush只是产生segment文件，并没有强制刷盘，lucene commit是强制刷片，清空translog文件。
+  public final long commit() throws IOException { // 比如flush过程就会触发commit()
+    ensureOpen();// es的refresh=lucene的flush，es的flush=lucene的commit
     return commitInternal(config.getMergePolicy());
   }
 
@@ -4212,7 +4212,7 @@ public class IndexWriter
   boolean hasChangesInRam() {
     return docWriter.anyChanges() || bufferedUpdatesStream.any();
   }
-
+  // TieredMergePolicy，从IndexWriter.commit()进来。主要是为了
   private long commitInternal(MergePolicy mergePolicy) throws IOException {
 
     if (infoStream.isEnabled("IW")) {
@@ -4232,7 +4232,7 @@ public class IndexWriter
         if (infoStream.isEnabled("IW")) {
           infoStream.message("IW", "commit: now prepare");
         }
-        seqNo = prepareCommitInternal();
+        seqNo = prepareCommitInternal(); // 需要进来看下
       } else {
         if (infoStream.isEnabled("IW")) {
           infoStream.message("IW", "commit: already prepared");
@@ -4240,7 +4240,7 @@ public class IndexWriter
         seqNo = pendingSeqNo;
       }
 
-      finishCommit();
+      finishCommit();// 这里还是有点重要，会有删除多余checkpoint。让pending_segments_d->pending_segments落盘
     }
 
     // we must do this outside of the commitLock else we can deadlock:
@@ -4267,13 +4267,13 @@ public class IndexWriter
         }
 
         if (pendingCommit != null) {
-          final Collection<String> commitFiles = this.filesToCommit;
-          try (Closeable finalizer = () -> deleter.decRef(commitFiles)) {
+          final Collection<String> commitFiles = this.filesToCommit;// 这个shard包含的所有文件
+          try (Closeable finalizer = () -> deleter.decRef(commitFiles)) {// 引用全部-1
 
             if (infoStream.isEnabled("IW")) {
               infoStream.message("IW", "commit: pendingCommit != null");
             }
-
+            // 完成pending_segments_(n+1) ->segments_(n+1)命名转变，并确认刷盘了
             committedSegmentsFileName = pendingCommit.finishCommit(directory);
 
             // we committed, if anything goes wrong after this, we are screwed and it's a tragedy:
@@ -4286,7 +4286,7 @@ public class IndexWriter
 
             // NOTE: don't use this.checkpoint() here, because
             // we do not want to increment changeCount:
-            deleter.checkpoint(pendingCommit, true);
+            deleter.checkpoint(pendingCommit, true); // 1.增加一些checkpoint，2.同时会有CombinedDeletionPolicy.onCommit(),从而删除本次废弃的translog文件
 
             // Carry over generation to our master SegmentInfos:
             segmentInfos.updateGeneration(pendingCommit);
@@ -4329,15 +4329,15 @@ public class IndexWriter
 
   // Ensures only one flush() is actually flushing segments
   // at a time:
-  private final Object fullFlushLock = new Object();
-
+  private final Object fullFlushLock = new Object(); // 开始flush时确保只有一个线程在flush
+// 触发强制flush，将所有Thread的In-memory buffer flush成segment文件，这个动作可以清理内存，强制对数据做持久化
   /**
    * Moves all in-memory segments to the {@link Directory}, but does not commit (fsync) them (call
    * {@link #commit} for that).
    */
-  public final void flush() throws IOException {
-    flush(true, true);
-  }
+  public final void flush() throws IOException {// es的refresh=lucene的flush，es的flush=lucene的commit
+    flush(true, true);// 应用所有deletes
+  }// flush
 
   /**
    * Flush all in-memory buffered updates (adds and deletes) to the Directory.
@@ -4345,7 +4345,7 @@ public class IndexWriter
    * @param triggerMerge if true, we may merge segments (if deletes or docs were flushed) if
    *     necessary
    * @param applyAllDeletes whether pending deletes should also
-   */
+   */ // 比如shard粒度刷新时间到了，那么会批量fullFlush
   final void flush(boolean triggerMerge, boolean applyAllDeletes) throws IOException {
 
     // NOTE: this method cannot be sync'd because
@@ -4361,7 +4361,7 @@ public class IndexWriter
       maybeMerge(config.getMergePolicy(), MergeTrigger.FULL_FLUSH, UNBOUNDED_MAX_MERGE_SEGMENTS);
     }
   }
-
+  // 当indexWriter.addDocument完文档后，我们主动调动flush
   /** Returns true a segment was flushed or deletes were applied. */
   private boolean doFlush(boolean applyAllDeletes) throws IOException {
     if (tragedy.get() != null) {
@@ -4369,7 +4369,7 @@ public class IndexWriter
           "this writer hit an unrecoverable error; cannot flush", tragedy.get());
     }
 
-    doBeforeFlush();
+    doBeforeFlush(); // 什么都不做
     testPoint("startDoFlush");
     boolean success = false;
     try {
@@ -4383,28 +4383,28 @@ public class IndexWriter
       synchronized (fullFlushLock) {
         boolean flushSuccess = false;
         try {
-          anyChanges = (docWriter.flushAllThreads() < 0);
+          anyChanges = (docWriter.flushAllThreads() < 0);// 进去后，会触发所有线程的flush操作
           if (!anyChanges) {
             // flushCount is incremented in flushAllThreads
             flushCount.incrementAndGet();
           }
-          publishFlushedSegments(true);
+          publishFlushedSegments(true);// 第二次进行publish
           flushSuccess = true;
         } finally {
           assert Thread.holdsLock(fullFlushLock);
-          docWriter.finishFullFlush(flushSuccess);
-          processEvents(false);
+          docWriter.finishFullFlush(flushSuccess);// 我们主动调用
+          processEvents(false);// 开始处理一些event，比如对新建segment进行mmap打开。对存量segment进行删除操作
         }
       }
 
       if (applyAllDeletes) {
-        applyAllDeletesAndUpdates();
+        applyAllDeletesAndUpdates();// 等待
       }
 
       anyChanges |= maybeMerge.getAndSet(false);
 
       synchronized (this) {
-        writeReaderPool(applyAllDeletes);
+        writeReaderPool(applyAllDeletes); // 若有删除的话，写入_n.liv文件
         doAfterFlush();
         success = true;
         return anyChanges;
@@ -4761,7 +4761,7 @@ public class IndexWriter
     // exception is hit e.g. writing the live docs for the
     // merge segment, in which case we need to abort the
     // merge:
-    segmentInfos.applyMergeChanges(merge, dropSegment);
+    segmentInfos.applyMergeChanges(merge, dropSegment);// 开始删掉merge的source semgent
 
     // Now deduct the deleted docs that we just reclaimed from this
     // merge:
@@ -4846,7 +4846,7 @@ public class IndexWriter
 
     final long t0 = System.currentTimeMillis();
 
-    final MergePolicy mergePolicy = config.getMergePolicy();
+    final MergePolicy mergePolicy = config.getMergePolicy(); // 为TieredMergePolicy
     try {
       try {
         try {
@@ -4856,8 +4856,8 @@ public class IndexWriter
                 "IW",
                 "now merge\n  merge=" + segString(merge.segments) + "\n  index=" + segString());
           }
-          mergeMiddle(merge, mergePolicy);
-          mergeSuccess(merge);
+          mergeMiddle(merge, mergePolicy);// 会发生merge中断
+          mergeSuccess(merge);// 啥都不做
           success = true;
         } catch (Throwable t) {
           handleMergeException(t, merge);
@@ -4880,7 +4880,7 @@ public class IndexWriter
             // This merge (and, generally, any change to the
             // segments) may now enable new merges, so we call
             // merge policy & update pending merges.
-            updatePendingMerges(mergePolicy, MergeTrigger.MERGE_FINISHED, merge.maxNumSegments);
+            updatePendingMerges(mergePolicy, MergeTrigger.MERGE_FINISHED, merge.maxNumSegments); // 重新更新下merge, maxNumSegments=-1
           }
         }
       }
@@ -4922,8 +4922,8 @@ public class IndexWriter
         final int delCount = numDeletedDocs(info);
         assert delCount <= info.info.maxDoc();
         final double delRatio = ((double) delCount) / info.info.maxDoc();
-        merge.estimatedMergeBytes += (long) (info.sizeInBytes() * (1.0 - delRatio));
-        merge.totalMergeBytes += info.sizeInBytes();
+        merge.estimatedMergeBytes += (long) (info.sizeInBytes() * (1.0 - delRatio));//预估的删除doc之后的文件长度之和
+        merge.totalMergeBytes += info.sizeInBytes();// 原文件长度相加
       }
     }
   }
@@ -4933,7 +4933,7 @@ public class IndexWriter
    * merge is "registered", meaning we record that its segments are now participating in a merge,
    * and true is returned. Else (the merge conflicts) false is returned.
    */
-  private synchronized boolean registerMerge(MergePolicy.OneMerge merge) throws IOException {
+  private synchronized boolean registerMerge(MergePolicy.OneMerge merge) throws IOException { // 遍历每个找到的merge
 
     if (merge.registerDone) {
       return true;
@@ -4947,7 +4947,7 @@ public class IndexWriter
 
     boolean isExternal = false;
     for (SegmentCommitInfo info : merge.segments) {
-      if (mergingSegments.contains(info)) {
+      if (mergingSegments.contains(info)) { // 被包含在已经合并中了
         if (infoStream.isEnabled("IW")) {
           infoStream.message(
               "IW",
@@ -4959,7 +4959,7 @@ public class IndexWriter
         }
         return false;
       }
-      if (!segmentInfos.contains(info)) {
+      if (!segmentInfos.contains(info)) { // 不存在了
         if (infoStream.isEnabled("IW")) {
           infoStream.message(
               "IW",
@@ -4974,14 +4974,14 @@ public class IndexWriter
       if (info.info.dir != directoryOrig) {
         isExternal = true;
       }
-      if (segmentsToMerge.containsKey(info)) {
+      if (segmentsToMerge.containsKey(info)) { // 已经处于待合并中了
         merge.maxNumSegments = mergeMaxNumSegments;
       }
     }
 
     ensureValidMerge(merge);
 
-    pendingMerges.add(merge);
+    pendingMerges.add(merge); // 放入
 
     if (infoStream.isEnabled("IW")) {
       infoStream.message(
@@ -5034,7 +5034,7 @@ public class IndexWriter
   final void mergeInit(MergePolicy.OneMerge merge) throws IOException {
     assert Thread.holdsLock(this) == false;
     // Make sure any deletes that must be resolved before we commit the merge are complete:
-    bufferedUpdatesStream.waitApplyForMerge(merge.segments, this);
+    bufferedUpdatesStream.waitApplyForMerge(merge.segments, this);//在merge之前，必须保证这个segment的update全部用上
 
     boolean success = false;
     try {
@@ -5101,7 +5101,7 @@ public class IndexWriter
     // Bind a new segment name here so even with
     // ConcurrentMergePolicy we keep deterministic segment
     // names.
-    final String mergeSegmentName = newSegmentName();
+    final String mergeSegmentName = newSegmentName(); //得到新的segment name
     // We set the min version to null for now, it will be set later by SegmentMerger
     SegmentInfo si =
         new SegmentInfo(
@@ -5223,7 +5223,7 @@ public class IndexWriter
       int docId;
       while ((docId = softDeletedDocs.nextDoc()) != DocIdSetIterator.NO_MORE_DOCS) {
         if (wrappedLiveDocs == null || wrappedLiveDocs.get(docId)) {
-          if (hardLiveDocs == null || hardLiveDocs.get(docId)) {
+          if (hardLiveDocs == null || hardLiveDocs.get(docId)) {// 包含在live文档中
             softDeletesCount++;
           } else {
             hardDeleteCount++;
@@ -5246,13 +5246,13 @@ public class IndexWriter
 
   /**
    * Does the actual (time-consuming) work of the merge, but without holding synchronized lock on
-   * IndexWriter instance
+   * IndexWriter instance//mergePolicy= TieredMergePolicy
    */
   private int mergeMiddle(MergePolicy.OneMerge merge, MergePolicy mergePolicy) throws IOException {
     testPoint("mergeMiddleStart");
     merge.checkAborted();
 
-    Directory mergeDirectory = mergeScheduler.wrapForMerge(merge, directory);
+    Directory mergeDirectory = mergeScheduler.wrapForMerge(merge, directory); // 这里面的mergeDirectory.createOutput()会产生RateLimitedIndexOutput，可以限速
     IOContext context = IOContext.merge(merge.getStoreMergeInfo());
 
     final TrackingDirectoryWrapper dirWrapper = new TrackingDirectoryWrapper(mergeDirectory);
@@ -5275,11 +5275,11 @@ public class IndexWriter
             }
           });
       // Let the merge wrap readers
-      List<CodecReader> mergeReaders = new ArrayList<>();
+      List<CodecReader> mergeReaders = new ArrayList<>(); //SegmentReader
       Counter softDeleteCount = Counter.newCounter(false);
       for (MergePolicy.MergeReader mergeReader : merge.getMergeReader()) {
         SegmentReader reader = mergeReader.reader;
-        CodecReader wrappedReader = merge.wrapForMerge(reader);
+        CodecReader wrappedReader = merge.wrapForMerge(reader);// 将跑到SoftDeletesRetentionMergePolicy的构造函数中
         validateMergeReader(wrappedReader);
         if (softDeletesEnabled) {
           if (reader != wrappedReader) { // if we don't have a wrapped reader we won't preserve any
@@ -5287,7 +5287,7 @@ public class IndexWriter
             Bits hardLiveDocs = mergeReader.hardLiveDocs;
             // we only need to do this accounting if we have mixed deletes
             if (hardLiveDocs != null) {
-              Bits wrappedLiveDocs = wrappedReader.getLiveDocs();
+              Bits wrappedLiveDocs = wrappedReader.getLiveDocs();// 可参考SoftDeletesRetentionMergePolicy的构造函数，将soft-delele部分也添加到live文档中了
               Counter hardDeleteCounter = Counter.newCounter(false);
               countSoftDeletes(
                   wrappedReader, wrappedLiveDocs, hardLiveDocs, softDeleteCount, hardDeleteCounter);
@@ -5397,7 +5397,7 @@ public class IndexWriter
 
       // This is where all the work happens:
       if (merger.shouldMerge()) {
-        merger.merge();
+        merger.merge(); // 这里是真正发生merge的地方，还有merge中断
       }
 
       assert mergeState.segmentInfo == merge.info.info;
@@ -5461,8 +5461,8 @@ public class IndexWriter
       // Very important to do this before opening the reader
       // because codec must know if prox was written for
       // this segment:
-      boolean useCompoundFile;
-      synchronized (this) { // Guard segmentInfos
+      boolean useCompoundFile; // mergePolicy=TieredMergePolicy
+      synchronized (this) { // Guard segmentInfos, 是否合并成复合文件。而flush产生的段是否需要复合文件，是在LiveIndexWriterConfig.useCompoundFile控制的，默认是需要
         useCompoundFile = mergePolicy.useCompoundFile(segmentInfos, merge.info, this);
       }
 
@@ -5539,7 +5539,7 @@ public class IndexWriter
       // and 2) .si reflects useCompoundFile=true change
       // above:
       boolean success2 = false;
-      try {
+      try {// 写si文件
         codec.segmentInfoFormat().write(directory, merge.info.info, context);
         success2 = true;
       } finally {
@@ -5563,12 +5563,12 @@ public class IndexWriter
                 merge.estimatedMergeBytes / 1024. / 1024.));
       }
 
-      final IndexReaderWarmer mergedSegmentWarmer = config.getMergedSegmentWarmer();
+      final IndexReaderWarmer mergedSegmentWarmer = config.getMergedSegmentWarmer();// 默认为null
       if (readerPool.isReaderPoolingEnabled() && mergedSegmentWarmer != null) {
         final ReadersAndUpdates rld = getPooledInstance(merge.info, true);
         final SegmentReader sr = rld.getReader(IOContext.DEFAULT);
         try {
-          mergedSegmentWarmer.warm(sr);
+          mergedSegmentWarmer.warm(sr);// 当segment merge后，会跑到这里，若索引warm的话，os会跑到MergedSegmentWarmer
         } finally {
           synchronized (this) {
             rld.release(sr);
@@ -5688,7 +5688,7 @@ public class IndexWriter
    * Walk through all files referenced by the current segmentInfos and ask the Directory to sync
    * each file, if it wasn't already. If that succeeds, then we prepare a new segments_N file but do
    * not fully commit it.
-   */
+   */// 主要是为了将这个shard的所有segment的所有索引文件落盘+创建pending_segments_x，toSync基本从IndexWriter.segmentInfos中拷贝过来的（不包括）
   private void startCommit(final SegmentInfos toSync) throws IOException {
 
     testPoint("startStartCommit");
@@ -5751,7 +5751,7 @@ public class IndexWriter
           // Exception here means nothing is prepared
           // (this method unwinds everything it did on
           // an exception)
-          toSync.prepareCommit(directory);
+          toSync.prepareCommit(directory);  // indexName/index目录元数据落盘(跑到IOUtils.fsync，将rename等元数据变更)，也会创建了临时文件pending_segments_(n+1)
           if (infoStream.isEnabled("IW")) {
             infoStream.message(
                 "IW",
@@ -5768,10 +5768,10 @@ public class IndexWriter
         // This call can take a long time -- 10s of seconds
         // or more.  We do it without syncing on this:
         boolean success = false;
-        final Collection<String> filesToSync;
+        final Collection<String> filesToSync;// 确保文件落盘
         try {
-          filesToSync = toSync.files(false);
-          directory.sync(filesToSync);
+          filesToSync = toSync.files(false); // 获取这个shard涉及到的所有segment的所有文件
+          directory.sync(filesToSync);// 每个文件都要刷盘，跑到FSDirectory.sync()
           success = true;
         } finally {
           if (!success) {
@@ -5809,7 +5809,7 @@ public class IndexWriter
           // generations we just prepared.  We do this
           // on error or success so we don't
           // double-write a segments_N file.
-          segmentInfos.updateGeneration(toSync);
+          segmentInfos.updateGeneration(toSync);// 更新segment版本号
         }
       }
     } catch (Error tragedy) {
@@ -5914,14 +5914,14 @@ public class IndexWriter
       infoStream.message("TP", message);
     }
   }
-
+  // 这个函数决定是否需要refresh
   synchronized boolean nrtIsCurrent(SegmentInfos infos) {
-    ensureOpen();
-    boolean isCurrent =
+    ensureOpen();// 有两个segmentInfos,一个属于IndexWriter,一个属于StandardDirectoryReader
+    boolean isCurrent =// 存量，版本要一致,只要产生DefaultIndexChain，都会增加版本号
         infos.getVersion() == segmentInfos.getVersion()
-            && docWriter.anyChanges() == false
+            && docWriter.anyChanges() == false// 增量
             && bufferedUpdatesStream.any() == false
-            && readerPool.anyDocValuesChanges() == false;
+            && readerPool.anyDocValuesChanges() == false; // 存量segments是否有更新操作
     if (infoStream.isEnabled("IW")) {
       if (isCurrent == false) {
         infoStream.message(
@@ -5946,7 +5946,7 @@ public class IndexWriter
   }
 
   /**
-   * Expert: remove any index files that are no longer used.
+   * Expert: remove any index files that are no longer used.删除一些不再使用的索引文件
    *
    * <p>IndexWriter normally deletes unused files itself, during indexing. However, on Windows,
    * which disallows deletion of open files, if there is a reader open on the index then those files
@@ -5962,7 +5962,7 @@ public class IndexWriter
    * some criteria are met, but those commits are no longer needed. Otherwise, those commits will be
    * deleted the next time commit() is called.
    */
-  public synchronized void deleteUnusedFiles() throws IOException {
+  public synchronized void deleteUnusedFiles() throws IOException {//删除未使用的IndexCommit,及其对应的文件。被触发调用的两个点：安全点有向前移动(完成commit,完成translog.sync)   2. 关于IndexCommit不再引用
     // TODO: should we remove this method now that it's the Directory's job to retry deletions?
     // Except, for the super expert IDP use case
     // it's still needed?
@@ -5994,7 +5994,7 @@ public class IndexWriter
     }
     // Now merge all added files
     boolean success = false;
-    try {
+    try { // 成功将每个索引文件组合成了复合文件
       info.getCodec().compoundFormat().write(directory, info, context);
       success = true;
     } finally {
@@ -6003,7 +6003,7 @@ public class IndexWriter
         deleteFiles.accept(directory.getCreatedFiles());
       }
     }
-
+    // 所有文件以cfe和cfs文件代替
     // Replace all previous files with the CFS/CFE files:
     info.setFiles(new HashSet<>(directory.getCreatedFiles()));
   }
@@ -6035,32 +6035,32 @@ public class IndexWriter
       deleter.deleteNewFiles(files);
     }
   }
-
+// segment内部的删除
   /**
    * Publishes the flushed segment, segment-private deletes (if any) and its associated global
    * delete (if present) to IndexWriter. The actual publishing operation is synced on {@code IW ->
    * BDS} so that the {@link SegmentInfo}'s delete generation is always
    * GlobalPacket_deleteGeneration + 1
-   *
+   * //发布生成的段的过程描述的是依次从Queue<FlushTicket> queue中取出FlushTicket，将其包含全局删除信息的FrozenBufferedUpdates对象作用到当前索引目录中已有的段的过程，同时还是对FlushedSegment对象进行最终处理的过程，比如找出未处理的删除信息（在文档提交之flush（三）中我们只找出了部分删除的文档）等一些操作
    * @param forced if <code>true</code> this call will block on the ticket queue if the lock is held
    *     by another thread. if <code>false</code> the call will try to acquire the queue lock and
    *     exits if it's held by another thread.
-   */
-  private void publishFlushedSegments(boolean forced) throws IOException {
+   */ // 公布这个segment,是将新产生的Segment放入IndexWriter.segmentInfos中罢了，打开是在IndexWriter.getReader()
+  private void publishFlushedSegments(boolean forced) throws IOException {// 只有当所有semgnet都已经执行完刷新了再统一来public
     docWriter.purgeFlushTickets(
         forced,
-        ticket -> {
-          DocumentsWriterPerThread.FlushedSegment newSegment = ticket.getFlushedSegment();
-          FrozenBufferedUpdates bufferedUpdates = ticket.getFrozenUpdates();
-          ticket.markPublished();
-          if (newSegment == null) { // this is a flushed global deletes package - not a segments
+        ticket -> { // 清除这个ticket
+          DocumentsWriterPerThread.FlushedSegment newSegment = ticket.getFlushedSegment();// 获取这个Segment
+          FrozenBufferedUpdates bufferedUpdates = ticket.getFrozenUpdates();// 这个是全局冻结的bufferedUpdates。第一个拿走后后面的DocumentsWriterPerThread都没有了，这是为啥？
+          ticket.markPublished(); // 标记ticket已执行
+          if (newSegment == null) { // this is a flushed global deletes package - not a segments 表示是DocumentsWriter.flushAllThreads在flush完所有DWPT后，使用ticketQueue.addDeletes(flushingDeleteQueue)放入的globalQueue
             if (bufferedUpdates != null && bufferedUpdates.any()) { // TODO why can this be null?
               publishFrozenUpdates(bufferedUpdates);
               if (infoStream.isEnabled("IW")) {
                 infoStream.message("IW", "flush: push buffered updates: " + bufferedUpdates);
               }
             }
-          } else {
+          } else { //每个DWPT刷盘之后产生的FlushedSegment
             assert newSegment.segmentInfo != null;
             if (infoStream.isEnabled("IW")) {
               infoStream.message(
@@ -6070,7 +6070,7 @@ public class IndexWriter
               infoStream.message(
                   "IW", "flush: push buffered seg private updates: " + newSegment.segmentUpdates);
             }
-            // now publish!
+            // now publish!   将这个segment对外可见了(将新segment放入IndexWriter.segmentInfos中)
             publishFlushedSegment(
                 newSegment.segmentInfo,
                 newSegment.fieldInfos,
@@ -6150,7 +6150,7 @@ public class IndexWriter
    * certain action must be encoded inside the {@link #process(IndexWriter)} method.
    */
   @FunctionalInterface
-  interface Event {
+  interface Event {// 必须要是函数
     /**
      * Processes the event. This method is called by the {@link IndexWriter} passed as the first
      * argument.
@@ -6228,9 +6228,9 @@ public class IndexWriter
   }
 
   final boolean isFullyDeleted(ReadersAndUpdates readersAndUpdates) throws IOException {
-    if (readersAndUpdates.isFullyDeleted()) {
+    if (readersAndUpdates.isFullyDeleted()) { // 若segment文档全部需要删除
       assert Thread.holdsLock(this);
-      return readersAndUpdates.keepFullyDeletedSegment(config.getMergePolicy()) == false;
+      return readersAndUpdates.keepFullyDeletedSegment(config.getMergePolicy()) == false;// 判断下软删除是否可以进行
     }
     return false;
   }
@@ -6243,14 +6243,14 @@ public class IndexWriter
    * @lucene.experimental
    */
   @Override
-  public final int numDeletesToMerge(SegmentCommitInfo info) throws IOException {
+  public final int numDeletesToMerge(SegmentCommitInfo info) throws IOException {// 计算删除文档，首先跑这里
     ensureOpen(false);
     validate(info);
     MergePolicy mergePolicy = config.getMergePolicy();
     final ReadersAndUpdates rld = getPooledInstance(info, false);
     int numDeletesToMerge;
     if (rld != null) {
-      numDeletesToMerge = rld.numDeletesToMerge(mergePolicy);
+      numDeletesToMerge = rld.numDeletesToMerge(mergePolicy);// 这里统计numDeletesToMerge非常耗时间
     } else {
       // if we don't have a pooled instance let's just return the hard deletes, this is safe!
       numDeletesToMerge = info.getDelCount();
@@ -6274,10 +6274,10 @@ public class IndexWriter
       checkpointNoSIS();
     }
   }
-
-  ReadersAndUpdates getPooledInstance(SegmentCommitInfo info, boolean create) {
+  //
+  ReadersAndUpdates getPooledInstance(SegmentCommitInfo info, boolean create) {// 文档若没有的话，就创建，引用计数+1
     ensureOpen(false);
-    return readerPool.get(info, create);
+    return readerPool.get(info, create); // 没有的话，需要创建的话，就创建。refresh刷新时，新segment就没有注册
   }
 
   // FrozenBufferedUpdates
@@ -6305,7 +6305,7 @@ public class IndexWriter
    * Translates a frozen packet of delete term/query, or doc values updates, into their actual
    * docIDs in the index, and applies the change. This is a heavy operation and is done concurrently
    * by incoming indexing threads.
-   */
+   */// 将updates转变为真是的docIDs
   final void forceApply(FrozenBufferedUpdates updates) throws IOException {
     updates.lock();
     try {
@@ -6316,7 +6316,7 @@ public class IndexWriter
       long startNS = System.nanoTime();
 
       assert updates.any();
-
+      // 会过滤掉最新产生的segment, 因为deleteTerm已经作用其上了。将deleteTerm作用于之前产生的几个Segment
       Set<SegmentCommitInfo> seenSegments = new HashSet<>();
 
       int iter = 0;
@@ -6334,7 +6334,7 @@ public class IndexWriter
       while (true) {
         String messagePrefix;
         if (iter == 0) {
-          messagePrefix = "";
+          messagePrefix = ""; // 跑到这里了
         } else {
           messagePrefix = "iter " + iter;
         }
@@ -6343,11 +6343,11 @@ public class IndexWriter
 
         long mergeGenStart = mergeFinishedGen.get();
 
-        Set<String> delFiles = new HashSet<>();
+        Set<String> delFiles = new HashSet<>();// 文件引用计数需要+1，防止被删除
         BufferedUpdatesStream.SegmentState[] segStates;
 
-        synchronized (this) {
-          List<SegmentCommitInfo> infos = getInfosToApply(updates);
+        synchronized (this) {      //取得IndexWriter里维护的SegmentInfos
+          List<SegmentCommitInfo> infos = getInfosToApply(updates);// 通过该函数决定updates是全局的，还是单个DWPT的
           if (infos == null) {
             break;
           }
@@ -6355,10 +6355,10 @@ public class IndexWriter
           for (SegmentCommitInfo info : infos) {
             delFiles.addAll(info.files());
           }
-
+          // 还是有点重要，对新建里的segment使用mmap打开了
           // Must open while holding IW lock so that e.g. segments are not merged
           // away, dropped from 100% deletions, etc., before we can open the readers
-          segStates = openSegmentStates(infos, seenSegments, updates.delGen());
+          segStates = openSegmentStates(infos, seenSegments, updates.delGen());// 过滤出存量出segment
 
           if (segStates.length == 0) {
 
@@ -6383,21 +6383,21 @@ public class IndexWriter
 
           // Important, else IFD may try to delete our files while we are still using them,
           // if e.g. a merge finishes on some of the segments we are resolving on:
-          deleter.incRef(delFiles);
+          deleter.incRef(delFiles);// 保证引用计数+1，完成后会-1
         }
 
         AtomicBoolean success = new AtomicBoolean();
         long delCount;
-        try (Closeable finalizer = () -> finishApply(segStates, success.get(), delFiles)) {
+        try (Closeable finalizer = () -> finishApply(segStates, success.get(), delFiles)) {// 这里就会取close，文件引用-1
           assert finalizer != null; // access the finalizer to prevent a warning
           // don't hold IW monitor lock here so threads are free concurrently resolve
           // deletes/updates:
-          delCount = updates.apply(segStates);
+          delCount = updates.apply(segStates);// 开始进行对存量segments的删除操作。（主要计算需要soft-deletes的docId），真正发生的写dvd和dvm落盘，以及open是在IndexWriter中 prepareCommitInternal中的writeReaderPool
           success.set(true);
         }
 
         // Since we just resolved some more deletes/updates, now is a good time to write them:
-        writeSomeDocValuesUpdates();
+        writeSomeDocValuesUpdates();// 尝试写入下，若内存超了就落盘
 
         // It's OK to add this here, even if the while loop retries, because delCount only includes
         // newly
@@ -6431,13 +6431,13 @@ public class IndexWriter
         synchronized (this) {
           long mergeGenCur = mergeFinishedGen.get();
 
-          if (mergeGenCur == mergeGenStart) {
+          if (mergeGenCur == mergeGenStart) {// apply期间没有merge变化
 
             // Must do this while still holding IW lock else a merge could finish and skip carrying
             // over our updates:
 
             // Record that this packet is finished:
-            bufferedUpdatesStream.finished(updates);
+            bufferedUpdatesStream.finished(updates); // 就是FrozenBufferedUpdates
 
             finished = true;
 
@@ -6489,7 +6489,7 @@ public class IndexWriter
    */
   private synchronized List<SegmentCommitInfo> getInfosToApply(FrozenBufferedUpdates updates) {
     final List<SegmentCommitInfo> infos;
-    if (updates.privateSegment != null) {
+    if (updates.privateSegment != null) {// 不为null，就作用单个新创建出来的segment
       if (segmentInfos.contains(updates.privateSegment)) {
         infos = Collections.singletonList(updates.privateSegment);
       } else {
@@ -6498,7 +6498,7 @@ public class IndexWriter
         }
         infos = null;
       }
-    } else {
+    } else {// 作用全局
       infos = segmentInfos.asList();
     }
     return infos;
@@ -6515,10 +6515,10 @@ public class IndexWriter
         // Matches the incRef we did above, but we must do the decRef after closing segment states
         // else
         // IFD can't delete still-open files
-        deleter.decRef(delFiles);
+        deleter.decRef(delFiles);// 文档引用计数-1
       }
 
-      if (result.anyDeletes()) {
+      if (result.anyDeletes()) {// 有删除操作
         maybeMerge.set(true);
         checkpoint();
       }
@@ -6541,7 +6541,7 @@ public class IndexWriter
     List<SegmentCommitInfo> allDeleted = null;
     long totDelCount = 0;
     try {
-      for (BufferedUpdatesStream.SegmentState segState : segStates) {
+      for (BufferedUpdatesStream.SegmentState segState : segStates) { // 循环每个匹配的segment
         if (success) {
           totDelCount += segState.rld.getDelCount() - segState.startDelCount;
           int fullDelCount = segState.rld.getDelCount();
@@ -6550,7 +6550,7 @@ public class IndexWriter
           if (segState.rld.isFullyDeleted()
               && getConfig().getMergePolicy().keepFullyDeletedSegment(() -> segState.reader)
                   == false) {
-            if (allDeleted == null) {
+            if (allDeleted == null) {// 是否全部删除
               allDeleted = new ArrayList<>();
             }
             allDeleted.add(segState.reader.getOriginalSegmentInfo());
@@ -6580,11 +6580,11 @@ public class IndexWriter
       throws IOException {
     List<BufferedUpdatesStream.SegmentState> segStates = new ArrayList<>();
     try {
-      for (SegmentCommitInfo info : infos) {
-        if (info.getBufferedDeletesGen() <= delGen && alreadySeenSegments.contains(info) == false) {
+      for (SegmentCommitInfo info : infos) {// 过滤只取不比当前delGen大的segment，一般新产生的segment都能过滤掉
+        if (info.getBufferedDeletesGen() <= delGen && alreadySeenSegments.contains(info) == false) { // 打开前提是版本小些
           segStates.add(
               new BufferedUpdatesStream.SegmentState(
-                  getPooledInstance(info, true), this::release, info));
+                  getPooledInstance(info, true), this::release, info));// new BufferedUpdatesStream.SegmentState对新创建的Segment，若没有reader,那么就创建Reader（使用mmap映射）
           alreadySeenSegments.add(info);
         }
       }
@@ -6653,7 +6653,7 @@ public class IndexWriter
       this.numDocs = numDocs;
     }
   }
-
+  // 每个shard只有一个
   private record IndexWriterMergeSource(IndexWriter writer) implements MergeScheduler.MergeSource {
 
     @Override

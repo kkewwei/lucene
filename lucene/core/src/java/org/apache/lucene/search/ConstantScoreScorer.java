@@ -26,10 +26,10 @@ import org.apache.lucene.util.FixedBitSet;
  *
  * @lucene.internal
  */
-public final class ConstantScoreScorer extends Scorer {
-
-  private class DocIdSetIteratorWrapper extends DocIdSetIterator {
-    int doc = -1;
+public final class ConstantScoreScorer extends Scorer {// 会缓存下当前读取到的哪个文档
+   // 会缓存下当前读取到的哪个文档
+  private class DocIdSetIteratorWrapper extends DocIdSetIterator { // 包装下，顺便记录下读取到哪个docID
+    int doc = -1; // 当前打分时，选取的文档Id
     DocIdSetIterator delegate;
 
     DocIdSetIteratorWrapper(DocIdSetIterator delegate) {
@@ -65,9 +65,9 @@ public final class ConstantScoreScorer extends Scorer {
 
   private final float score;
   private final ScoreMode scoreMode;
-  private final DocIdSetIterator approximation;
+  private final DocIdSetIterator approximation; //  匹配的文档数放在这里了
   private final TwoPhaseIterator twoPhaseIterator;
-  private final DocIdSetIterator disi;
+  private final DocIdSetIterator disi; // 存储的匹配的文档
 
   /**
    * Constructor based on a {@link DocIdSetIterator} which will be used to drive iteration. Two
@@ -77,7 +77,7 @@ public final class ConstantScoreScorer extends Scorer {
    * @param scoreMode the score mode
    * @param disi the iterator that defines matching documents
    */
-  public ConstantScoreScorer(float score, ScoreMode scoreMode, DocIdSetIterator disi) {
+  public ConstantScoreScorer(float score, ScoreMode scoreMode, DocIdSetIterator disi) {// disi=BitSetIterator
     this.score = score;
     this.scoreMode = scoreMode;
     // TODO: Only wrap when it is the top-level scoring clause? See
@@ -102,7 +102,7 @@ public final class ConstantScoreScorer extends Scorer {
     if (scoreMode == ScoreMode.TOP_SCORES) {
       // TODO: Only wrap when it is the top-level scoring clause? See
       // ScorerSupplier#setTopLevelScoringClause
-      this.approximation = new DocIdSetIteratorWrapper(twoPhaseIterator.approximation());
+      this.approximation = new DocIdSetIteratorWrapper(twoPhaseIterator.approximation());//遍历docId
       this.twoPhaseIterator =
           new TwoPhaseIterator(this.approximation) {
             @Override
@@ -126,11 +126,11 @@ public final class ConstantScoreScorer extends Scorer {
   public float getMaxScore(int upTo) throws IOException {
     return score;
   }
-
+  // 只有平均分才能保证确定跳过
   @Override
   public void setMinCompetitiveScore(float minScore) throws IOException {
-    if (scoreMode == ScoreMode.TOP_SCORES && minScore > score) {
-      ((DocIdSetIteratorWrapper) approximation).delegate = DocIdSetIterator.empty();
+    if (scoreMode == ScoreMode.TOP_SCORES && minScore > score) {// scoreMode仅这里可用
+      ((DocIdSetIteratorWrapper) approximation).delegate = DocIdSetIterator.empty();// 若是取TOP_SCORES。后面就直接清零不遍历了：
     }
   }
 

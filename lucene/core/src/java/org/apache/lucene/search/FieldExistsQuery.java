@@ -54,7 +54,7 @@ public class FieldExistsQuery extends Query {
       throws IOException {
     FieldInfo fieldInfo = reader.getFieldInfos().fieldInfo(field);
     final DocIdSetIterator iterator;
-    if (fieldInfo != null) {
+    if (fieldInfo != null) {// 若没有soft_delete字段，那就没有软删除
       switch (fieldInfo.getDocValuesType()) {
         case NONE:
           iterator = null;
@@ -168,7 +168,7 @@ public class FieldExistsQuery extends Query {
       @Override
       public ScorerSupplier scorerSupplier(LeafReaderContext context) throws IOException {
         FieldInfos fieldInfos = context.reader().getFieldInfos();
-        FieldInfo fieldInfo = fieldInfos.fieldInfo(field);
+        FieldInfo fieldInfo = fieldInfos.fieldInfo(field);// 返回的是融合所有配置信息后的fieldInfo
         DocIdSetIterator iterator = null;
 
         if (fieldInfo == null) {

@@ -49,7 +49,7 @@ final class IntersectTermsEnumFrame {
   final ByteArrayDataInput suffixesReader = new ByteArrayDataInput();
 
   byte[] suffixLengthBytes;
-  final ByteArrayDataInput suffixLengthsReader;
+  final ByteArrayDataInput suffixLengthsReader; // 前缀长度
 
   byte[] statBytes = new byte[64];
   int statsSingletonRunLength = 0;
@@ -310,7 +310,7 @@ final class IntersectTermsEnumFrame {
         termState.totalTermFreq = 1;
         statsSingletonRunLength--;
       } else {
-        int token = statsReader.readVInt();
+        int token = statsReader.readVInt();// 读取的tim词典部分
         if ((token & 1) == 1) {
           termState.docFreq = 1;
           termState.totalTermFreq = 1;

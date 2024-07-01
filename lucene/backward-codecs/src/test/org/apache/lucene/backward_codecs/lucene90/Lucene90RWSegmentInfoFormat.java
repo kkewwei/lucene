@@ -82,13 +82,13 @@ public class Lucene90RWSegmentInfoFormat extends SegmentInfoFormat {
   static final int VERSION_CURRENT = VERSION_START;
 
   /** Sole constructor. */
-  public Lucene90RWSegmentInfoFormat() {}
+  public Lucene90RWSegmentInfoFormat() {}// 读单个segment的元数据文件（_8.si），或者这个段的元数据，没有使用mmap读取数据
 
   @Override
   public SegmentInfo read(Directory dir, String segment, byte[] segmentID, IOContext context)
       throws IOException {
-    final String fileName = IndexFileNames.segmentFileName(segment, "", SI_EXTENSION);
-    try (ChecksumIndexInput input = dir.openChecksumInput(fileName)) {
+    final String fileName = IndexFileNames.segmentFileName(segment, "", SI_EXTENSION);// 将获取_7.si文件，主要存放这个segment的元数据
+    try (ChecksumIndexInput input = dir.openChecksumInput(fileName)) { // 打开文件方式，分NIO和MMAP
       Throwable priorE = null;
       SegmentInfo si = null;
       try {
@@ -120,17 +120,17 @@ public class Lucene90RWSegmentInfoFormat extends SegmentInfoFormat {
         throw new CorruptIndexException("Illegal boolean value " + hasMinVersion, input);
     }
 
-    final int docCount = input.readInt();
+    final int docCount = input.readInt();// 段的文档个数
     if (docCount < 0) {
       throw new CorruptIndexException("invalid docCount: " + docCount, input);
     }
-    final boolean isCompoundFile = input.readByte() == SegmentInfo.YES;
+    final boolean isCompoundFile = input.readByte() == SegmentInfo.YES; //是否复合文件
 
     final Map<String, String> diagnostics = input.readMapOfStrings();
-    final Set<String> files = input.readSetOfStrings();
-    final Map<String, String> attributes = input.readMapOfStrings();
+    final Set<String> files = input.readSetOfStrings();// 读取该段相关的数据,(_1.cfe、_1.cfs、_1.si)三个文件
+    final Map<String, String> attributes = input.readMapOfStrings(); // 获取fd文件存储格式，有BEST_SPEED格式
 
-    int numSortFields = input.readVInt();
+    int numSortFields = input.readVInt(); // 几个排序文档
     Sort indexSort;
     if (numSortFields > 0) {
       SortField[] sortFields = new SortField[numSortFields];
@@ -162,7 +162,7 @@ public class Lucene90RWSegmentInfoFormat extends SegmentInfoFormat {
     si.setFiles(files);
     return si;
   }
-
+  // 主要是构建_n.si文件，包括写入_n.cfs,_n.cfe，_n.si文件名、segment构建时候的环境
   @Override
   public void write(Directory dir, SegmentInfo si, IOContext ioContext) throws IOException {
     final String fileName = IndexFileNames.segmentFileName(si.name, "", SI_EXTENSION);

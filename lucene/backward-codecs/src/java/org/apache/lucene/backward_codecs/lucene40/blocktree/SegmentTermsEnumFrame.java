@@ -236,7 +236,7 @@ final class SegmentTermsEnumFrame {
     statsSingletonRunLength = 0;
     metaDataUpto = 0;
 
-    state.termBlockOrd = 0;
+    state.termBlockOrd = 0;// block最开始，为0
     nextEnt = 0;
     lastSubFP = -1;
 

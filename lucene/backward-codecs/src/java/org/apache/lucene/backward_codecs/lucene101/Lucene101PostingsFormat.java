@@ -409,7 +409,7 @@ public class Lucene101PostingsFormat extends PostingsFormat {
    */
   public static final class IntBlockTermState extends BlockTermState {
     /** file pointer to the start of the doc ids enumeration, in {@link #DOC_EXTENSION} file */
-    public long docStartFP;
+    public long docStartFP;//词在doc中的起始位置
 
     /** file pointer to the start of the positions enumeration, in {@link #POS_EXTENSION} file */
     public long posStartFP;
@@ -433,7 +433,7 @@ public class Lucene101PostingsFormat extends PostingsFormat {
      * docid when there is a single pulsed posting, otherwise -1. freq is always implicitly
      * totalTermFreq in this case.
      */
-    public int singletonDocID;
+    public int singletonDocID;// 这个term在所有term中仅出现过一次，那么会讲docId保存在tim词典中，而不会在doc中保存
 
     /** Sole constructor. */
     public IntBlockTermState() {

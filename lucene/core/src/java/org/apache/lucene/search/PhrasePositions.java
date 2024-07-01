@@ -22,15 +22,15 @@ import org.apache.lucene.index.Term;
 
 /** Position of a term in a document that takes into account the term offset within the phrase. */
 final class PhrasePositions {
-  int position; // position in doc
-  int count; // remaining pos in this doc
-  int offset; // position in phrase
-  final int ord; // unique across all PhrasePositions instances
-  final PostingsEnum postings; // stream of docs & positions
-  PhrasePositions next; // used to make lists
-  int rptGroup = -1; // >=0 indicates that this is a repeating PP
-  int rptInd; // index in the rptGroup
-  final Term[] terms; // for repetitions initialization
+  int position; // position in doc    注意，这个position是我们前面说的PhrasePos，也就是文档中的pos - offset
+  int count; // remaining pos in this doc     term剩余的匹配位置个数
+  int offset; // position in phrase term在PhraseQuery中position    // PhraseQuery中的第几个term组
+  final int ord; // unique across all PhrasePositions instances    PhraseQuery中的第几个term组
+  final PostingsEnum postings; // stream of docs & positions  // term的倒排
+  PhrasePositions next; // used to make lists 指向下一个  PhrasePositions
+  int rptGroup = -1; // >=0 indicates that this is a repeating PP      rptGroup >= 0表示当前position的term集合和其他position的term集合有重叠，  有重叠的PhrasePositions属于同一组，rptGroup标识当前PhrasePositions的组号
+  int rptInd; // index in the rptGroup    一个组的PhrasePositions是一个数组，rptInd表示PhrasePositions在组中的下标
+  final Term[] terms; // for repetitions initialization   当前position的term集合
   int freq; // cached frequency for the current document
 
   PhrasePositions(PostingsEnum postings, int o, int ord, Term[] terms) {
@@ -52,7 +52,7 @@ final class PhrasePositions {
    */
   final boolean nextPosition() throws IOException {
     if (count-- > 0) { // read subsequent pos's
-      position = postings.nextPosition() - offset;
+      position = postings.nextPosition() - offset; //  这个position是我们前面说的PhrasePos，也就是文档中的pos - offset
       return true;
     } else {
       return false;

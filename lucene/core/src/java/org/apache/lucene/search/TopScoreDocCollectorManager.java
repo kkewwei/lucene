@@ -30,7 +30,7 @@ public class TopScoreDocCollectorManager
   private final int numHits;
   private final ScoreDoc after;
   private final int totalHitsThreshold;
-  private final MaxScoreAccumulator minScoreAcc;
+  private final MaxScoreAccumulator minScoreAcc;// 若不是要全部值，全部maxScore就不会为null
 
   /**
    * Creates a new {@link TopScoreDocCollectorManager} given the number of hits to collect and the
@@ -93,7 +93,7 @@ public class TopScoreDocCollectorManager
           "numHits must be > 0; please use TotalHitCountCollectorManager if you just need the total hit count");
     }
 
-    this.numHits = numHits;
+    this.numHits = numHits;// 就是每次需要返回的个数
     this.after = after;
     this.totalHitsThreshold = Math.max(totalHitsThreshold, numHits);
     this.minScoreAcc = totalHitsThreshold != Integer.MAX_VALUE ? new MaxScoreAccumulator() : null;

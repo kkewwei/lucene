@@ -35,14 +35,14 @@ import org.apache.lucene.store.AlreadyClosedException;
  * @lucene.experimental
  */
 public abstract class ReferenceManager<G> implements Closeable {
-
+ //有ExternalReaderManager externalReaderManager和ElasticsearchReaderManager internalReaderManager 两种实现，只是externalReaderManager.current=internalReaderManager.current
   private static final String REFERENCE_MANAGER_IS_CLOSED_MSG = "this ReferenceManager is closed";
+  // 可进RamAccountingRefreshListener里查看ElasticsearchDirectoryReader， ElasticsearchLeafReader, SegmentReader关系
+  protected volatile G current;// ElasticsearchDirectoryReader。每当refresh完成后，就会根据维护的IndexWriter.segmentInfos产生新的ElasticsearchDirectoryReader，然后每次查询，都会使用最新的segents
+  // 任何时候只允许有一个线程在refresh。主要semgent变动，那么ElasticsearchDirectoryReader也会产生新的。一变缓存也将失效
+  private final Lock refreshLock = new ReentrantLock();// refresh线程，只允许一个线程refresh（可重入锁）
 
-  protected volatile G current;
-
-  private final Lock refreshLock = new ReentrantLock();
-
-  private final List<RefreshListener> refreshListeners = new CopyOnWriteArrayList<>();
+  private final List<RefreshListener> refreshListeners = new CopyOnWriteArrayList<>(); // RefreshListeners和CompletionStatsCache
 
   private void ensureOpen() {
     if (current == null) {
@@ -54,7 +54,7 @@ public abstract class ReferenceManager<G> implements Closeable {
     ensureOpen();
     final G oldReference = current;
     current = newReference;
-    release(oldReference);
+    release(oldReference);// 释放依次引用
   }
 
   /**
@@ -70,7 +70,7 @@ public abstract class ReferenceManager<G> implements Closeable {
    *
    * @throws AlreadyClosedException if the reference manager has been {@link #close() closed}.
    * @throws IOException if the refresh operation failed
-   */
+   */ // SearcherManager.refreshIfNeeded
   protected abstract G refreshIfNeeded(G referenceToRefresh) throws IOException;
 
   /**
@@ -95,8 +95,8 @@ public abstract class ReferenceManager<G> implements Closeable {
       if ((ref = current) == null) {
         throw new AlreadyClosedException(REFERENCE_MANAGER_IS_CLOSED_MSG);
       }
-      if (tryIncRef(ref)) {
-        return ref;
+      if (tryIncRef(ref)) { // 这里增加一次引用。一般都会成功 。查询时也会进来，
+        return ref;// ElasticsearchDirectoryReader
       }
       if (getRefCount(ref) == 0 && current == ref) {
         assert ref != null;
@@ -151,37 +151,37 @@ public abstract class ReferenceManager<G> implements Closeable {
    */
   protected void afterClose() throws IOException {}
 
-  private void doMaybeRefresh() throws IOException {
+  private void doMaybeRefresh() throws IOException { // externalReaderManager会先调用这里，然后internalReaderManager也会调用到这里
     // it's ok to call lock() here (blocking) because we're supposed to get here
     // from either maybeRefresh() or maybeRefreshBlocking(), after the lock has
     // already been obtained. Doing that protects us from an accidental bug
     // where this method will be called outside the scope of refreshLock.
     // Per ReentrantLock's javadoc, calling lock() by the same thread more than
     // once is ok, as long as unlock() is called a matching number of times.
-    refreshLock.lock();
+    refreshLock.lock(); // 本不需要，做这个是为了防止一个偶发的bug，我们假设只有maybeRefreshBlocking和maybeRefresh调用这个函数，但是不能保证这个函数别别的地方乱调用，为了以防万一，才加上的
     boolean refreshed = false;
     try {
-      final G reference = acquire();
+      final G reference = acquire(); // ElasticsearchDirectoryReader，每refresh一次，就产生一个新的
       try {
-        notifyRefreshListenersBefore();
-        G newReference = refreshIfNeeded(reference);
-        if (newReference != null) {
+        notifyRefreshListenersBefore();// 会进一次LiveVersionMap.beforeRefresh。RefreshMetricUpdater.beforeRefresh、RefreshListeners.beforeRefresh()
+        G newReference = refreshIfNeeded(reference); // 重要函数，会进入ElasticsearchReaderManager，产生新的ElasticsearchDirectoryReader，会触发主动merge操作
+        if (newReference != null) {// 若返回null，就说明这个shard所有的segment都没有发生变化
           assert newReference != reference
               : "refreshIfNeeded should return null if refresh wasn't needed";
           try {
-            swapReference(newReference);
+            swapReference(newReference); // 释放旧的的ElasticsearchDirectoryReader，用新的ElasticsearchDirectoryReader来替换
             refreshed = true;
           } finally {
             if (!refreshed) {
-              release(newReference);
+              release(newReference); // 其实释放了2次，在swapReference就释放了一次
             }
           }
         }
       } finally {
-        release(reference);
+        release(reference); // 再释放一次
         notifyRefreshListenersRefreshed(refreshed);
       }
-      afterMaybeRefresh();
+      afterMaybeRefresh(); // 什么都不做
     } finally {
       refreshLock.unlock();
     }
@@ -207,7 +207,7 @@ public abstract class ReferenceManager<G> implements Closeable {
     ensureOpen();
 
     // Ensure only 1 thread does refresh at once; other threads just return immediately:
-    final boolean doTryRefresh = refreshLock.tryLock();
+    final boolean doTryRefresh = refreshLock.tryLock(); // 只允许一个索引刷新，其他线程全部返回
     if (doTryRefresh) {
       try {
         doMaybeRefresh();
@@ -231,13 +231,13 @@ public abstract class ReferenceManager<G> implements Closeable {
    * @throws IOException if refreshing the resource causes an {@link IOException}
    * @throws AlreadyClosedException if the reference manager has been {@link #close() closed}.
    */
-  public final void maybeRefreshBlocking() throws IOException {
+  public final void maybeRefreshBlocking() throws IOException { // 刷新时可能会被阻塞，只允许一个线程refresh。
     ensureOpen();
-
+    // doMaybeRefresh()里面还嵌套了一层refreshLock.lock()
     // Ensure only 1 thread does refresh at once
-    refreshLock.lock();
+    refreshLock.lock(); // 任何时候只允许有一个线程在refresh
     try {
-      doMaybeRefresh();
+      doMaybeRefresh();  // refresh的时候，有可能触发merge操作
     } finally {
       refreshLock.unlock();
     }
@@ -261,11 +261,11 @@ public abstract class ReferenceManager<G> implements Closeable {
    */
   public final void release(G reference) throws IOException {
     assert reference != null;
-    decRef(reference);
+    decRef(reference);// 跑到 ElasticsearchReaderManager.decRef()
   }
 
   private void notifyRefreshListenersBefore() throws IOException {
-    for (RefreshListener refreshListener : refreshListeners) {
+    for (RefreshListener refreshListener : refreshListeners) { // // RefreshListeners：记录当前CheckPoint地点和CompletionStatsCache：啥都不做
       refreshListener.beforeRefresh();
     }
   }

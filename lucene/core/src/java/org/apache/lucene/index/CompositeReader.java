@@ -44,9 +44,9 @@ import org.apache.lucene.store.Directory;
  * synchronization, you should <b>not</b> synchronize on the <code>IndexReader</code> instance; use
  * your own (non-Lucene) objects instead.
  */
-public abstract non-sealed class CompositeReader extends IndexReader {
-
-  private volatile CompositeReaderContext readerContext = null; // lazy init
+public abstract non-sealed class CompositeReader extends IndexReader {// 仅仅为了从LeafReaders中获取storedFields,而不能获取post信息。
+  // 真正保存每个Segment读取的地方
+  private volatile CompositeReaderContext readerContext = null; // lazy init CompositeReaderContext
 
   /** Sole constructor. (For invocation by subclass constructors, typically implicit.) */
   protected CompositeReader() {
@@ -98,6 +98,6 @@ public abstract non-sealed class CompositeReader extends IndexReader {
       assert getSequentialSubReaders() != null;
       readerContext = CompositeReaderContext.create(this);
     }
-    return readerContext;
+    return readerContext; //CompositeReaderContext，一个Shard下面所有的segment。会进来
   }
 }

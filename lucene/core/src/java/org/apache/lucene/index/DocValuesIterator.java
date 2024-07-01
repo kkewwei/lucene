@@ -30,5 +30,5 @@ abstract class DocValuesIterator extends DocIdSetIterator {
    * <p>Note: it is illegal to call {@link DocIdSetIterator#intoBitSet} or {@link
    * DocIdSetIterator#docIDRunEnd()} when this method returns false.
    */
-  public abstract boolean advanceExact(int target) throws IOException;
+  public abstract boolean advanceExact(int target) throws IOException; // target是docId，判断target是否存在
 }

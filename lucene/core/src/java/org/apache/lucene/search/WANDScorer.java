@@ -52,7 +52,7 @@ import org.apache.lucene.util.MathUtil;
  * entry in 'head', and then advance 'tail' until there is a match, by meeting the configured {@code
  * freq >= minShouldMatch} and / or {@code ∑ max_score >= minCompetitiveScore} requirements.
  */
-final class WANDScorer extends Scorer {
+final class WANDScorer extends Scorer {// weak and
 
   static final int FLOAT_MANTISSA_BITS = 24;
   private static final long MAX_SCALED_SCORE = (1L << 24) - 1;
@@ -66,7 +66,7 @@ final class WANDScorer extends Scorer {
    *    scalingFactor(+Infty) = scalingFactor(MAX_VALUE) - 1
    * </pre>
    */
-  static int scalingFactor(float f) {
+  static int scalingFactor(float f) {//
     if (f < 0) {
       throw new IllegalArgumentException("Scores must be positive or null");
     } else if (f == 0) {
@@ -78,7 +78,7 @@ final class WANDScorer extends Scorer {
       // Since doubles have more amplitude than floats for the
       // exponent, the cast produces a normal value.
       assert d == 0 || Math.getExponent(d) >= Double.MIN_EXPONENT; // normal double
-      return FLOAT_MANTISSA_BITS - 1 - Math.getExponent(d);
+      return FLOAT_MANTISSA_BITS - 1 - Math.getExponent(d);//Math.getExponent求的是：2^n
     }
   }
 
@@ -93,7 +93,7 @@ final class WANDScorer extends Scorer {
 
     // NOTE: because doubles have more amplitude than floats for the
     // exponent, the scalb call produces an accurate value.
-    final double scaled = Math.scalb((double) maxScore, scalingFactor);
+    final double scaled = Math.scalb((double) maxScore, scalingFactor);// maxScore^scalingFactor
 
     if (scaled > MAX_SCALED_SCORE) {
       // This happens if one scorer returns +Infty as a max score, or if the scorer returns greater
@@ -108,7 +108,7 @@ final class WANDScorer extends Scorer {
    * Scale min competitive scores the same way as max scores but this time by rounding down in order
    * to make sure that we do not miss any matches.
    */
-  private static long scaleMinScore(float minScore, int scalingFactor) {
+  private static long scaleMinScore(float minScore, int scalingFactor) {// 返回minScore^scalingFactor
     assert Float.isFinite(minScore);
     assert minScore >= 0;
 
@@ -119,7 +119,7 @@ final class WANDScorer extends Scorer {
     return (long) Math.floor(scaled);
   }
 
-  private final int scalingFactor;
+  private final int scalingFactor;// 可以理解就是一个变量，用来打分
   // scaled min competitive score
   private long minCompetitiveScore;
 
@@ -128,21 +128,21 @@ final class WANDScorer extends Scorer {
   // list of scorers which 'lead' the iteration and are currently
   // positioned on 'doc'. This is sometimes called the 'pivot' in
   // some descriptions of WAND (Weak AND).
-  DisiWrapper lead;
+  DisiWrapper lead;// 每轮都是将lead中的scorer放入head和tail。每轮匹配的，都会放入leader序列
   int doc; // current doc ID of the leads
-  double leadScore; // score of the leads
+  double leadScore; // score of the leads //若多个条件匹配了，那么这个doc上多个条件总的分数
 
   // priority queue of scorers that are too advanced compared to the current
   // doc. Ordered by doc ID.
-  final DisiPriorityQueue head;
+  final DisiPriorityQueue head;// 小id放前面的优点队列。每列必须文档大于等于doc。
 
   // priority queue of scorers which are behind the current doc.
   // Ordered by maxScore.
-  final DisiWrapper[] tail;
-  long tailMaxScore; // sum of the max scores of scorers in 'tail'
+  final DisiWrapper[] tail; //每列的doc都是小于doc的。 以maxScore进行堆排序存放，maxScore最大的放在top。要么放在tail中，要么放在head中
+  long tailMaxScore; // sum of the max scores of scorers in 'tail' 放在tail中所有score最大的分
   int tailSize;
 
-  final long cost;
+  final long cost;// 所有总的文档个数
 
   int upTo; // upper bound for which max scores are valid
 
@@ -151,7 +151,7 @@ final class WANDScorer extends Scorer {
 
   final ScoreMode scoreMode;
   final long leadCost;
-
+  // 有leadcost才会进来，也就是不是bool第一层query才会进来。若shuoud min_match必须要>1，就会跑到这里，取topN。
   WANDScorer(Collection<Scorer> scorers, int minShouldMatch, ScoreMode scoreMode, long leadCost)
       throws IOException {
 
@@ -184,14 +184,14 @@ final class WANDScorer extends Scorer {
       // 24 bits of accuracy - the number of mantissa bits of single-precision floating-point
       // numbers.
       double maxScoreSumDouble = 0;
-      for (Scorer scorer : scorers) {
-        scorer.advanceShallow(0);
-        float maxScore = scorer.getMaxScore(DocIdSetIterator.NO_MORE_DOCS);
+      for (Scorer scorer : scorers) {// 多个score,目前没有任何排序
+        scorer.advanceShallow(0);//每个都要进入
+        float maxScore = scorer.getMaxScore(DocIdSetIterator.NO_MORE_DOCS);// 获取在当前匹配文档得分的最大值
         maxScoreSumDouble += maxScore;
       }
       final float maxScoreSum = (float) MathUtil.sumUpperBound(maxScoreSumDouble, scorers.size());
-      this.scalingFactor = scalingFactor(maxScoreSum);
-    } else {
+      this.scalingFactor = scalingFactor(maxScoreSum);// scalingFactor最终由得分最大的那个（最相似）个来决定
+    } else {// 若不排序的话。比如加了sort
       this.scalingFactor = 0;
     }
 
@@ -201,10 +201,10 @@ final class WANDScorer extends Scorer {
       // (ImpactsEnum, PostingsEnum and <Else>). So we pass true to favor disjunctions sorted by
       // descending score as opposed to non-scoring disjunctions whose minShouldMatch is greater
       // than 1.
-      addUnpositionedLead(new DisiWrapper(scorer, true));
+      addUnpositionedLead(new DisiWrapper(scorer, true));// 头插法，放入leader中
     }
 
-    this.cost =
+    this.cost =// 总的相似文档个数
         costWithMinShouldMatch(
             scorers.stream().map(Scorer::iterator).mapToLong(DocIdSetIterator::cost),
             scorers.size(),
@@ -255,7 +255,7 @@ final class WANDScorer extends Scorer {
   }
 
   @Override
-  public void setMinCompetitiveScore(float minScore) throws IOException {
+  public void setMinCompetitiveScore(float minScore) throws IOException {// 会从 TopScoreDocCollector.collect放文档，当heap满了后，会修改这里的得分。
     // Let this disjunction know about the new min score so that it can skip
     // over clauses that produce low scores.
     assert scoreMode == ScoreMode.TOP_SCORES
@@ -277,12 +277,12 @@ final class WANDScorer extends Scorer {
   }
 
   @Override
-  public DocIdSetIterator iterator() {
+  public DocIdSetIterator iterator() {// 这iterator()和twoPhaseIterator两个咋都一样
     return TwoPhaseIterator.asDocIdSetIterator(twoPhaseIterator());
   }
 
   @Override
-  public TwoPhaseIterator twoPhaseIterator() {
+  public TwoPhaseIterator twoPhaseIterator() {// 设计成了两阶段匹配呀
     DocIdSetIterator approximation =
         new DocIdSetIterator() {
 
@@ -299,14 +299,14 @@ final class WANDScorer extends Scorer {
           @Override
           public int advance(int target) throws IOException {
             // Move 'lead' iterators back to the tail
-            pushBackLeads(target);
+            pushBackLeads(target);// 类似初始化：将head中的每个条件，看是否可以放入tail；若放不下，就放入head（并更新docId），并且head中每个doc都大于target 。lead置空
 
             // Make sure `head` is also on or beyond `target`
-            DisiWrapper headTop = advanceHead(target);
+            DisiWrapper headTop = advanceHead(target); // 确保head中的全部>=target
 
-            if (scoreMode == ScoreMode.TOP_SCORES && (headTop == null || headTop.doc > upTo)) {
+            if (scoreMode == ScoreMode.TOP_SCORES && (headTop == null || headTop.doc > upTo)) {//只要不大于upTo的都是可以直接跳过？
               // Update score bounds if necessary
-              moveToNextBlock(target);
+              moveToNextBlock(target);//这里不断前进block，对于倒排，128个doc就是一个block
               assert upTo >= target;
               headTop = head.top();
             }
@@ -328,29 +328,29 @@ final class WANDScorer extends Scorer {
       @Override
       public boolean matches() throws IOException {
         assert lead == null;
-        moveToNextCandidate();
+        moveToNextCandidate();// 从head找匹配的文档， 是从 head 里把“当前 doc 的所有对齐条目”搬到 lead 的过程。
 
         long scaledLeadScore = 0;
         if (scoreMode == ScoreMode.TOP_SCORES) {
           scaledLeadScore =
-              scaleMaxScore(
+              scaleMaxScore(// 重新计算弹性酸粉
                   (float) MathUtil.sumUpperBound(leadScore, FLOAT_MANTISSA_BITS), scalingFactor);
         }
 
-        while (scaledLeadScore < minCompetitiveScore || freq < minShouldMatch) {
+        while (scaledLeadScore < minCompetitiveScore || freq < minShouldMatch) {// 若弹性算分或者freq小于minShouldMatch，就尝试从tail拿
           assert ensureConsistent();
-          if (scaledLeadScore + tailMaxScore < minCompetitiveScore
+          if (scaledLeadScore + tailMaxScore < minCompetitiveScore// 任何一项，加tail还满足不了，就真没救了
               || freq + tailSize < minShouldMatch) {
             return false;
-          } else {
+          } else {// 一个满足的话，考虑从tail拿
             // a match on doc is still possible, try to
             // advance scorers from the tail
             DisiWrapper prevLead = lead;
-            advanceTail();
+            advanceTail();// 仅仅先取一个，匹配的话，就放入leader中，不匹配的话，就放入head
             if (scoreMode == ScoreMode.TOP_SCORES && lead != prevLead) {
               assert prevLead == lead.next;
               scaledLeadScore =
-                  scaleMaxScore(
+                  scaleMaxScore(// 重新计算得分
                       (float) MathUtil.sumUpperBound(leadScore, FLOAT_MANTISSA_BITS),
                       scalingFactor);
             }
@@ -373,7 +373,7 @@ final class WANDScorer extends Scorer {
   private void addLead(DisiWrapper lead) throws IOException {
     lead.next = this.lead;
     this.lead = lead;
-    freq += 1;
+    freq += 1;// 匹配了，就放进来
     if (scoreMode == ScoreMode.TOP_SCORES) {
       leadScore += lead.scorable.score();
     }
@@ -389,11 +389,11 @@ final class WANDScorer extends Scorer {
 
   /** Move disis that are in 'lead' back to the tail. */
   private void pushBackLeads(int target) throws IOException {
-    for (DisiWrapper s = lead; s != null; s = s.next) {
-      final DisiWrapper evicted = insertTailWithOverFlow(s);
-      if (evicted != null) {
-        evicted.doc = evicted.iterator.advance(target);
-        head.add(evicted);
+    for (DisiWrapper s = lead; s != null; s = s.next) {// 逐个遍历lead，放入tail或者head中
+      final DisiWrapper evicted = insertTailWithOverFlow(s);// 尽量放，放不下了，说明已经满足了
+      if (evicted != null) {//若没有淘汰的
+        evicted.doc = evicted.iterator.advance(target);// 准备下一个block的可读doc。
+        head.add(evicted);// 按照下一个文档id进行排好序
       }
     }
     lead = null;
@@ -401,26 +401,26 @@ final class WANDScorer extends Scorer {
 
   /** Make sure all disis in 'head' are on or after 'target'. */
   private DisiWrapper advanceHead(int target) throws IOException {
-    DisiWrapper headTop = head.top();
-    while (headTop != null && headTop.doc < target) {
+    DisiWrapper headTop = head.top();// 获取最小的那个文档
+    while (headTop != null && headTop.doc < target) {// 确保head中的都是>=target
       final DisiWrapper evicted = insertTailWithOverFlow(headTop);
       if (evicted != null) {
-        evicted.doc = evicted.iterator.advance(target);
-        headTop = head.updateTop(evicted);
-      } else {
+        evicted.doc = evicted.iterator.advance(target);//
+        headTop = head.updateTop(evicted);// 重新按照docId
+      } else {// 说明此时的head.top已经放入tail
         head.pop();
         headTop = head.top();
       }
     }
-    return headTop;
+    return headTop;// 确保head中的doc都是大于target
   }
 
   private void advanceTail(DisiWrapper disi) throws IOException {
-    disi.doc = disi.iterator.advance(doc);
-    if (disi.doc == doc) {
-      addLead(disi);
+    disi.doc = disi.iterator.advance(doc);//本文档前进一个
+    if (disi.doc == doc) {// 只有相等才会放入lead
+      addLead(disi);// 匹配的也会放进leader序列
     } else {
-      head.add(disi);
+      head.add(disi); // 否则放入head，当成淘汰的
     }
   }
 
@@ -433,7 +433,7 @@ final class WANDScorer extends Scorer {
     advanceTail(top);
   }
 
-  private void updateMaxScores(int target) throws IOException {
+  private void updateMaxScores(int target) throws IOException {// 1.可能upTo不匹配minCompetitiveScore, target向前移动。2.并且head.doc超过了>upto，再次更新下这批head的maxScore
     int newUpTo = DocIdSetIterator.NO_MORE_DOCS;
     // If we have entries in 'head', we treat them all as leads and take the minimum of their next
     // block boundaries as a next boundary.
@@ -443,14 +443,14 @@ final class WANDScorer extends Scorer {
     // Likewise, we ignore clauses whose cost is greater than the lead cost to avoid recomputing
     // per-window max scores over and over again. In the event when this makes us compute upTo as
     // NO_MORE_DOCS, this scorer will effectively implement WAND rather than block-max WAND.
-    for (DisiWrapper w : head) {
-      if (w.doc <= newUpTo && w.cost <= leadCost) {
-        newUpTo = Math.min(w.scorer.advanceShallow(w.doc), newUpTo);
+    for (DisiWrapper w : head) {// 更新upTo
+      if (w.doc <= newUpTo && w.cost <= leadCost) {// 找到大于等于
+        newUpTo = Math.min(w.scorer.advanceShallow(w.doc), newUpTo);// 找到最小的那个block
       }
     }
     // Only look at the tail if none of the `head` clauses had a block we could reuse and if its
     // cost is less than or equal to the lead cost.
-    if (newUpTo == DocIdSetIterator.NO_MORE_DOCS && tailSize > 0 && tail[0].cost <= leadCost) {
+    if (newUpTo == DocIdSetIterator.NO_MORE_DOCS && tailSize > 0 && tail[0].cost <= leadCost) {// 如果newUpTo=NO_MORE_DOCS
       newUpTo = tail[0].scorer.advanceShallow(target);
       // upTo must be on or after the least `head` doc
       DisiWrapper headTop = head.top();
@@ -461,26 +461,26 @@ final class WANDScorer extends Scorer {
     upTo = newUpTo;
 
     // Now update the max scores of clauses that are before upTo.
-    for (DisiWrapper w : head) {
-      if (w.doc <= upTo) {
-        w.scaledMaxScore = scaleMaxScore(w.scorer.getMaxScore(newUpTo), scalingFactor);
+    for (DisiWrapper w : head) {// 更新head中每个scaledMaxScore
+      if (w.doc <= upTo) {//再将w.doc往下推进一个(就是找接下来最小的那个文档Id)
+        w.scaledMaxScore = scaleMaxScore(w.scorer.getMaxScore(newUpTo), scalingFactor);// 在此文档下的最最大score^scalingFactor
       }
     }
 
-    tailMaxScore = 0;
+    tailMaxScore = 0;// 更新tail中的每个scaledMaxScore
     for (int i = 0; i < tailSize; ++i) {
       DisiWrapper w = tail[i];
       w.scorer.advanceShallow(target);
       w.scaledMaxScore = scaleMaxScore(w.scorer.getMaxScore(upTo), scalingFactor);
-      upHeapMaxScore(tail, i); // the heap might need to be reordered
+      upHeapMaxScore(tail, i); // the heap might need to be reordered 重新更下下tail中的maxScore
       tailMaxScore += w.scaledMaxScore;
     }
-
+    // 这里会将tail中大于minCompetitiveScore的列全部转到head中
     // We need to make sure that entries in 'tail' alone cannot match
     // a competitive hit.
-    while (tailSize > 0 && tailMaxScore >= minCompetitiveScore) {
-      DisiWrapper w = popTail();
-      w.doc = w.iterator.advance(target);
+    while (tailSize > 0 && tailMaxScore >= minCompetitiveScore) {// 只要tail的累计值大于minCompetitiveScore，就放入head
+      DisiWrapper w = popTail();// 一直拿最大的放入head中
+      w.doc = w.iterator.advance(target);// 再转移的时候，同时更新下最新doc
       head.add(w);
     }
   }
@@ -492,19 +492,19 @@ final class WANDScorer extends Scorer {
   private void moveToNextBlock(int target) throws IOException {
     assert lead == null;
 
-    while (upTo < DocIdSetIterator.NO_MORE_DOCS) {
-      if (head.size() == 0) {
+    while (upTo < DocIdSetIterator.NO_MORE_DOCS) {// 循环直到找到upTo
+      if (head.size() == 0) {// 都已经放入tail了，还未达到minCompetitiveScore
         // All clauses could fit in the tail, which means that the sum of the
         // maximum scores of sub clauses is less than the minimum competitive score.
         // Move to the next block until this condition becomes false.
-        target = Math.max(target, upTo + 1);
-        updateMaxScores(target);
-      } else if (head.top().doc > upTo) {
+        target = Math.max(target, upTo + 1);// 都没有一个满足的（最核心的了） ，重新设置targe
+        updateMaxScores(target);//会去更新upTo
+      } else if (head.top().doc > upTo) {// 是否通过顶部最小docId来确定是否需要更新upTo
         // We have a next candidate but it's not in the current block. We need to
         // move to the next block in order to not miss any potential hits between
         // `target` and `head.top().doc`.
         assert head.top().doc >= target;
-        updateMaxScores(target);
+        updateMaxScores(target);// 更新 head 里面的upTo和maxScores
         break;
       } else {
         break;
@@ -514,7 +514,7 @@ final class WANDScorer extends Scorer {
     assert head.size() == 0 || head.top().doc <= upTo;
     assert upTo >= target;
   }
-
+  // 是从 head 里把“当前 doc 的所有对齐条目”搬到 lead 的过程。
   /**
    * Set 'doc' to the next potential match, and move all disis of 'head' that are on this doc into
    * 'lead'.
@@ -525,12 +525,12 @@ final class WANDScorer extends Scorer {
     lead = head.pop();
     assert doc == lead.doc;
     lead.next = null;
-    freq = 1;
+    freq = 1; // 下一个可能的doc
     if (scoreMode == ScoreMode.TOP_SCORES) {
       leadScore = lead.scorable.score();
     }
-    while (head.size() > 0 && head.top().doc == doc) {
-      addLead(head.pop());
+    while (head.size() > 0 && head.top().doc == doc) {// 遍历后续的，只要有相同doc，就说明废弃了，需要更新下doc。不满足，继续在head中
+      addLead(head.pop());// 把匹配的队列，出栈后放到leader尾部
     }
   }
 
@@ -550,9 +550,9 @@ final class WANDScorer extends Scorer {
   }
 
   @Override
-  public float score() throws IOException {
+  public float score() throws IOException {// 会进行打分
     // we need to know about all matches
-    advanceAllTail();
+    advanceAllTail();//为了打分，我们需要刻意推进全部的队列
 
     double leadScore = this.leadScore;
     if (scoreMode != ScoreMode.TOP_SCORES) {
@@ -597,37 +597,37 @@ final class WANDScorer extends Scorer {
 
   /** Insert an entry in 'tail' and evict the least-costly scorer if full. */
   private DisiWrapper insertTailWithOverFlow(DisiWrapper s) {
-    if (tailMaxScore + s.scaledMaxScore < minCompetitiveScore || tailSize + 1 < minShouldMatch) {
+    if (tailMaxScore + s.scaledMaxScore < minCompetitiveScore || tailSize + 1 < minShouldMatch) {// 总分没到，或者没放满。都是可以随便放的
       // we have free room for this new entry
       addTail(s);
-      tailMaxScore += s.scaledMaxScore;
+      tailMaxScore += s.scaledMaxScore;// 默认不赋值
       return null;
-    } else if (tailSize == 0) {
-      return s;
-    } else {
+    } else if (tailSize == 0) {// 还没有设置minCompetitiveScore
+      return s;// 淘汰
+    } else {// 分数已经够了，则返回得分最大的那个
       final DisiWrapper top = tail[0];
-      if (greaterMaxScore(top, s) == false) {
+      if (greaterMaxScore(top, s) == false) {//若s有更高的maxScore的话,那么直接返回s
         return s;
       }
       // Swap top and s
-      tail[0] = s;
+      tail[0] = s;//将tail中的top拿出来，然后将s放入tail中
       downHeapMaxScore(tail, tailSize);
-      tailMaxScore = tailMaxScore - top.scaledMaxScore + s.scaledMaxScore;
+      tailMaxScore = tailMaxScore - top.scaledMaxScore + s.scaledMaxScore;//重新计算得分
       return top;
     }
   }
 
   /** Add an entry to 'tail'. Fails if over capacity. */
   private void addTail(DisiWrapper s) {
-    tail[tailSize] = s;
-    upHeapMaxScore(tail, tailSize);
+    tail[tailSize] = s;// 先放尾部
+    upHeapMaxScore(tail, tailSize);// 根据每个的max_score进行下调整
     tailSize += 1;
   }
 
   /** Pop the least-costly scorer from 'tail'. */
   private DisiWrapper popTail() {
     assert tailSize > 0;
-    final DisiWrapper result = tail[0];
+    final DisiWrapper result = tail[0];// 把第一个拿出来
     tail[0] = tail[--tailSize];
     downHeapMaxScore(tail, tailSize);
     tailMaxScore -= result.scaledMaxScore;
@@ -635,8 +635,8 @@ final class WANDScorer extends Scorer {
   }
 
   /** Heap helpers */
-  private static void upHeapMaxScore(DisiWrapper[] heap, int i) {
-    final DisiWrapper node = heap[i];
+  private static void upHeapMaxScore(DisiWrapper[] heap, int i) {//通过堆排存放，将tail中maxScore最大的放在最前面
+    final DisiWrapper node = heap[i];// 当前需要调整的那个
     int j = parentNode(i);
     while (j >= 0 && greaterMaxScore(node, heap[j])) {
       heap[i] = heap[j];

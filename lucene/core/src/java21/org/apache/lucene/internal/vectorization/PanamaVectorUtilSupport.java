@@ -1151,7 +1151,7 @@ final class PanamaVectorUtilSupport implements VectorUtilSupport {
           return from + mask.trueCount();
         }
       }
-    }
+    }// 实现标量fallback实现
     for (int i = from; i < to; ++i) {
       if (buffer[i] >= target) {
         return i;

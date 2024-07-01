@@ -49,7 +49,7 @@ import org.apache.lucene.store.IndexInput;
  * <p>Therefore, we'll trim df before passing it to the interface. see trim(int)
  */
 public class Lucene99SkipReader extends MultiLevelSkipListReader {
-  private long[] docPointer;
+  private long[] docPointer;//  该词在doc文件中绝对起始写入位置
   private long[] posPointer;
   private long[] payPointer;
   private int[] posBufferUpto;
@@ -58,7 +58,7 @@ public class Lucene99SkipReader extends MultiLevelSkipListReader {
   private long lastPosPointer;
   private long lastPayPointer;
   private int lastPayloadByteUpto;
-  private long lastDocPointer;
+  private long lastDocPointer;//  该词在doc文件中绝对起始写入位置
   private int lastPosBufferUpto;
 
   /** Sole constructor. */
@@ -70,7 +70,7 @@ public class Lucene99SkipReader extends MultiLevelSkipListReader {
       boolean hasPayloads) {
     super(skipStream, maxSkipLevels, ForUtil.BLOCK_SIZE, 8);
     docPointer = new long[maxSkipLevels];
-    if (hasPos) {
+    if (hasPos) {// 线上es,默认为false
       posPointer = new long[maxSkipLevels];
       posBufferUpto = new int[maxSkipLevels];
       if (hasPayloads) {
@@ -98,13 +98,13 @@ public class Lucene99SkipReader extends MultiLevelSkipListReader {
   protected int trim(int df) {
     return df % ForUtil.BLOCK_SIZE == 0 ? df - 1 : df;
   }
-
+// skipPointer:跳表的起始位置，从 Lucene84PostingsReader$BlockImpactsDocsEnum 构造类中调用
   /** Initialize state. */
-  public void init(
+public void init(
       long skipPointer, long docBasePointer, long posBasePointer, long payBasePointer, int df)
       throws IOException {
     super.init(skipPointer, trim(df));
-    lastDocPointer = docBasePointer;
+    lastDocPointer = docBasePointer;//  该词在doc文件中绝对起始写入位置
     lastPosPointer = posBasePointer;
     lastPayPointer = payBasePointer;
 
@@ -184,11 +184,11 @@ public class Lucene99SkipReader extends MultiLevelSkipListReader {
       }
     }
   }
-
+  // 可参数 Lucene84SkipWriter.writeSkipData
   @Override
   protected int readSkipData(int level, IndexInput skipStream) throws IOException {
-    int delta = skipStream.readVInt();
-    docPointer[level] += skipStream.readVLong();
+    int delta = skipStream.readVInt();// 该级别上次和这次之间的文件差,相差的跳表文档数
+    docPointer[level] += skipStream.readVLong();// 从上次的结果累加之和，由于第一位都是0，索引就是原值
 
     if (posPointer != null) {
       posPointer[level] += skipStream.readVLong();

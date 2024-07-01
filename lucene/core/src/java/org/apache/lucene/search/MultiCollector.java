@@ -102,16 +102,16 @@ public class MultiCollector implements Collector {
   }
 
   @Override
-  public ScoreMode scoreMode() {
+  public ScoreMode scoreMode() { // 只要mode不一样，就是混合的
     ScoreMode scoreMode = null;
     for (Collector collector : collectors) {
       if (scoreMode == null) {
         scoreMode = collector.scoreMode();
-      } else if (scoreMode != collector.scoreMode()) {
+      } else if (scoreMode != collector.scoreMode()) {// 聚合部分可以跑到AggregatorBase.scoreMode()
         // If score modes disagree, we don't try to be smart and just use one of the COMPLETE score
         // modes depending on whether scores are needed or not.
         if (scoreMode.needsScores() || collector.scoreMode().needsScores()) {
-          scoreMode = ScoreMode.COMPLETE;
+          scoreMode = ScoreMode.COMPLETE;// 若不一致，就是COMPLETE。比如topScore和terms聚合的COMPLETE_NO_SCORES
         } else {
           scoreMode = ScoreMode.COMPLETE_NO_SCORES;
         }
@@ -119,15 +119,15 @@ public class MultiCollector implements Collector {
     }
     return scoreMode;
   }
-
+  // 每个semgnet都会调用这个函数，但是该类不变
   @Override
   public LeafCollector getLeafCollector(LeafReaderContext context) throws IOException {
     final List<LeafCollector> leafCollectors = new ArrayList<>(collectors.length);
     ScoreMode leafScoreMode = null;
-    for (Collector collector : collectors) {
+    for (Collector collector : collectors) {// 聚合时，其中一个collector是NumericTermsAggregator
       final LeafCollector leafCollector;
       try {
-        leafCollector = collector.getLeafCollector(context);
+        leafCollector = collector.getLeafCollector(context);// collector变成LeafCollector
       } catch (
           @SuppressWarnings("unused")
           CollectionTerminatedException e) {
@@ -137,7 +137,7 @@ public class MultiCollector implements Collector {
       if (leafScoreMode == null) {
         leafScoreMode = collector.scoreMode();
       } else if (leafScoreMode != collector.scoreMode()) {
-        leafScoreMode = ScoreMode.COMPLETE;
+        leafScoreMode = ScoreMode.COMPLETE;// 当两个score不一样，就会变成complete
       }
       leafCollectors.add(leafCollector);
     }
@@ -151,7 +151,7 @@ public class MultiCollector implements Collector {
         return leafCollectors.get(0);
       }
       LeafCollector collector =
-          new MultiLeafCollector(leafCollectors, scoreMode() == ScoreMode.TOP_SCORES);
+          new MultiLeafCollector(leafCollectors, scoreMode() == ScoreMode.TOP_SCORES);// score打分，就可以忽略
       if (cacheScores) {
         collector = ScoreCachingWrappingScorer.wrap(collector);
       }
@@ -179,13 +179,13 @@ public class MultiCollector implements Collector {
 
     private MultiLeafCollector(List<LeafCollector> collectors, boolean skipNonCompetitive) {
       this.collectors = collectors.toArray(LeafCollector[]::new);
-      this.skipNonCompetitiveScores = skipNonCompetitive;
+      this.skipNonCompetitiveScores = skipNonCompetitive;// ScoreMode.COMPLETE != ScoreMode.TOP_SCORES
       this.minScores = this.skipNonCompetitiveScores ? new float[this.collectors.length] : null;
     }
 
     @Override
     public void setScorer(Scorable scorer) throws IOException {
-      if (skipNonCompetitiveScores) {
+      if (skipNonCompetitiveScores) {// 跳过非竞争的doc
         for (int i = 0; i < collectors.length; ++i) {
           final LeafCollector c = collectors[i];
           if (c != null) {
@@ -213,10 +213,10 @@ public class MultiCollector implements Collector {
 
     // NOTE: not propagating collect(DocIdStream) since DocIdStreams may only be consumed once.
     @Override
-    public void collect(int doc) throws IOException {
+    public void collect(int doc) throws IOException {// 一个doc满足查询条件，开始收集起来
       for (int i = 0; i < collectors.length; i++) {
         final LeafCollector collector = collectors[i];
-        if (collector != null) {
+        if (collector != null) { // 进入不同的collector接受doc
           try {
             collector.collect(doc);
           } catch (

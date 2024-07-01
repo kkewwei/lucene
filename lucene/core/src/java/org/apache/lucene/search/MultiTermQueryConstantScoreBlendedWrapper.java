@@ -37,7 +37,7 @@ final class MultiTermQueryConstantScoreBlendedWrapper<Q extends MultiTermQuery>
     extends AbstractMultiTermQueryConstantScoreWrapper<Q> {
   // postings lists under this threshold will always be "pre-processed" into a bitset
   private static final int POSTINGS_PRE_PROCESS_THRESHOLD = 512;
-
+  //BLENDED 里“低成本 / 高成本”是按 postings 成本分的，源码里一个明显阈值是 docFreq <= 512 的 term 直接进 bitset，而更“贵”的 term 会进入优先队列保留在线合
   MultiTermQueryConstantScoreBlendedWrapper(Q query) {
     super(query);
   }
@@ -45,20 +45,20 @@ final class MultiTermQueryConstantScoreBlendedWrapper<Q extends MultiTermQuery>
   @Override
   public Weight createWeight(IndexSearcher searcher, ScoreMode scoreMode, float boost)
       throws IOException {
-    return new RewritingWeight(query, boost, scoreMode, searcher) {
+    return new RewritingWeight(query, boost, scoreMode, searcher) {// 明确告诉了需要重写
 
       @Override
-      protected WeightOrDocIdSetIterator rewriteInner(
+      protected WeightOrDocIdSetIterator rewriteInner(//超过16个term才进来
           LeafReaderContext context,
           int fieldDocCount,
           Terms terms,
-          TermsEnum termsEnum,
+          TermsEnum termsEnum, // fst中剩余的terms
           List<TermAndState> collectedTerms,
           long leadCost)
           throws IOException {
         DocIdSetBuilder otherTerms = new DocIdSetBuilder(context.reader().maxDoc(), terms);
         PriorityQueue<PostingsEnum> highFrequencyTerms =
-            new PriorityQueue<>(collectedTerms.size()) {
+            new PriorityQueue<>(collectedTerms.size()) {// 只存放16个高优先级的文档
               @Override
               protected boolean lessThan(PostingsEnum a, PostingsEnum b) {
                 return a.cost() < b.cost();
@@ -68,11 +68,11 @@ final class MultiTermQueryConstantScoreBlendedWrapper<Q extends MultiTermQuery>
         // Handle the already-collected terms:
         PostingsEnum reuse = null;
         if (collectedTerms.isEmpty() == false) {
-          TermsEnum termsEnum2 = terms.iterator();
-          for (TermAndState t : collectedTerms) {
-            termsEnum2.seekExact(t.term, t.state);
+          TermsEnum termsEnum2 = terms.iterator(); // 这个field的倒排列表
+          for (TermAndState t : collectedTerms) { // 分下已经收集的类，分为高优先级和其他
+            termsEnum2.seekExact(t.term, t.state);// 重新定位到这里
             reuse = termsEnum2.postings(reuse, PostingsEnum.NONE);
-            if (t.docFreq <= POSTINGS_PRE_PROCESS_THRESHOLD) {
+            if (t.docFreq <= POSTINGS_PRE_PROCESS_THRESHOLD) { // 出现在文档中的频率小于512的话
               otherTerms.add(reuse);
             } else {
               highFrequencyTerms.add(reuse);
@@ -83,11 +83,11 @@ final class MultiTermQueryConstantScoreBlendedWrapper<Q extends MultiTermQuery>
 
         // Then collect remaining terms:
         do {
-          reuse = termsEnum.postings(reuse, PostingsEnum.NONE);
+          reuse = termsEnum.postings(reuse, PostingsEnum.NONE); // 从fst中查找剩余的term
           // If a term contains all docs with a value for the specified field, we can discard the
           // other terms and just use the dense term's postings:
           int docFreq = termsEnum.docFreq();
-          if (fieldDocCount == docFreq) {
+          if (fieldDocCount == docFreq) {// 只要发生任何一个出现的次数等于所有文档，那么就直接返回
             TermStates termStates = new TermStates(searcher.getTopReaderContext());
             termStates.register(
                 termsEnum.termState(), context.ord, docFreq, termsEnum.totalTermFreq());
@@ -103,7 +103,7 @@ final class MultiTermQueryConstantScoreBlendedWrapper<Q extends MultiTermQuery>
           } else {
             PostingsEnum dropped = highFrequencyTerms.insertWithOverflow(reuse);
             if (dropped != null) {
-              otherTerms.add(dropped);
+              otherTerms.add(dropped);// 把文档全部收集起来
             }
             // Reuse the postings that drop out of the PQ. Note that `dropped` will be null here
             // if nothing is evicted, meaning we will _not_ reuse any postings (which is intentional
@@ -113,11 +113,11 @@ final class MultiTermQueryConstantScoreBlendedWrapper<Q extends MultiTermQuery>
         } while (termsEnum.next() != null);
 
         List<DisiWrapper> subs = new ArrayList<>(highFrequencyTerms.size() + 1);
-        for (DocIdSetIterator disi : highFrequencyTerms) {
+        for (DocIdSetIterator disi : highFrequencyTerms) {// 先进行高频率先放
           Scorer s = wrapWithDummyScorer(this, disi);
           subs.add(new DisiWrapper(s, false));
         }
-        Scorer s = wrapWithDummyScorer(this, otherTerms.build().iterator());
+        Scorer s = wrapWithDummyScorer(this, otherTerms.build().iterator());// 将其他低优先级的terms组成一个scorer
         subs.add(new DisiWrapper(s, false));
 
         return new WeightOrDocIdSetIterator(new DisjunctionDISIApproximation(subs, leadCost));

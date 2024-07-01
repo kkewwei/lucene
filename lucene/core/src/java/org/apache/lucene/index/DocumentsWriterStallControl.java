@@ -33,11 +33,11 @@ import org.apache.lucene.util.ThreadInterruptedException;
  * DWPT is equal or lower than the number of active {@link DocumentsWriterPerThread}s threads are
  * released and can continue indexing.
  */
-final class DocumentsWriterStallControl {
+final class DocumentsWriterStallControl { // DocumentsWriter阻塞控制器，为了阻止写入程序，防止写入速度大于刷新速度
 
-  private volatile boolean stalled;
-  private int numWaiting; // only with assert
-  private boolean wasStalled; // only with assert
+  private volatile boolean stalled; // 最新判断的阻塞状态
+  private int numWaiting; // only with assert   增加因为内存用超而等待的线程数
+  private boolean wasStalled; // only with assert   // 仅仅是为了在test中使用，没啥用
   private final Map<Thread, Boolean> waiting = new IdentityHashMap<>(); // only with assert
 
   /**
@@ -45,21 +45,21 @@ final class DocumentsWriterStallControl {
    * the number of flushing {@link DocumentsWriterPerThread} is greater than the number of active
    * {@link DocumentsWriterPerThread}. Otherwise it will reset the {@link
    * DocumentsWriterStallControl} to healthy and release all threads waiting on {@link
-   * #waitIfStalled()}
+   * #waitIfStalled()}// 当刷新的DWPT小于等于活跃的ThreadState县城个数，就可以继续写入了
    */
-  synchronized void updateStalled(boolean stalled) {
+  synchronized void updateStalled(boolean stalled) {// 当刷新DocumentsWriterPerThread大于写入的DocumentsWriterPerThread个数，就说明需要阻塞写入了
     if (this.stalled != stalled) {
       this.stalled = stalled;
       if (stalled) {
-        wasStalled = true;
+        wasStalled = true;// 仅仅是为了在test中使用，没啥用
       }
-      notifyAll();
+      notifyAll(); // 没事就试着唤醒下所有被阻塞的
     }
   }
 
   /** Blocks if documents writing is currently in a stalled state. */
-  void waitIfStalled() {
-    if (stalled) {
+  void waitIfStalled() {// 仅仅阻塞1s钟
+    if (stalled) { // 是阻塞的状态
       synchronized (this) {
         if (stalled) { // react on the first wakeup call!
           // don't loop here, higher level logic will re-stall!
@@ -67,7 +67,7 @@ final class DocumentsWriterStallControl {
             incWaiters();
             // Defensive, in case we have a concurrency bug that fails to .notify/All our thread:
             // just wait for up to 1 second here, and let caller re-stall if it's still needed:
-            wait(1000);
+            wait(1000); // 仅最长等待时间1s。
             decrWaiters();
           } catch (InterruptedException e) {
             throw new ThreadInterruptedException(e);
@@ -78,12 +78,12 @@ final class DocumentsWriterStallControl {
   }
 
   boolean anyStalledThreads() {
-    return stalled;
+    return stalled; // false
   }
 
   private void incWaiters() {
     numWaiting++;
-    assert waiting.put(Thread.currentThread(), Boolean.TRUE) == null;
+    assert waiting.put(Thread.currentThread(), Boolean.TRUE) == null; // 之前没有被阻塞过
     assert numWaiting > 0;
   }
 

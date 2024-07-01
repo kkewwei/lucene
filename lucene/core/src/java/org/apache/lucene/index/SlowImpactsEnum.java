@@ -35,7 +35,7 @@ public final class SlowImpactsEnum extends ImpactsEnum {
 
   @Override
   public int nextDoc() throws IOException {
-    return delegate.nextDoc();
+    return delegate.nextDoc();//可以直接不停的读取匹配的下个文档
   }
 
   @Override

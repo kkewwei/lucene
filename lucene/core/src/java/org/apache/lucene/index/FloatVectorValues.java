@@ -116,7 +116,7 @@ public abstract class FloatVectorValues extends KnnVectorValues {
       public int dimension() {
         return dim;
       }
-
+      // 应该是向量写入顺序 
       @Override
       public float[] vectorValue(int targetOrd) {
         return vectors.get(targetOrd);

@@ -272,7 +272,7 @@ final class DefaultVectorUtilSupport implements VectorUtilSupport {
       if (buffer[i] >= target) {
         return i;
       }
-    }
+    }// 这里测试说，二分搜索效率并不一定高：https://github.com/apache/lucene/pull/13692
     return to;
   }
 

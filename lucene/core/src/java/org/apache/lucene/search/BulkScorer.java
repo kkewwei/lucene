@@ -24,9 +24,9 @@ import org.apache.lucene.util.Bits;
  * Weight#bulkScorer}. Only queries that have a more optimized means of scoring across a range of
  * documents need to override this. Otherwise, a default implementation is wrapped around the {@link
  * Scorer} returned by {@link Weight#scorer}.
- */
+ */// 对一批文档评分，只有更优的评分方法，才会覆盖该函数
 public abstract class BulkScorer {
-
+//给每个docID进行打分
   /**
    * Collects matching documents in a range and return an estimation of the next matching document
    * which is on or after {@code max}.
@@ -73,8 +73,8 @@ public abstract class BulkScorer {
    * @param max Score up to, but not including, this doc
    * @return an under-estimation of the next matching doc after max
    */
-  public abstract int score(LeafCollector collector, Bits acceptDocs, int min, int max)
-      throws IOException;
+  public abstract int score(LeafCollector collector, Bits acceptDocs, int min, int max)//acceptDocs= liveDocs
+      throws IOException;// 跑到 CancellableBulkScorer.score中了
 
   /** Same as {@link DocIdSetIterator#cost()} for bulk scorers. */
   public abstract long cost();

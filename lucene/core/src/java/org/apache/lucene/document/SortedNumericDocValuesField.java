@@ -47,11 +47,11 @@ public class SortedNumericDocValuesField extends Field {
   private static final FieldType INDEXED_TYPE;
 
   static {
-    TYPE.setDocValuesType(DocValuesType.SORTED_NUMERIC);
+    TYPE.setDocValuesType(DocValuesType.SORTED_NUMERIC);// 默认sorted_number
     TYPE.freeze();
 
     INDEXED_TYPE = new FieldType(TYPE);
-    INDEXED_TYPE.setDocValuesSkipIndexType(DocValuesSkipIndexType.RANGE);
+    INDEXED_TYPE.setDocValuesSkipIndexType(DocValuesSkipIndexType.RANGE); // 默认不开启
     INDEXED_TYPE.freeze();
   }
 

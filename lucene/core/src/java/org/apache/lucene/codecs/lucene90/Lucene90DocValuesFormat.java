@@ -156,7 +156,7 @@ public final class Lucene90DocValuesFormat extends DocValuesFormat {
     this.skipIndexIntervalSize = skipIndexIntervalSize;
   }
 
-  @Override
+  @Override// 写时产生
   public DocValuesConsumer fieldsConsumer(SegmentWriteState state) throws IOException {
     return new Lucene90DocValuesConsumer(
         state,
@@ -169,7 +169,7 @@ public final class Lucene90DocValuesFormat extends DocValuesFormat {
         SKIP_INDEX_EXTENSION);
   }
 
-  @Override
+  @Override// segment加载的时候就会进来
   public DocValuesProducer fieldsProducer(SegmentReadState state) throws IOException {
     return new Lucene90DocValuesProducer(
         state,
@@ -193,24 +193,24 @@ public final class Lucene90DocValuesFormat extends DocValuesFormat {
   static final int VERSION_CURRENT = VERSION_SKIPPER_MAX_VALUE_COUNT;
 
   // indicates docvalues type
-  static final byte NUMERIC = 0;
-  static final byte BINARY = 1;
-  static final byte SORTED = 2;
-  static final byte SORTED_SET = 3;
-  static final byte SORTED_NUMERIC = 4;
+  static final byte NUMERIC = 0;  //
+  static final byte BINARY = 1; //
+  static final byte SORTED = 2; //
+  static final byte SORTED_SET = 3;  //
+  static final byte SORTED_NUMERIC = 4;  //sorted_number
 
   static final int DIRECT_MONOTONIC_BLOCK_SHIFT = 16;
 
-  static final int NUMERIC_BLOCK_SHIFT = 14;
-  static final int NUMERIC_BLOCK_SIZE = 1 << NUMERIC_BLOCK_SHIFT;
+  static final int NUMERIC_BLOCK_SHIFT = 14; // number_block_shift
+  static final int NUMERIC_BLOCK_SIZE = 1 << NUMERIC_BLOCK_SHIFT;  //block最大的个数 1<<16
 
   static final int TERMS_DICT_BLOCK_LZ4_SHIFT = 6;
-  static final int TERMS_DICT_BLOCK_LZ4_SIZE = 1 << TERMS_DICT_BLOCK_LZ4_SHIFT;
-  static final int TERMS_DICT_BLOCK_LZ4_MASK = TERMS_DICT_BLOCK_LZ4_SIZE - 1;
+  static final int TERMS_DICT_BLOCK_LZ4_SIZE = 1 << TERMS_DICT_BLOCK_LZ4_SHIFT;// terms_dict_block_size   为64
+  static final int TERMS_DICT_BLOCK_LZ4_MASK = TERMS_DICT_BLOCK_LZ4_SIZE - 1;// 63  词典block，会没15个词尽量压缩到一次，为一个block
 
-  static final int TERMS_DICT_REVERSE_INDEX_SHIFT = 10;
-  static final int TERMS_DICT_REVERSE_INDEX_SIZE = 1 << TERMS_DICT_REVERSE_INDEX_SHIFT;
-  static final int TERMS_DICT_REVERSE_INDEX_MASK = TERMS_DICT_REVERSE_INDEX_SIZE - 1;
+  static final int TERMS_DICT_REVERSE_INDEX_SHIFT = 10;// terms_dict_reverses_index_shift
+  static final int TERMS_DICT_REVERSE_INDEX_SIZE = 1 << TERMS_DICT_REVERSE_INDEX_SHIFT;  // terms_dict_reverses_index_size  1024
+  static final int TERMS_DICT_REVERSE_INDEX_MASK = TERMS_DICT_REVERSE_INDEX_SIZE - 1;// terms_dict_reverses_index_mask 1023
 
   // number of documents in an interval
   private static final int DEFAULT_SKIP_INDEX_INTERVAL_SIZE = 4096;
@@ -219,21 +219,21 @@ public final class Lucene90DocValuesFormat extends DocValuesFormat {
   //   * 16 bytes: min / max value,
   //   * 8 bytes:  min / max docID
   //   * 4 bytes: number of documents
-  private static final long SKIP_INDEX_INTERVAL_BYTES = 29L;
+  private static final long SKIP_INDEX_INTERVAL_BYTES = 29L; // 每个level的层级别
   // number of intervals represented as a shift to create a new level, this is 1 << 3 == 8
   // intervals.
-  static final int SKIP_INDEX_LEVEL_SHIFT = 3;
+  static final int SKIP_INDEX_LEVEL_SHIFT = 3;// 每次跳过8个来创建一个跳表SkipAccumulator，其中一个SkipAccumulator需要4096个文档
   // max number of levels
   // Increasing this number, it increases how much heap we need at index time.
   // we currently need (1 * 8 * 8 * 8)  = 512 accumulators on heap
   static final int SKIP_INDEX_MAX_LEVEL = 4;
   // number of bytes to skip when skipping a level. It does not take into account the
   // current interval that is being read.
-  static final long[] SKIP_INDEX_JUMP_LENGTH_PER_LEVEL = new long[SKIP_INDEX_MAX_LEVEL];
+  static final long[] SKIP_INDEX_JUMP_LENGTH_PER_LEVEL = new long[SKIP_INDEX_MAX_LEVEL];// 每一次的长度范围都是固定的
 
   static {
     // Size of the interval minus read bytes (1 byte for level and 4 bytes for maxDocID)
-    SKIP_INDEX_JUMP_LENGTH_PER_LEVEL[0] = SKIP_INDEX_INTERVAL_BYTES - 5L;
+    SKIP_INDEX_JUMP_LENGTH_PER_LEVEL[0] = SKIP_INDEX_INTERVAL_BYTES - 5L; // 
     for (int level = 1; level < SKIP_INDEX_MAX_LEVEL; level++) {
       // jump from previous level
       SKIP_INDEX_JUMP_LENGTH_PER_LEVEL[level] = SKIP_INDEX_JUMP_LENGTH_PER_LEVEL[level - 1];

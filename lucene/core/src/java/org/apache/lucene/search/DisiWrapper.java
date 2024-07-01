@@ -32,7 +32,7 @@ public class DisiWrapper {
   public final Scorable scorable;
   public final long cost;
   public final float matchCost; // the match cost for two-phase iterators, 0 otherwise
-  public int doc; // the current doc, used for comparison
+  public int doc; // the current doc, used for comparison  文档Id
   public DisiWrapper next; // reference to a next element, see #topList
 
   // An approximation of the iterator, or the iterator itself if it does not
@@ -43,7 +43,7 @@ public class DisiWrapper {
   public final TwoPhaseIterator twoPhaseView;
 
   // For WANDScorer
-  long scaledMaxScore;
+  long scaledMaxScore;// 这个upTo范围内的最大的分
 
   // for MaxScoreBulkScorer
   float maxWindowScore;
@@ -58,13 +58,13 @@ public class DisiWrapper {
   DisiWrapper(Scorer scorer, boolean impacts, float weight) {
     this.scorer = Objects.requireNonNull(scorer);
     this.scorable = ScorerUtil.likelyTermScorer(scorer);
-    if (impacts) {
+    if (impacts) {// 说是可以加速
       this.iterator = ScorerUtil.likelyImpactsEnum(scorer.iterator());
     } else {
-      this.iterator = scorer.iterator();
+      this.iterator = scorer.iterator();// 就是
     }
     this.postingsEnum = iterator instanceof PostingsEnum pe ? pe : null;
-    this.cost = iterator.cost();
+    this.cost = iterator.cost();// 匹配的文档数
     this.doc = -1;
     this.twoPhaseView = scorer.twoPhaseIterator();
 

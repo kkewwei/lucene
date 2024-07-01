@@ -38,7 +38,7 @@ import org.apache.lucene.store.Directory;
  */
 public final class FileDeleter {
 
-  private final Map<String, RefCount> refCounts = new HashMap<>();
+  private final Map<String, RefCount> refCounts = new HashMap<>();// 存储当前所有文件的引用次数，当引用计数为0后，就会彻底删除。
 
   private final Directory directory;
 
@@ -97,14 +97,14 @@ public final class FileDeleter {
     Throwable firstThrowable = null;
     for (String fileName : fileNames) {
       try {
-        if (decRef(fileName)) {
+        if (decRef(fileName)) {// 若引用次数为0，就可以删除了
           toDelete.add(fileName);
         }
       } catch (Throwable t) {
         firstThrowable = IOUtils.useOrSuppress(firstThrowable, t);
       }
     }
-
+// 删除引用次数为0的文件
     try {
       delete(toDelete);
     } catch (Throwable t) {
@@ -208,13 +208,13 @@ public final class FileDeleter {
     if (messenger != null) {
       messenger.accept(MsgType.FILE, "now delete " + toDelete.size() + " files: " + toDelete);
     }
-
+    //删除分为2步骤
     // First pass: delete any segments_N files.  We do these first to be certain stale commit points
     // are removed
     // before we remove any files they reference, in case we crash right now:
     for (String fileName : toDelete) {
       assert exists(fileName) == false;
-      if (fileName.startsWith(IndexFileNames.SEGMENTS)) {
+      if (fileName.startsWith(IndexFileNames.SEGMENTS)) {// 先删除segments开头的文件
         delete(fileName);
       }
     }

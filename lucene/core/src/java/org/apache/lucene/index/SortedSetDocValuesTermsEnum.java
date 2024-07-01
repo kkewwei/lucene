@@ -34,7 +34,7 @@ class SortedSetDocValuesTermsEnum extends BaseTermsEnum {
 
   @Override
   public SeekStatus seekCeil(BytesRef text) throws IOException {
-    long ord = values.lookupTerm(text);
+    long ord = values.lookupTerm(text);// 查找某个词排第几
     if (ord >= 0) {
       currentOrd = ord;
       scratch.copyBytes(text);
@@ -73,10 +73,10 @@ class SortedSetDocValuesTermsEnum extends BaseTermsEnum {
   @Override
   public BytesRef next() throws IOException {
     currentOrd++;
-    if (currentOrd >= values.getValueCount()) {
+    if (currentOrd >= values.getValueCount()) {// 这个segment合计起来的总文档个数遍历
       return null;
     }
-    scratch.copyBytes(values.lookupOrd(currentOrd));
+    scratch.copyBytes(values.lookupOrd(currentOrd));// 排好序的term，逐个读取
     return scratch.get();
   }
 

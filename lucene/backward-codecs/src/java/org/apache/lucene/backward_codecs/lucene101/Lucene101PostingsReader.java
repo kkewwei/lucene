@@ -212,9 +212,9 @@ public final class Lucene101PostingsReader extends PostingsReaderBase {
   public void close() throws IOException {
     IOUtils.close(docIn, posIn, payIn);
   }
-
+  // 最开始部分，解析的tim中的metaWriter部分，包括这个block的docStartFP/posStartFP等地址
   @Override
-  public void decodeTerm(
+  public void decodeTerm(// in仍然是从tim中读取的。属于ByteArrayDataInput之前已经全部读取了磁盘上的文件到内存了
       DataInput in, FieldInfo fieldInfo, BlockTermState _termState, boolean absolute)
       throws IOException {
     final IntBlockTermState termState = (IntBlockTermState) _termState;
@@ -224,10 +224,10 @@ public final class Lucene101PostingsReader extends PostingsReaderBase {
       termState.payStartFP = 0;
     }
 
-    final long l = in.readVLong();
+    final long l = in.readVLong();// 可参考 Lucene101PostingsWriter.encodeTerm() 部分
     if ((l & 0x01) == 0) {
       termState.docStartFP += l >>> 1;
-      if (termState.docFreq == 1) {
+      if (termState.docFreq == 1) {// 说明这个term仅在一个doc中出现过
         termState.singletonDocID = in.readVInt();
       } else {
         termState.singletonDocID = -1;
@@ -239,7 +239,7 @@ public final class Lucene101PostingsReader extends PostingsReaderBase {
     }
 
     if (fieldInfo.getIndexOptions().subsumes(IndexOptions.DOCS_AND_FREQS_AND_POSITIONS)) {
-      termState.posStartFP += in.readVLong();
+      termState.posStartFP += in.readVLong();// 读取这个block的pos
       if (fieldInfo
               .getIndexOptions()
               .subsumes(IndexOptions.DOCS_AND_FREQS_AND_POSITIONS_AND_OFFSETS)
@@ -264,11 +264,11 @@ public final class Lucene101PostingsReader extends PostingsReaderBase {
             : new BlockPostingsEnum(fieldInfo, flags, false))
         .reset((IntBlockTermState) termState, flags);
   }
-
+    // flags是 PostingsEnum.FREQS
   @Override
   public ImpactsEnum impacts(FieldInfo fieldInfo, BlockTermState state, int flags)
       throws IOException {
-    return new BlockPostingsEnum(fieldInfo, flags, true).reset((IntBlockTermState) state, flags);
+    return new BlockPostingsEnum(fieldInfo, flags, true).reset((IntBlockTermState) state, flags);//
   }
 
   private static int sumOverRange(int[] arr, int start, int end) {
@@ -286,12 +286,12 @@ public final class Lucene101PostingsReader extends PostingsReaderBase {
        * Deltas between consecutive docs are stored as packed integers, ie. the block is encoded
        * using Frame Of Reference (FOR).
        */
-      PACKED,
+      PACKED, // 就是使用bitsPerValue来存储
       /**
        * Deltas between consecutive docs are stored using unary coding, ie. {@code delta-1} zero
        * bits followed by a one bit, ie. the block is encoded as an offset plus a bit set.
        */
-      UNARY
+      UNARY// 就是使用bitset来存储
     }
 
     private ForDeltaUtil forDeltaUtil;
@@ -300,7 +300,7 @@ public final class Lucene101PostingsReader extends PostingsReaderBase {
     /* Variables that store the content of a block and the current position within this block */
     /* Shared variables */
     private DeltaEncoding encoding;
-    private int doc; // doc we last read
+    private int doc; // doc we last read。这个block读取的文档id
 
     /* Variables when the block is stored as packed deltas (Frame Of Reference) */
     private final int[] docBuffer = new int[BLOCK_SIZE];
@@ -314,24 +314,24 @@ public final class Lucene101PostingsReader extends PostingsReaderBase {
     private final int[] docCumulativeWordPopCounts = docBuffer;
 
     // level 0 skip data
-    private int level0LastDocID;
-    private long level0DocEndFP;
+    private int level0LastDocID; // 当前level0(128个文档)的最大doc
+    private long level0DocEndFP;//当前level0的截止文件FP，也是下一个level0开始位置
 
     // level 1 skip data
-    private int level1LastDocID;
-    private long level1DocEndFP;
-    private int level1DocCountUpto;
+    private int level1LastDocID;// level1(4096个文档)最大的一个文档Id，保证当前doc在这个level1中
+    private long level1DocEndFP; //当前level1的截止文件FP，也是下一个level1开始位置
+    private int level1DocCountUpto; // 当前level1截至的文档docId
 
-    private int docFreq; // number of docs in this posting list
+    private int docFreq; // number of docs in this posting list。 // 这个term在多少个文件中存在
     private long totalTermFreq; // sum of freqBuffer in this posting list (or docFreq when omitted)
 
     private int singletonDocID; // docid when there is a single pulsed posting, otherwise -1
 
-    private int docCountLeft; // number of remaining docs in this postings list
+    private int docCountLeft; // number of remaining docs in this postings list。// post去除当前level1后，剩余的文档个数
     private int prevDocID; // last doc ID of the previous block
 
     private int docBufferSize;
-    private int docBufferUpto;
+    private int docBufferUpto;// 这个block（128个）已经读取了多少个文档
 
     private IndexInput docIn;
     private PostingDecodingUtil docInUtil;
@@ -353,7 +353,7 @@ public final class Lucene101PostingsReader extends PostingsReaderBase {
 
     private int posBufferUpto;
 
-    final IndexInput posIn;
+    final IndexInput posIn; // 表示没有pos
     final PostingDecodingUtil posInUtil;
     final IndexInput payIn;
     final PostingDecodingUtil payInUtil;
@@ -374,7 +374,7 @@ public final class Lucene101PostingsReader extends PostingsReaderBase {
     final boolean needsOffsetsOrPayloads;
     final boolean needsImpacts;
     final boolean needsDocsAndFreqsOnly;
-
+    // 记录下在doc中这个block freq存放地址
     private long freqFP; // offset of the freq block
 
     private int position; // current position
@@ -513,7 +513,7 @@ public final class Lucene101PostingsReader extends PostingsReaderBase {
         prefetchPostings(docIn, termState);
       }
 
-      if (forDeltaUtil == null && docFreq >= BLOCK_SIZE) {
+      if (forDeltaUtil == null && docFreq >= BLOCK_SIZE) {// 词频大于128
         forDeltaUtil = new ForDeltaUtil();
       }
       totalTermFreq = indexHasFreq ? termState.totalTermFreq : termState.docFreq;
@@ -557,14 +557,14 @@ public final class Lucene101PostingsReader extends PostingsReaderBase {
       docCountLeft = docFreq;
       freqFP = -1L;
       level0LastDocID = -1;
-      if (docFreq < LEVEL1_NUM_DOCS) {
+      if (docFreq < LEVEL1_NUM_DOCS) {// 若文档个数小于4096条
         level1LastDocID = NO_MORE_DOCS;
         if (docFreq > 1) {
           docIn.seek(termState.docStartFP);
         }
       } else {
         level1LastDocID = -1;
-        level1DocEndFP = termState.docStartFP;
+        level1DocEndFP = termState.docStartFP;// docStartFP地址
       }
       level1DocCountUpto = 0;
       docBufferSize = BLOCK_SIZE;
@@ -581,19 +581,19 @@ public final class Lucene101PostingsReader extends PostingsReaderBase {
 
     @Override
     public int freq() throws IOException {
-      if (freqFP != -1) {
-        docIn.seek(freqFP);
+      if (freqFP != -1) {// -1 代表已经读取完了
+        docIn.seek(freqFP);//还是需要读取freq，那么就重新去读取下
         pforUtil.decode(docInUtil, freqBuffer);
         freqFP = -1;
       }
-      return freqBuffer[docBufferUpto - 1];
+      return freqBuffer[docBufferUpto - 1];// 也是一个block 128个文档
     }
-
+    //读取这个block（128个文档）所有的文档
     private void refillFullBlock() throws IOException {
       int bitsPerValue = docIn.readByte();
       if (bitsPerValue > 0) {
         // block is encoded as 128 packed integers that record the delta between doc IDs
-        forDeltaUtil.decodeAndPrefixSum(bitsPerValue, docInUtil, prevDocID, docBuffer);
+        forDeltaUtil.decodeAndPrefixSum(bitsPerValue, docInUtil, prevDocID, docBuffer);// 读取这个block的文档列表
         encoding = DeltaEncoding.PACKED;
       } else {
         // block is encoded as a bit set
@@ -606,7 +606,7 @@ public final class Lucene101PostingsReader extends PostingsReaderBase {
           docBitSet.set(0, BLOCK_SIZE);
         } else {
           numLongs = -bitsPerValue;
-          docIn.readLongs(docBitSet.getBits(), 0, numLongs);
+          docIn.readLongs(docBitSet.getBits(), 0, numLongs);// 一下读取多少个long
         }
         if (needsFreq) {
           // Note: we know that BLOCK_SIZE bits are set, so no need to compute the cumulative pop
@@ -629,7 +629,7 @@ public final class Lucene101PostingsReader extends PostingsReaderBase {
         if (needsFreq) {
           freqFP = docIn.getFilePointer();
         }
-        PForUtil.skip(docIn);
+        PForUtil.skip(docIn);// 跳过了128 freq的读取
       }
       docCountLeft -= BLOCK_SIZE;
       prevDocID = docBuffer[BLOCK_SIZE - 1];
@@ -639,7 +639,7 @@ public final class Lucene101PostingsReader extends PostingsReaderBase {
 
     private void refillRemainder() throws IOException {
       assert docCountLeft >= 0 && docCountLeft < BLOCK_SIZE;
-      if (docFreq == 1) {
+      if (docFreq == 1) {// 若只有一个文档
         docBuffer[0] = singletonDocID;
         freqBuffer[0] = (int) totalTermFreq;
         docBuffer[1] = NO_MORE_DOCS;
@@ -668,40 +668,40 @@ public final class Lucene101PostingsReader extends PostingsReaderBase {
 
       if (docCountLeft >= BLOCK_SIZE) {
         refillFullBlock();
-      } else {
+      } else {// 小于一个block（128个文档）
         refillRemainder();
       }
     }
-
+   // 参考 Lucene101PostingsWriter.writeLevel1SkipData
     private void skipLevel1To(int target) throws IOException {
-      while (true) {
+      while (true) {// 根据level1跳过
         prevDocID = level1LastDocID;
-        level0LastDocID = level1LastDocID;
-        docIn.seek(level1DocEndFP);
+        level0LastDocID = level1LastDocID;// 上次的level1就是这次开始的level0的地址
+        docIn.seek(level1DocEndFP);// 初始时是docStartFP地址。
         level0PosEndFP = level1PosEndFP;
         level0BlockPosUpto = level1BlockPosUpto;
         level0PayEndFP = level1PayEndFP;
         level0BlockPayUpto = level1BlockPayUpto;
-        docCountLeft = docFreq - level1DocCountUpto;
+        docCountLeft = docFreq - level1DocCountUpto;// post去除当前level1后，剩余的文档个数
         level1DocCountUpto += LEVEL1_NUM_DOCS;
 
-        if (docCountLeft < LEVEL1_NUM_DOCS) {
+        if (docCountLeft < LEVEL1_NUM_DOCS) {// 剩下不到一个level1的文档
           level1LastDocID = NO_MORE_DOCS;
           break;
         }
 
-        level1LastDocID += docIn.readVInt();
-        long delta = docIn.readVLong();
-        level1DocEndFP = delta + docIn.getFilePointer();
+        level1LastDocID += docIn.readVInt();// 当前level1最大的一个文档id
+        long delta = docIn.readVLong();// level1Len的长度
+        level1DocEndFP = delta + docIn.getFilePointer();// 更新下level1的截止文件位置
 
-        if (indexHasFreq) {
-          long skip1EndFP = docIn.readShort() + docIn.getFilePointer();
-          int numImpactBytes = docIn.readShort();
-          if (needsImpacts && level1LastDocID >= target) {
+        if (indexHasFreq) {// 有词频信息
+          long skip1EndFP = docIn.readShort() + docIn.getFilePointer();//
+          int numImpactBytes = docIn.readShort();//
+          if (needsImpacts && level1LastDocID >= target) {//读取的List<Impact>
             docIn.readBytes(level1SerializedImpacts.bytes, 0, numImpactBytes);
-            level1SerializedImpacts.length = numImpactBytes;
+            level1SerializedImpacts.length = numImpactBytes;// 长度
           } else {
-            docIn.skipBytes(numImpactBytes);
+            docIn.skipBytes(numImpactBytes);// 可以简单跳过
           }
           if (indexHasPos) {
             level1PosEndFP += docIn.readVLong();
@@ -714,14 +714,14 @@ public final class Lucene101PostingsReader extends PostingsReaderBase {
           assert docIn.getFilePointer() == skip1EndFP;
         }
 
-        if (level1LastDocID >= target) {
+        if (level1LastDocID >= target) {// 必须要在当前level1中
           break;
         }
       }
     }
-
+    // level1一定定位到了，开始进入下一个level0
     private void doMoveToNextLevel0Block() throws IOException {
-      assert doc == level0LastDocID;
+      assert doc == level0LastDocID;// 一定要是在上个level0(128个文档)最后一个文档
       if (posIn != null) {
         if (level0PosEndFP >= posIn.getFilePointer()) {
           posIn.seek(level0PosEndFP);
@@ -738,13 +738,13 @@ public final class Lucene101PostingsReader extends PostingsReaderBase {
         }
       }
 
-      if (docCountLeft >= BLOCK_SIZE) {
-        docIn.readVLong(); // level0NumBytes
+      if (docCountLeft >= BLOCK_SIZE) {// 剩余大于128个doc
+        docIn.readVLong(); // level0NumBytes    实际是numSkipBytes
         int docDelta = readVInt15(docIn);
-        level0LastDocID += docDelta;
+        level0LastDocID += docDelta;// 当前level0最大的docId
         long blockLength = readVLong15(docIn);
         level0DocEndFP = docIn.getFilePointer() + blockLength;
-        if (indexHasFreq) {
+        if (indexHasFreq) {// 有词频信息，才会有Impacts
           int numImpactBytes = docIn.readVInt();
           if (needsImpacts) {
             docIn.readBytes(level0SerializedImpacts.bytes, 0, numImpactBytes);
@@ -762,15 +762,15 @@ public final class Lucene101PostingsReader extends PostingsReaderBase {
             }
           }
         }
-        refillFullBlock();
+        refillFullBlock();// 开始读取这个block(128个doc)的文档
       } else {
         level0LastDocID = NO_MORE_DOCS;
         refillRemainder();
       }
     }
-
+   // doc文件移动到下个block(一个block是128个doc)，一二级跳表也在其中
     private void moveToNextLevel0Block() throws IOException {
-      if (doc == level1LastDocID) { // advance level 1 skip data
+      if (doc == level1LastDocID) { // advance level 1 skip data   也到了当前level1最后一个词
         skipLevel1To(doc + 1);
       }
 
@@ -785,7 +785,7 @@ public final class Lucene101PostingsReader extends PostingsReaderBase {
         docIn.seek(level0End);
         refillFullBlock();
       } else {
-        doMoveToNextLevel0Block();
+        doMoveToNextLevel0Block();//跳转到block0处,也会读取128个doc出来
       }
     }
 
@@ -816,7 +816,7 @@ public final class Lucene101PostingsReader extends PostingsReaderBase {
         posPendingCount += sumOverRange(freqBuffer, posDocBufferUpto, BLOCK_SIZE);
       }
     }
-
+    // level已经跳够了，开始跳level0了
     private void skipLevel0To(int target) throws IOException {
       long posFP;
       int posUpto;
@@ -831,21 +831,21 @@ public final class Lucene101PostingsReader extends PostingsReaderBase {
         payFP = level0PayEndFP;
         payUpto = level0BlockPayUpto;
 
-        if (docCountLeft >= BLOCK_SIZE) {
+        if (docCountLeft >= BLOCK_SIZE) {//直到跳到对应block所在的doc
           long numSkipBytes = docIn.readVLong();
           long skip0End = docIn.getFilePointer() + numSkipBytes;
           int docDelta = readVInt15(docIn);
           level0LastDocID += docDelta;
-          boolean found = target <= level0LastDocID;
+          boolean found = target <= level0LastDocID;// 在当前level0发现了吗？
           long blockLength = readVLong15(docIn);
-          level0DocEndFP = docIn.getFilePointer() + blockLength;
+          level0DocEndFP = docIn.getFilePointer() + blockLength;// 下一个level0的偏移量
 
           if (indexHasFreq) {
             if (found == false && needsPos == false) {
               docIn.seek(skip0End);
-            } else {
+            } else {// 需要pos
               int numImpactBytes = docIn.readVInt();
-              if (needsImpacts && found) {
+              if (needsImpacts && found) {// 发现了，那么就读取
                 docIn.readBytes(level0SerializedImpacts.bytes, 0, numImpactBytes);
                 level0SerializedImpacts.length = numImpactBytes;
               } else {
@@ -880,26 +880,26 @@ public final class Lucene101PostingsReader extends PostingsReaderBase {
     @Override
     public void advanceShallow(int target) throws IOException {
       if (target > level0LastDocID) { // advance level 0 skip data
-        doAdvanceShallow(target);
-        needsRefilling = true;
+        doAdvanceShallow(target);// 若超过了当前level0
+        needsRefilling = true;// 就代表我们刚执行完advanceShallow，128个doc还没有加载
       }
     }
 
     private void doAdvanceShallow(int target) throws IOException {
-      if (target > level1LastDocID) { // advance skip data on level 1
-        skipLevel1To(target);
+      if (target > level1LastDocID) { // advance skip data on level 1。 若超过了当前level1文档
+        skipLevel1To(target);// 跳过一个level1文档列表
       } else if (needsRefilling) {
         docIn.seek(level0DocEndFP);
         docCountLeft -= BLOCK_SIZE;
       }
 
-      skipLevel0To(target);
+      skipLevel0To(target);// 再去进入level0
     }
 
     @Override
     public int nextDoc() throws IOException {
-      if (doc == level0LastDocID || needsRefilling) {
-        if (needsRefilling) {
+      if (doc == level0LastDocID || needsRefilling) {// 已经达到当前level1最后一个docId了
+        if (needsRefilling) {// 刚 advanceShallow完，还没有加载128个doc
           refillDocs();
           needsRefilling = false;
         } else {
@@ -911,7 +911,7 @@ public final class Lucene101PostingsReader extends PostingsReaderBase {
         case PACKED:
           doc = docBuffer[docBufferUpto];
           break;
-        case UNARY:
+        case UNARY: // unary
           int next = docBitSet.nextSetBit(doc - docBitSetBase + 1);
           assert next != NO_MORE_DOCS;
           doc = docBitSetBase + next;
@@ -925,17 +925,17 @@ public final class Lucene101PostingsReader extends PostingsReaderBase {
     @Override
     public int advance(int target) throws IOException {
       if (target > level0LastDocID || needsRefilling) {
-        if (target > level0LastDocID) {
+        if (target > level0LastDocID) {// 大于level0
           doAdvanceShallow(target);
         }
-        refillDocs();
+        refillDocs();// 读取这个block文档id
         needsRefilling = false;
       }
 
       switch (encoding) {
         case PACKED:
           {
-            int next = VectorUtil.findNextGEQ(docBuffer, target, docBufferUpto, docBufferSize);
+            int next = VectorUtil.findNextGEQ(docBuffer, target, docBufferUpto, docBufferSize);// 找到下一个文档
             this.doc = docBuffer[next];
             docBufferUpto = next + 1;
           }
@@ -1305,7 +1305,7 @@ public final class Lucene101PostingsReader extends PostingsReaderBase {
 
           @Override
           public int numLevels() {
-            return indexHasFreq == false || level1LastDocID == NO_MORE_DOCS ? 1 : 2;
+            return indexHasFreq == false || level1LastDocID == NO_MORE_DOCS ? 1 : 2;//有freq就是二级
           }
 
           @Override
@@ -1328,7 +1328,7 @@ public final class Lucene101PostingsReader extends PostingsReaderBase {
               impactBuffer.norms[0] = 1L;
               return impactBuffer;
             }
-            if (level == 0 && level0LastDocID != NO_MORE_DOCS) {
+            if (level == 0 && level0LastDocID != NO_MORE_DOCS) {// 一般跑这里
               return readImpacts(level0SerializedImpacts, impactBuffer);
             }
             if (level == 1) {
@@ -1344,7 +1344,7 @@ public final class Lucene101PostingsReader extends PostingsReaderBase {
               BytesRef serialized, FreqAndNormBuffer impactBuffer) {
             var scratch = this.scratch;
             scratch.reset(serialized.bytes, 0, serialized.length);
-            Lucene101PostingsReader.readImpacts(scratch, impactBuffer);
+            Lucene101PostingsReader.readImpacts(scratch, impactBuffer);//去解析频率
             return impactBuffer;
           }
         };
@@ -1394,7 +1394,7 @@ public final class Lucene101PostingsReader extends PostingsReaderBase {
     long norm = 0;
     int size = 0;
     while (in.getPosition() < in.length()) {
-      int freqDelta = in.readVInt();
+      int freqDelta = in.readVInt();// 读取的词频
       if ((freqDelta & 0x01) != 0) {
         freq += 1 + (freqDelta >>> 1);
         try {

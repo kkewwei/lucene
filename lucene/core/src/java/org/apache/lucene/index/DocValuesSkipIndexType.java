@@ -30,9 +30,9 @@ public enum DocValuesSkipIndexType {
    * DocValuesType#SORTED_NUMERIC}, {@link DocValuesType#SORTED} and {@link
    * DocValuesType#SORTED_SET} doc values, and will record the min/max values per range of doc IDs.
    */
-  RANGE {
+  RANGE { ///  range 类型的docValues，会记录docId的范围，用于快速过滤
     @Override
-    boolean isCompatibleWith(DocValuesType dvType) {
+    boolean isCompatibleWith(DocValuesType dvType) {  // 这个字段已经需要记录，然后检查来的DocValuesType必须也是这几类之一
       return dvType == DocValuesType.NUMERIC
           || dvType == DocValuesType.SORTED_NUMERIC
           || dvType == DocValuesType.SORTED

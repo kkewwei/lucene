@@ -28,7 +28,7 @@ final class BitSetDocIdStream extends DocIdStream {
 
   BitSetDocIdStream(FixedBitSet bitSet, int offset) {
     this.bitSet = bitSet;
-    this.offset = offset;
+    this.offset = offset;// 起始offset位置
     upTo = offset;
     max = MathUtil.unsignedMin(Integer.MAX_VALUE, offset + bitSet.length());
   }
@@ -40,7 +40,7 @@ final class BitSetDocIdStream extends DocIdStream {
 
   @Override
   public void forEach(int upTo, CheckedIntConsumer<IOException> consumer) throws IOException {
-    if (upTo > this.upTo) {
+    if (upTo > this.upTo) {// 这里挺神奇的
       upTo = Math.min(upTo, max);
       bitSet.forEach(this.upTo - offset, upTo - offset, offset, consumer);
       this.upTo = upTo;

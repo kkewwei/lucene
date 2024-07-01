@@ -35,30 +35,30 @@ import org.apache.lucene.util.bkd.BKDReader;
 public class Lucene90PointsReader extends PointsReader {
   private final IndexInput indexIn, dataIn;
   private final SegmentReadState readState;
-  private final IntObjectHashMap<PointValues> readers = new IntObjectHashMap<>();
+  private final IntObjectHashMap<PointValues> readers = new IntObjectHashMap<>();//  该segment内字段编号，是在节点启动的时候，就会产生BKDReader
 
   /** Sole constructor */
   public Lucene90PointsReader(SegmentReadState readState) throws IOException {
     this.readState = readState;
 
-    String metaFileName =
+    String metaFileName =// kdm文件
         IndexFileNames.segmentFileName(
             readState.segmentInfo.name,
             readState.segmentSuffix,
             Lucene90PointsFormat.META_EXTENSION);
-    String indexFileName =
+    String indexFileName = // kdi文件
         IndexFileNames.segmentFileName(
             readState.segmentInfo.name,
             readState.segmentSuffix,
             Lucene90PointsFormat.INDEX_EXTENSION);
-    String dataFileName =
+    String dataFileName =// kdd文件
         IndexFileNames.segmentFileName(
             readState.segmentInfo.name,
             readState.segmentSuffix,
             Lucene90PointsFormat.DATA_EXTENSION);
 
     boolean success = false;
-    try {
+    try {// 仅仅是给映射号
       indexIn =
           readState.directory.openInput(
               indexFileName, readState.context.withHints(FileTypeHint.INDEX));
@@ -142,7 +142,7 @@ public class Lucene90PointsReader extends PointsReader {
       throw new IllegalArgumentException("field=\"" + fieldName + "\" did not index point values");
     }
 
-    return readers.get(fieldInfo.number);
+    return readers.get(fieldInfo.number); // 得到这个域名->域id
   }
 
   @Override

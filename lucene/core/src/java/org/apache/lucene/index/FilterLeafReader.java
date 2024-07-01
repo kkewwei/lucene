@@ -41,7 +41,7 @@ import org.apache.lucene.util.Unwrappable;
  * reader, you could consider delegating calls to {@link #getCoreCacheHelper()} and {@link
  * #getReaderCacheHelper()}.
  */
-public abstract class FilterLeafReader extends LeafReader {
+public abstract class FilterLeafReader extends LeafReader { // 封装的是另外一个LeafReader
 
   /**
    * Get the wrapped instance by <code>reader</code> as long as this reader is an instance of {@link
@@ -57,7 +57,7 @@ public abstract class FilterLeafReader extends LeafReader {
   /** Base class for filtering {@link Fields} implementations. */
   public abstract static class FilterFields extends Fields {
     /** The underlying Fields instance. */
-    protected final Fields in;
+    protected final Fields in; // FreqProxFields
 
     /**
      * Creates a new FilterFields.
@@ -78,7 +78,7 @@ public abstract class FilterLeafReader extends LeafReader {
 
     @Override
     public Terms terms(String field) throws IOException {
-      return in.terms(field);
+      return in.terms(field); //in=FreqProxFields
     }
 
     @Override
@@ -96,7 +96,7 @@ public abstract class FilterLeafReader extends LeafReader {
    */
   public abstract static class FilterTerms extends Terms {
     /** The underlying Terms instance. */
-    protected final Terms in;
+    protected final Terms in; // 是FieldReader
 
     /**
      * Creates a new FilterTerms
@@ -320,7 +320,7 @@ public abstract class FilterLeafReader extends LeafReader {
   }
 
   /** The underlying LeafReader. */
-  protected final LeafReader in;
+  protected final LeafReader in; // 查询的时候开始是ElasticsearchLeafReader，深入是SegmentReader
 
   /**
    * Construct a FilterLeafReader based on the specified base reader.
@@ -341,7 +341,7 @@ public abstract class FilterLeafReader extends LeafReader {
   @Override
   public Bits getLiveDocs() {
     ensureOpen();
-    return in.getLiveDocs();
+    return in.getLiveDocs(); // SegmentReader
   }
 
   @Override
@@ -387,15 +387,15 @@ public abstract class FilterLeafReader extends LeafReader {
   @Override
   public int numDocs() {
     // Don't call ensureOpen() here (it could affect performance)
-    return in.numDocs();
-  }
-
+    return in.numDocs(); //首先this=ExitableDirectoryReader$ExitableLeafReader,in =ElasticsearchLeafReader
+  } // 其次再次this=ElasticsearchLeafReader,in=SegmentReader
+  // segment包含的最大文档ID
   @Override
   public int maxDoc() {
     // Don't call ensureOpen() here (it could affect performance)
     return in.maxDoc();
   }
-
+  // fetch阶段在目标数据节点上根据docId读取目标文档
   @Override
   public StoredFields storedFields() throws IOException {
     ensureOpen();
@@ -410,7 +410,7 @@ public abstract class FilterLeafReader extends LeafReader {
   @Override
   public Terms terms(String field) throws IOException {
     ensureOpen();
-    return in.terms(field);
+    return in.terms(field); // SegmentReader, 将进入CodecReader.terms()
   }
 
   @Override
@@ -447,8 +447,8 @@ public abstract class FilterLeafReader extends LeafReader {
 
   @Override
   public SortedSetDocValues getSortedSetDocValues(String field) throws IOException {
-    ensureOpen();
-    return in.getSortedSetDocValues(field);
+    ensureOpen(); // in = SegmentReader
+    return in.getSortedSetDocValues(field); // 进入CodecReader.getSortedSetDocValues()
   }
 
   @Override

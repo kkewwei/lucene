@@ -21,7 +21,7 @@ import org.apache.lucene.store.RandomAccessInput;
 
 /** Implements reverse read from a RandomAccessInput. */
 final class ReverseRandomAccessReader extends FST.BytesReader {
-  private final RandomAccessInput in;
+  private final RandomAccessInput in;//就是一个slice（mmap）
   private long pos;
 
   public ReverseRandomAccessReader(RandomAccessInput in) {
@@ -35,7 +35,7 @@ final class ReverseRandomAccessReader extends FST.BytesReader {
 
   @Override
   public void readBytes(byte[] b, int offset, int len) throws IOException {
-    int i = offset, end = offset + len;
+    int i = offset, end = offset + len;// 倒着读从tip文件中读取fst内容
     while (i < end) {
       b[i++] = in.readByte(pos--);
     }
