@@ -41,6 +41,8 @@ import static org.apache.lucene.codecs.lucene90.compressing.Lucene90CompressingS
 import java.io.EOFException;
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.concurrent.atomic.AtomicInteger;
+
 import org.apache.lucene.codecs.CodecUtil;
 import org.apache.lucene.codecs.StoredFieldsReader;
 import org.apache.lucene.codecs.compressing.CompressionMode;
@@ -529,8 +531,7 @@ public final class Lucene90CompressingStoredFieldsReader extends StoredFieldsRea
         }
       }
     }
-
-    /**
+      /**
      * Get the serialized representation of the given docID. This docID has to be contained in the
      * current block.
      */

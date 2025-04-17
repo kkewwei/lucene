@@ -17,6 +17,8 @@
 package org.apache.lucene.codecs.lucene90;
 
 import java.io.IOException;
+import java.util.concurrent.atomic.AtomicInteger;
+
 import org.apache.lucene.codecs.compressing.CompressionMode;
 import org.apache.lucene.codecs.compressing.Compressor;
 import org.apache.lucene.codecs.compressing.Decompressor;
@@ -60,7 +62,11 @@ public final class LZ4WithPresetDictCompressionMode extends CompressionMode {
     return "BEST_SPEED";
   }
 
-  private static final class LZ4WithPresetDictDecompressor extends Decompressor {
+    public static AtomicInteger total = new AtomicInteger();
+    public static AtomicInteger hit = new AtomicInteger();
+
+
+    private static final class LZ4WithPresetDictDecompressor extends Decompressor {
 
     private int[] compressedLengths;
     private byte[] buffer;
@@ -84,6 +90,7 @@ public final class LZ4WithPresetDictCompressionMode extends CompressionMode {
       return i - 1;
     }
 
+
     @Override
     public void decompress(DataInput in, int originalLength, int offset, int length, BytesRef bytes)
         throws IOException {
@@ -102,6 +109,7 @@ public final class LZ4WithPresetDictCompressionMode extends CompressionMode {
       if (reused) {
         assert buffer.length >= dictLength + blockLength;
         in.skipBytes(compressedLengths[0]);
+        hit.incrementAndGet();
       } else {
         // Read the dictionary
         buffer = ArrayUtil.growNoCopy(buffer, dictLength + blockLength);
@@ -110,8 +118,12 @@ public final class LZ4WithPresetDictCompressionMode extends CompressionMode {
         }
         reused = true;
       }
+        total.incrementAndGet();
+      if (total.get() % 1000 == 0) {
+          System.out.println("total:" + total.get() + ", hit:" + hit.get());
+      }
 
-      int offsetInBlock = dictLength;
+        int offsetInBlock = dictLength;
       int offsetInBytesRef = offset;
       if (offset >= dictLength) {
         offsetInBytesRef -= dictLength;
