@@ -24,7 +24,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.OptionalLong;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.apache.lucene.search.BooleanClause.Occur;
 import org.apache.lucene.search.Weight.DefaultBulkScorer;
@@ -78,15 +78,17 @@ final class BooleanScorerSupplier extends ScorerSupplier {
   }
 
   private long computeCost() {
-    OptionalLong minRequiredCost =
-        Stream.concat(subs.get(Occur.MUST).stream(), subs.get(Occur.FILTER).stream())
-            .mapToLong(ScorerSupplier::cost)
-            .min();
-    if (minRequiredCost.isPresent() && minShouldMatch == 0) {
-      return minRequiredCost.getAsLong();
+    long minRequiredCost = -1;
+    for (ScorerSupplier scorerSupplier :
+      Stream.concat(subs.get(Occur.MUST).stream(), subs.get(Occur.FILTER).stream()).collect(Collectors.toList())) {
+      minRequiredCost = Math.min(scorerSupplier.cost(minRequiredCost), minRequiredCost);
+    }
+
+    if (minRequiredCost > -1 && minShouldMatch == 0) {
+      return minRequiredCost;
     } else {
       final long shouldCost = computeShouldCost();
-      return Math.min(minRequiredCost.orElse(Long.MAX_VALUE), shouldCost);
+      return Math.min(minRequiredCost == -1 ? Long.MAX_VALUE: minRequiredCost, shouldCost);
     }
   }
 

@@ -411,7 +411,7 @@ public abstract class PointValues {
    *
    * <p>TODO: will broad-first help estimation terminate earlier?
    */
-  private static long estimatePointCount(
+  public static long estimatePointCount(
       IntersectVisitor visitor, PointTree pointTree, long upperBound) throws IOException {
     Relation r = visitor.compare(pointTree.getMinPackedValue(), pointTree.getMaxPackedValue());
     switch (r) {

@@ -17,6 +17,7 @@
 package org.apache.lucene.search;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.Arrays;
 import java.util.Objects;
 import java.util.function.BiFunction;
@@ -331,6 +332,21 @@ public abstract class PointRangeQuery extends Query {
                 assert cost >= 0;
               }
               return cost;
+            }
+
+            @Override
+            public long cost(long leadCost) {
+              if (cost >= 0) {
+                return cost;
+              }
+              if (leadCost == -1) {
+                return cost();
+              }
+              try {
+                return PointValues.estimatePointCount(visitor, values.getPointTree(), leadCost);
+              } catch (IOException e) {
+                throw new UncheckedIOException(e);
+              }
             }
           };
         }

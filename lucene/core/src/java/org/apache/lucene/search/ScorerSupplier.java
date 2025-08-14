@@ -53,6 +53,10 @@ public abstract class ScorerSupplier {
    */
   public abstract long cost();
 
+  public long cost(long leadCost) {
+    return cost();
+  }
+
   /**
    * Inform this {@link ScorerSupplier} that its returned scorers produce scores that get passed to
    * the collector, as opposed to partial scores that then need to get combined (e.g. summed up).
