@@ -21,7 +21,9 @@ import java.util.Objects;
 import org.apache.lucene.index.IndexReaderContext;
 import org.apache.lucene.index.LeafReader;
 import org.apache.lucene.index.LeafReaderContext;
+import org.apache.lucene.util.BitSetIterator;
 import org.apache.lucene.util.Bits;
+import org.apache.lucene.util.FixedBitSet;
 
 /**
  * Expert: Calculate query weights and build query scorers.
@@ -293,6 +295,21 @@ public abstract class Weight implements SegmentCacheable {
     private static void scoreIterator(
         LeafCollector collector, Bits acceptDocs, DocIdSetIterator iterator, int max)
         throws IOException {
+      if (acceptDocs == null) {
+        DocIdSetIterator wrapper = ConstantScoreScorer.DocIdSetIteratorWrapper.unWrapper(iterator);
+        FixedBitSet fixedBitSet = BitSetIterator.getFixedBitSetOrNull(wrapper);
+        if (fixedBitSet != null && iterator.docID() < max) {
+          assert wrapper instanceof BitSetIterator;
+          new BitSetDocIdStream(fixedBitSet, 0, iterator.docID(), max)
+            .forEach(
+              docId -> {
+                ((BitSetIterator) wrapper).setDocId(docId);
+                collector.collect(docId);
+              });
+          iterator.advance(max);
+          return;
+        }
+      }
       for (int doc = iterator.docID(); doc < max; doc = iterator.nextDoc()) {
         if (acceptDocs == null || acceptDocs.get(doc)) {
           collector.collect(doc);
