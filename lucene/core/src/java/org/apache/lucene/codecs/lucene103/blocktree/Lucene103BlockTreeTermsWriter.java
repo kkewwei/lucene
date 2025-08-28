@@ -719,6 +719,10 @@ public final class Lucene103BlockTreeTermsWriter extends FieldsConsumer {
 
       assert end > start;
 
+      if (end - start == 1 && pending.get(start) instanceof PendingBlock) {
+          return (PendingBlock) pending.get(start);
+      }
+
       long startFP = termsOut.getFilePointer();
 
       boolean hasFloorLeadLabel = isFloor && floorLeadLabel != -1;
