@@ -1082,7 +1082,7 @@ final class SegmentTermsEnum extends BaseTermsEnum {
   public int docFreq() throws IOException {
     assert !eof;
     // if (DEBUG) System.out.println("BTR.docFreq");
-    currentFrame.decodeMetaData();
+    currentFrame.decodeMetaData(false);
     // if (DEBUG) System.out.println("  return " + currentFrame.state.docFreq);
     return currentFrame.state.docFreq;
   }
@@ -1090,7 +1090,7 @@ final class SegmentTermsEnum extends BaseTermsEnum {
   @Override
   public long totalTermFreq() throws IOException {
     assert !eof;
-    currentFrame.decodeMetaData();
+    currentFrame.decodeMetaData(false);
     return currentFrame.state.totalTermFreq;
   }
 
@@ -1100,7 +1100,7 @@ final class SegmentTermsEnum extends BaseTermsEnum {
     // if (DEBUG) {
     // System.out.println("BTTR.docs seg=" + segment);
     // }
-    currentFrame.decodeMetaData();
+    currentFrame.decodeMetaData(true);
     // if (DEBUG) {
     // System.out.println("  state=" + currentFrame.state);
     // }
@@ -1113,7 +1113,7 @@ final class SegmentTermsEnum extends BaseTermsEnum {
     // if (DEBUG) {
     // System.out.println("BTTR.docs seg=" + segment);
     // }
-    currentFrame.decodeMetaData();
+    currentFrame.decodeMetaData(true);
     // if (DEBUG) {
     // System.out.println("  state=" + currentFrame.state);
     // }
@@ -1145,7 +1145,7 @@ final class SegmentTermsEnum extends BaseTermsEnum {
   @Override
   public TermState termState() throws IOException {
     assert !eof;
-    currentFrame.decodeMetaData();
+    currentFrame.decodeMetaData(true);
     TermState ts = currentFrame.state.clone();
     // if (DEBUG) System.out.println("BTTR.termState seg=" + segment + " state=" + ts);
     return ts;

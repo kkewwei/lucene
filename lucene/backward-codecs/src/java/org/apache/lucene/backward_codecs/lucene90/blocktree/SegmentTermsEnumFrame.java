@@ -445,7 +445,7 @@ final class SegmentTermsEnumFrame {
     }
   }
 
-  public void decodeMetaData() throws IOException {
+  public void decodeMetaData(boolean decodePostings) throws IOException {
 
     // if (DEBUG) System.out.println("\nBTTR.decodeMetadata seg=" + segment + " mdUpto=" +
     // metaDataUpto + " vs termBlockOrd=" + state.termBlockOrd);
@@ -486,8 +486,10 @@ final class SegmentTermsEnumFrame {
         }
       }
 
-      // metadata
-      ste.fr.parent.postingsReader.decodeTerm(bytesReader, ste.fr.fieldInfo, state, absolute);
+      if (decodePostings) {
+          // metadata
+          ste.fr.parent.postingsReader.decodeTerm(bytesReader, ste.fr.fieldInfo, state, absolute);
+      }
 
       metaDataUpto++;
       absolute = false;
