@@ -684,8 +684,28 @@ final class SegmentTermsEnumFrame {
     // But we need to keep the same status with scanToTermLeaf.
     int start = nextEnt;
     int end = entCount - 1;
-    // Binary search the entries (terms) in this leaf block:
     int cmp = 0;
+    if ((prefixLength + suffixLength != target.length)) {
+      cmp =
+        Arrays.compareUnsigned(
+          suffixBytes,
+          end * suffixLength,
+          entCount * suffixLength,
+          target.bytes,
+          target.offset + prefixLength,
+          target.offset + target.length);
+      if (cmp < 0) {
+        startBytePos = end * suffixLength;
+        suffixesReader.setPosition(startBytePos + suffixLength);
+        nextEnt = entCount;
+        if (exactOnly) {
+          fillTerm();
+        }
+        return SeekStatus.END;
+      }
+    }
+
+    // Binary search the entries (terms) in this leaf block:
     while (start <= end) {
       int mid = (start + end) >>> 1;
       nextEnt = mid + 1;
