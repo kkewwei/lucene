@@ -311,6 +311,24 @@ final class WANDScorer extends Scorer {
               headTop = head.top();
             }
 
+            if (minShouldMatch > 1) {
+              while (headTop != null && headTop.doc != DocIdSetIterator.NO_MORE_DOCS) {
+                if (scoreMode == ScoreMode.TOP_SCORES && headTop.doc > upTo) {
+                  moveToNextBlock(headTop.doc);
+                  headTop = head.top();
+                  continue;
+                }
+                doc = headTop.doc;
+                moveToNextCandidate();
+                if (freq + tailSize >= minShouldMatch) {
+                  return doc;
+                }
+                pushBackLeads(doc + 1);
+                headTop = head.top();
+              }
+              return doc = DocIdSetIterator.NO_MORE_DOCS;
+            }
+
             if (headTop == null) {
               return doc = DocIdSetIterator.NO_MORE_DOCS;
             } else {
@@ -327,8 +345,9 @@ final class WANDScorer extends Scorer {
 
       @Override
       public boolean matches() throws IOException {
-        assert lead == null;
-        moveToNextCandidate();
+        if (lead == null) {
+          moveToNextCandidate();
+        }
 
         long scaledLeadScore = 0;
         if (scoreMode == ScoreMode.TOP_SCORES) {
