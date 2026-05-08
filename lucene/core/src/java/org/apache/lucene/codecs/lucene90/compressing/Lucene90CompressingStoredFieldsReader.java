@@ -657,6 +657,42 @@ public final class Lucene90CompressingStoredFieldsReader extends StoredFieldsRea
     return state.contains(docID);
   }
 
+  /**
+   * Light-weight chunk boundary lookup, used by the merge-time chunk-relocate fast path. Unlike
+   * {@link #serializedDocument(int)} this does not eagerly decompress the chunk and does not
+   * disturb the {@link BlockState}. It only reads the two leading VInts of the chunk header
+   * (docBase + token) on a clone of {@link #fieldsStream}.
+   *
+   * @param docID an arbitrary docID; the returned boundary is the chunk that contains it.
+   * @return a {@code long} where the high 32 bits hold {@code docBase} and the low 32 bits hold
+   *     {@code chunkDocs}.
+   */
+  long getChunkBoundary(int docID) throws IOException {
+    assert merging;
+    if (version != VERSION_CURRENT) {
+      throw new IllegalStateException(
+          "getChunkBoundary should only ever get called when the reader is on the current version");
+    }
+    final IndexInput in = fieldsStream.clone();
+    in.seek(indexReader.getStartPointer(docID));
+    final int docBase = in.readVInt();
+    final int token = in.readVInt();
+    final int chunkDocs = token >>> 2;
+    if (docID < docBase || docID >= docBase + chunkDocs || docBase + chunkDocs > numDocs) {
+      throw new CorruptIndexException(
+          "Corrupted chunk header: docID="
+              + docID
+              + ", docBase="
+              + docBase
+              + ", chunkDocs="
+              + chunkDocs
+              + ", numDocs="
+              + numDocs,
+          fieldsStream);
+    }
+    return (((long) docBase) << 32) | (chunkDocs & 0xFFFFFFFFL);
+  }
+
   @Override
   public void document(int docID, StoredFieldVisitor visitor) throws IOException {
 

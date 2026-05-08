@@ -44,6 +44,7 @@ import org.apache.lucene.store.IndexInput;
 import org.apache.lucene.store.IndexOutput;
 import org.apache.lucene.util.ArrayUtil;
 import org.apache.lucene.util.BitUtil;
+import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.IOUtils;
 import org.apache.lucene.util.packed.PackedInts;
@@ -554,12 +555,7 @@ public final class Lucene90CompressingStoredFieldsWriter extends StoredFieldsWri
           throw new CorruptIndexException(
               "invalid state: base=" + base + ", docID=" + docID, rawDocs);
         }
-        // write a new index entry and new header for this chunk.
-        indexWriter.writeIndex(bufferedDocs, fieldsStream.getFilePointer());
-        fieldsStream.writeVInt(docBase); // rebase
-        fieldsStream.writeVInt(code);
         docID += bufferedDocs;
-        docBase += bufferedDocs;
         if (docID > toDocID) {
           throw new CorruptIndexException(
               "invalid state: base=" + base + ", count=" + bufferedDocs + ", toDocID=" + toDocID,
@@ -574,14 +570,7 @@ public final class Lucene90CompressingStoredFieldsWriter extends StoredFieldsWri
         } else {
           endChunkPointer = index.getStartPointer(docID);
         }
-        fieldsStream.copyBytes(rawDocs, endChunkPointer - rawDocs.getFilePointer());
-        ++numChunks;
-        final boolean dirtyChunk = (code & 2) != 0;
-        if (dirtyChunk) {
-          assert bufferedDocs < maxDocsPerChunk;
-          ++numDirtyChunks;
-          numDirtyDocs += bufferedDocs;
-        }
+        copyOneRawChunk(rawDocs, code, bufferedDocs, endChunkPointer);
         fromPointer = endChunkPointer;
       } while (fromPointer < toPointer);
     }
@@ -591,6 +580,102 @@ public final class Lucene90CompressingStoredFieldsWriter extends StoredFieldsWri
     while (docID < toDocID) {
       copyOneDoc(reader, docID++);
     }
+  }
+
+  private void copyOneRawChunk(
+      IndexInput rawDocs, int code, int bufferedDocs, long endChunkPointer) throws IOException {
+    indexWriter.writeIndex(bufferedDocs, fieldsStream.getFilePointer());
+    fieldsStream.writeVInt(docBase); // rebase
+    fieldsStream.writeVInt(code);
+    fieldsStream.copyBytes(rawDocs, endChunkPointer - rawDocs.getFilePointer());
+    docBase += bufferedDocs;
+    ++numChunks;
+    final boolean dirtyChunk = (code & 2) != 0;
+    if (dirtyChunk) {
+      assert bufferedDocs < maxDocsPerChunk;
+      ++numDirtyChunks;
+      numDirtyDocs += bufferedDocs;
+    }
+  }
+
+  private void copyOneRawChunk(
+      Lucene90CompressingStoredFieldsReader reader,
+      int chunkDocBase,
+      int chunkDocCount,
+      long fromPointer,
+      long endChunkPointer)
+      throws IOException {
+    assert numBufferedDocs == 0;
+    final IndexInput rawDocs = reader.getFieldsStream();
+    rawDocs.seek(fromPointer);
+    final int base = rawDocs.readVInt();
+    final int code = rawDocs.readVInt();
+    final int bufferedDocs = code >>> 2;
+    if (base != chunkDocBase || bufferedDocs != chunkDocCount) {
+      throw new CorruptIndexException(
+          "invalid state: base="
+              + base
+              + ", expectedBase="
+              + chunkDocBase
+              + ", bufferedDocs="
+              + bufferedDocs
+              + ", expectedDocs="
+              + chunkDocCount,
+          rawDocs);
+    }
+    copyOneRawChunk(rawDocs, code, bufferedDocs, endChunkPointer);
+  }
+
+  /**
+   * Chunk-level merge for a reader with deletions: raw-copy each fully-live chunk, otherwise
+   * decode its live docs. Residue (if any) is flushed first as a small dirty chunk so that the
+   * next fully-live chunk can still take the raw-copy fast path.
+   */
+  private int mergeByChunkStrategy(
+      Lucene90CompressingStoredFieldsReader reader, Bits liveDocs, int maxDoc) throws IOException {
+    assert reader.getVersion() == VERSION_CURRENT;
+    assert reader.getChunkSize() == chunkSize;
+    assert reader.getCompressionMode() == compressionMode;
+    assert !tooDirty(reader);
+    assert liveDocs != null;
+
+    final FieldsIndex index = reader.getIndexReader();
+    final int numDocs = reader.getNumDocs();
+    int written = 0;
+    for (int docID = 0; docID < maxDoc; ) {
+      long boundary = reader.getChunkBoundary(docID);
+      int chunkBase = (int) (boundary >>> 32);
+      int chunkDocs = (int) boundary;
+      int chunkEnd = chunkBase + chunkDocs;
+      assert chunkBase == docID && chunkEnd <= maxDoc;
+
+      boolean cleanChunk = true;
+      for (int d = chunkBase; d < chunkEnd; d++) {
+        if (liveDocs.get(d) == false) {
+          cleanChunk = false;
+          break;
+        }
+      }
+
+      if (cleanChunk) {
+        if (numBufferedDocs > 0) {
+          flush(true);
+        }
+        long from = index.getStartPointer(chunkBase);
+        long to = chunkEnd == numDocs ? reader.getMaxPointer() : index.getStartPointer(chunkEnd);
+        copyOneRawChunk(reader, chunkBase, chunkDocs, from, to);
+        written += chunkDocs;
+      } else {
+        for (int d = chunkBase; d < chunkEnd; d++) {
+          if (liveDocs.get(d)) {
+            copyOneDoc(reader, d);
+            written++;
+          }
+        }
+      }
+      docID = chunkEnd;
+    }
+    return written;
   }
 
   @Override
@@ -626,6 +711,16 @@ public final class Lucene90CompressingStoredFieldsWriter extends StoredFieldsWri
         ++toDocID; // exclusive bound
         copyChunks(mergeState, current, fromDocID, toDocID);
         docCount += (toDocID - fromDocID);
+      } else if (sub.mergeStrategy == MergeStrategy.CHUNK) {
+        final CompressingStoredFieldsMergeSub current = sub;
+        int liveDocsForReader = 1; // current sub already accounts for one live doc
+        while ((sub = docIDMerger.next()) == current) {
+          ++liveDocsForReader;
+        }
+        final int written = mergeByChunkStrategy((Lucene90CompressingStoredFieldsReader) reader,
+          mergeState.liveDocs[current.readerIndex], mergeState.maxDocs[current.readerIndex]);
+        assert written == liveDocsForReader;
+        docCount += written;
       } else if (sub.mergeStrategy == MergeStrategy.DOC) {
         copyOneDoc((Lucene90CompressingStoredFieldsReader) reader, sub.docID);
         ++docCount;
@@ -664,6 +759,9 @@ public final class Lucene90CompressingStoredFieldsWriter extends StoredFieldsWri
     /** Copy chunk by chunk in a compressed format */
     BULK,
 
+    /** Copy chunk by BULK if the chunk has no deletions. by DOC */
+    CHUNK,
+
     /** Copy document by document in a decompressed format */
     DOC,
 
@@ -671,8 +769,41 @@ public final class Lucene90CompressingStoredFieldsWriter extends StoredFieldsWri
     VISITOR
   }
 
+  /** Number of chunks sampled to estimate how many are fully-live. */
+  private static final int CHUNK_STRATEGY_SAMPLES = 32;
+
+  /** Min fraction of sampled chunks that must be fully-live for CHUNK strategy to win. */
+  private static final int CHUNK_STRATEGY_MIN_CLEAN_PERCENT = 25;
+
+  /**
+   * Estimate whether enough chunks are fully-live so that the CHUNK strategy's raw-copy fast path
+   * can amortize the residue-flush cost. Samples up to {@link #CHUNK_STRATEGY_SAMPLES} chunks at
+   * uniform docID stride; falls back to a per-chunk scan on tiny segments.
+   */
+  private static boolean cleanChunksWorthwhile(
+      Lucene90CompressingStoredFieldsReader reader, Bits liveDocs, int maxDoc) throws IOException {
+    final int stride = Math.max(1, maxDoc / CHUNK_STRATEGY_SAMPLES);
+    int sampled = 0;
+    int clean = 0;
+    for (int doc = 0; doc < maxDoc; doc += stride) {
+      long boundary = reader.getChunkBoundary(doc);
+      int base = (int) (boundary >>> 32);
+      int n = (int) boundary;
+      boolean allLive = true;
+      for (int d = base; d < base + n; d++) {
+        if (liveDocs.get(d) == false) {
+          allLive = false;
+          break;
+        }
+      }
+      if (allLive) clean++;
+      if (++sampled >= CHUNK_STRATEGY_SAMPLES) break;
+    }
+    return sampled == 0 || clean * 100 >= sampled * CHUNK_STRATEGY_MIN_CLEAN_PERCENT;
+  }
+
   private MergeStrategy getMergeStrategy(
-      MergeState mergeState, MatchingReaders matchingReaders, int readerIndex) {
+      MergeState mergeState, MatchingReaders matchingReaders, int readerIndex) throws IOException {
     final StoredFieldsReader candidate = mergeState.storedFieldsReaders[readerIndex];
     if (matchingReaders.matchingReaders[readerIndex] == false
         || candidate instanceof Lucene90CompressingStoredFieldsReader == false
@@ -684,13 +815,19 @@ public final class Lucene90CompressingStoredFieldsWriter extends StoredFieldsWri
     if (BULK_MERGE_ENABLED
         && reader.getCompressionMode() == compressionMode
         && reader.getChunkSize() == chunkSize
-        // its not worth fine-graining this if there are deletions.
-        && mergeState.liveDocs[readerIndex] == null
         && !tooDirty(reader)) {
-      return MergeStrategy.BULK;
-    } else {
-      return MergeStrategy.DOC;
+      if (mergeState.liveDocs[readerIndex] == null) {
+        return MergeStrategy.BULK;
+      }
+      // Index-sorted merges still have to go through the doc because docs are
+      // re-ordered across chunks.
+      if (!mergeState.needsIndexSort
+          && cleanChunksWorthwhile(
+              reader, mergeState.liveDocs[readerIndex], mergeState.maxDocs[readerIndex])) {
+        return MergeStrategy.CHUNK;
+      }
     }
+    return MergeStrategy.DOC;
   }
 
   private static class CompressingStoredFieldsMergeSub extends DocIDMerger.Sub {
