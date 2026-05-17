@@ -30,7 +30,7 @@ import org.apache.lucene.index.DocValues;
 import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.util.BytesRef;
-import org.apache.lucene.util.PriorityQueue;
+import org.apache.lucene.util.TernaryPriorityQueue;
 
 /**
  * Returns the counts for each given {@link FacetSet}
@@ -160,8 +160,8 @@ public class MatchingFacetSetsCounts extends FacetCountsWithFilterQuery {
 
     topN = Math.min(topN, counts.length);
 
-    PriorityQueue<Entry> pq =
-        PriorityQueue.usingComparator(
+    TernaryPriorityQueue<Entry> pq =
+        TernaryPriorityQueue.usingComparator(
             topN, () -> new Entry("", 0), (a, b) -> compare(a.count, b.count, a.label, b.label));
 
     int childCount = 0;

@@ -45,7 +45,7 @@ import java.util.NoSuchElementException;
  */
 public final class MergedIterator<T extends Comparable<T>> implements Iterator<T> {
   private T current;
-  private final PriorityQueue<SubIterator<T>> queue;
+  private final TernaryPriorityQueue<SubIterator<T>> queue;
   private final SubIterator<T>[] top;
   private final boolean removeDuplicates;
   private int numTop;
@@ -59,7 +59,7 @@ public final class MergedIterator<T extends Comparable<T>> implements Iterator<T
   public MergedIterator(boolean removeDuplicates, Iterator<T>... iterators) {
     this.removeDuplicates = removeDuplicates;
     queue =
-        PriorityQueue.usingComparator(
+        TernaryPriorityQueue.usingComparator(
             iterators.length,
             Comparator.<SubIterator<T>, T>comparing(it -> it.current)
                 .thenComparingInt(it -> it.index));

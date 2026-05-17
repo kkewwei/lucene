@@ -21,7 +21,7 @@ import java.util.Arrays;
 import org.apache.lucene.util.ArrayUtil;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.BytesRefBuilder;
-import org.apache.lucene.util.PriorityQueue;
+import org.apache.lucene.util.TernaryPriorityQueue;
 
 /**
  * Exposes {@link TermsEnum} API, merged from {@link TermsEnum} API of sub-segments. This does a
@@ -370,7 +370,7 @@ public final class MultiTermsEnum extends BaseTermsEnum {
     }
   }
 
-  private static final class TermMergeQueue extends PriorityQueue<TermsEnumWithSlice> {
+  private static final class TermMergeQueue extends TernaryPriorityQueue<TermsEnumWithSlice> {
 
     final int[] stack;
 

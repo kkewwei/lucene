@@ -29,7 +29,7 @@ import org.apache.lucene.index.NumericDocValues;
 import org.apache.lucene.index.SortedNumericDocValues;
 import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.search.Query;
-import org.apache.lucene.util.PriorityQueue;
+import org.apache.lucene.util.TernaryPriorityQueue;
 
 /**
  * Base class for range faceting.
@@ -223,8 +223,8 @@ abstract class RangeFacetCounts extends FacetCountsWithFilterQuery {
       return new FacetResult(dim, path, totCount, new LabelAndValue[0], 0);
     }
 
-    PriorityQueue<Entry> pq =
-        PriorityQueue.usingComparator(
+    TernaryPriorityQueue<Entry> pq =
+      TernaryPriorityQueue.usingComparator(
             Math.min(topN, counts.length),
             Comparator.<Entry>comparingInt(e -> e.count)
                 .thenComparing(e -> e.label, Comparator.reverseOrder()));

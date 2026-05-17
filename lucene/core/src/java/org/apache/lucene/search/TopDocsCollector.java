@@ -16,16 +16,16 @@
  */
 package org.apache.lucene.search;
 
-import org.apache.lucene.util.PriorityQueue;
+import org.apache.lucene.util.TernaryPriorityQueue;
 
 /**
  * A base class for all collectors that return a {@link TopDocs} output. This collector allows easy
- * extension by providing a single constructor which accepts a {@link PriorityQueue} as well as
- * protected members for that priority queue and a counter of the number of total hits.<br>
+ * extension by providing a single constructor which accepts a {@link TernaryPriorityQueue} as well
+ * as protected members for that priority queue and a counter of the number of total hits.<br>
  * Extending classes can override any of the methods to provide their own implementation, as well as
  * avoid the use of the priority queue entirely by passing null to {@link
- * #TopDocsCollector(PriorityQueue)}. In that case however, you might want to consider overriding
- * all methods, in order to avoid a NullPointerException.
+ * #TopDocsCollector(TernaryPriorityQueue)}. In that case however, you might want to consider
+ * overriding all methods, in order to avoid a NullPointerException.
  */
 public abstract class TopDocsCollector<T extends ScoreDoc> implements Collector {
 
@@ -44,7 +44,7 @@ public abstract class TopDocsCollector<T extends ScoreDoc> implements Collector 
    * top scoring documents, while other PQ implementations may hold documents sorted by other
    * criteria.
    */
-  protected final PriorityQueue<T> pq;
+  protected final TernaryPriorityQueue<T> pq;
 
   /** The total number of documents that the collector encountered. */
   protected int totalHits;
@@ -52,7 +52,7 @@ public abstract class TopDocsCollector<T extends ScoreDoc> implements Collector 
   /** Whether {@link #totalHits} is exact or a lower bound. */
   protected TotalHits.Relation totalHitsRelation = TotalHits.Relation.EQUAL_TO;
 
-  protected TopDocsCollector(PriorityQueue<T> pq) {
+  protected TopDocsCollector(TernaryPriorityQueue<T> pq) {
     this.pq = pq;
   }
 

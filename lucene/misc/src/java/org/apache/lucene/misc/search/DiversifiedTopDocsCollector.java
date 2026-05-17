@@ -32,7 +32,7 @@ import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.TopDocsCollector;
 import org.apache.lucene.search.TotalHits;
 import org.apache.lucene.util.FloatComparator;
-import org.apache.lucene.util.PriorityQueue;
+import org.apache.lucene.util.TernaryPriorityQueue;
 
 /**
  * A {@link TopDocsCollector} that controls diversity in results by ensuring no more than
@@ -69,14 +69,14 @@ import org.apache.lucene.util.PriorityQueue;
 public abstract class DiversifiedTopDocsCollector extends TopDocsCollector<ScoreDocKey> {
 
   /** An internal PQ with remove(element) operation implemented using a linear scan of the heap. */
-  private static final class PriorityQueueWithSlowRemove extends PriorityQueue<ScoreDocKey> {
+  private static final class PriorityQueueWithSlowRemove extends TernaryPriorityQueue<ScoreDocKey> {
     public PriorityQueueWithSlowRemove(int maxSize, LessThan<? super ScoreDocKey> lessThan) {
       super(maxSize, lessThan);
     }
 
     /**
-     * Removes an existing element currently stored in the PriorityQueue. Cost is linear with the
-     * size of the queue. Elements are compared by reference (not equality).
+     * Removes an existing element currently stored in the TernaryPriorityQueue. Cost is linear with
+     * the size of the queue. Elements are compared by reference (not equality).
      */
     boolean remove(ScoreDocKey element) {
       var heap = super.getHeapArray();
@@ -100,9 +100,9 @@ public abstract class DiversifiedTopDocsCollector extends TopDocsCollector<Score
   ScoreDocKey spare;
   private final PriorityQueueWithSlowRemove globalQueue;
   private final int numHits;
-  private final LongObjectHashMap<PriorityQueue<ScoreDocKey>> perKeyQueues;
+  private final LongObjectHashMap<TernaryPriorityQueue<ScoreDocKey>> perKeyQueues;
   protected int maxNumPerKey;
-  private final Deque<PriorityQueue<ScoreDocKey>> sparePerKeyQueues = new ArrayDeque<>();
+  private final Deque<TernaryPriorityQueue<ScoreDocKey>> sparePerKeyQueues = new ArrayDeque<>();
 
   public DiversifiedTopDocsCollector(int numHits, int maxHitsPerKey) {
     super(new PriorityQueueWithSlowRemove(numHits, (a, b) -> KEY_COMPARATOR.compare(a, b) < 0));
@@ -152,11 +152,11 @@ public abstract class DiversifiedTopDocsCollector extends TopDocsCollector<Score
 
     // For this to work the choice of key class needs to implement
     // hashcode and equals.
-    PriorityQueue<ScoreDocKey> thisKeyQ = perKeyQueues.get(addition.key);
+    TernaryPriorityQueue<ScoreDocKey> thisKeyQ = perKeyQueues.get(addition.key);
 
     if (thisKeyQ == null) {
       if (sparePerKeyQueues.isEmpty()) {
-        thisKeyQ = PriorityQueue.usingComparator(maxNumPerKey, KEY_COMPARATOR);
+        thisKeyQ = TernaryPriorityQueue.usingComparator(maxNumPerKey, KEY_COMPARATOR);
       } else {
         thisKeyQ = sparePerKeyQueues.pop();
       }
@@ -190,7 +190,7 @@ public abstract class DiversifiedTopDocsCollector extends TopDocsCollector<Score
     if (globalOverflow == null) {
       return;
     }
-    PriorityQueue<ScoreDocKey> q = perKeyQueues.get(globalOverflow.key);
+    TernaryPriorityQueue<ScoreDocKey> q = perKeyQueues.get(globalOverflow.key);
     ScoreDocKey perKeyLowest = q.pop();
     // The least globally-competitive item should also always be the least
     // key-local item

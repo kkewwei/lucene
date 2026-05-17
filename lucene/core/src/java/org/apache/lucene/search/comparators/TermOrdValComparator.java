@@ -39,7 +39,7 @@ import org.apache.lucene.search.SkipBlockRangeIterator;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.BytesRefBuilder;
 import org.apache.lucene.util.FixedBitSet;
-import org.apache.lucene.util.PriorityQueue;
+import org.apache.lucene.util.TernaryPriorityQueue;
 
 /**
  * Sorts by field's natural Term sort order, using ordinals. This is functionally equivalent to
@@ -539,7 +539,7 @@ public class TermOrdValComparator extends FieldComparator<BytesRef> {
     private final TermsEnum docValuesTerms;
     private ArrayDeque<PostingsEnumAndOrd> postings;
     private DocIdSetIterator docsWithField;
-    private PriorityQueue<PostingsEnumAndOrd> disjunction;
+    private TernaryPriorityQueue<PostingsEnumAndOrd> disjunction;
     private final DocIdSetIterator disjunctionIterator;
 
     PostingsBasedCompetitiveState(
@@ -645,7 +645,8 @@ public class TermOrdValComparator extends FieldComparator<BytesRef> {
         }
       }
       disjunction =
-          PriorityQueue.usingLessThan(size, (a, b) -> a.postings.docID() < b.postings.docID());
+          TernaryPriorityQueue.usingLessThan(
+              size, (a, b) -> a.postings.docID() < b.postings.docID());
       disjunction.addAll(postings);
     }
   }

@@ -21,7 +21,7 @@ import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.TotalHits;
 import org.apache.lucene.search.suggest.Lookup;
-import org.apache.lucene.util.PriorityQueue;
+import org.apache.lucene.util.TernaryPriorityQueue;
 
 /**
  * {@link org.apache.lucene.search.TopDocs} wrapper with an additional CharSequence key per {@link
@@ -113,8 +113,8 @@ public class TopSuggestDocs extends TopDocs {
    * <p>NOTE: assumes every <code>shardHit</code> is already sorted by score
    */
   public static TopSuggestDocs merge(int topN, TopSuggestDocs[] shardHits) {
-    PriorityQueue<SuggestScoreDoc> priorityQueue =
-        PriorityQueue.usingComparator(topN, SUGGEST_SCORE_DOC_COMPARATOR);
+    TernaryPriorityQueue<SuggestScoreDoc> priorityQueue =
+        TernaryPriorityQueue.usingComparator(topN, SUGGEST_SCORE_DOC_COMPARATOR);
     for (TopSuggestDocs shardHit : shardHits) {
       for (SuggestScoreDoc scoreDoc : shardHit.scoreLookupDocs()) {
         if (scoreDoc == priorityQueue.insertWithOverflow(scoreDoc)) {

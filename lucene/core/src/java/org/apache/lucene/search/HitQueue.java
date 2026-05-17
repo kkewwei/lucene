@@ -16,14 +16,14 @@
  */
 package org.apache.lucene.search;
 
-import org.apache.lucene.util.PriorityQueue;
+import org.apache.lucene.util.TernaryPriorityQueue;
 
 /**
  * Expert: Priority queue containing hit docs
  *
  * @lucene.internal
  */
-public final class HitQueue extends PriorityQueue<ScoreDoc> {
+public final class HitQueue extends TernaryPriorityQueue<ScoreDoc> {
 
   /**
    * Creates a new instance with <code>size</code> elements. If <code>prePopulate</code> is set to

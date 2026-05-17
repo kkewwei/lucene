@@ -29,7 +29,7 @@ import org.apache.lucene.search.ScoreMode;
 import org.apache.lucene.search.SimpleCollector;
 import org.apache.lucene.search.TotalHits;
 import org.apache.lucene.search.suggest.Lookup;
-import org.apache.lucene.util.PriorityQueue;
+import org.apache.lucene.util.TernaryPriorityQueue;
 
 /**
  * {@link org.apache.lucene.search.Collector} that collects completion and score, along with
@@ -50,7 +50,7 @@ import org.apache.lucene.util.PriorityQueue;
  */
 public class TopSuggestDocsCollector extends SimpleCollector {
 
-  private final PriorityQueue<SuggestScoreDoc> priorityQueue;
+  private final TernaryPriorityQueue<SuggestScoreDoc> priorityQueue;
   private final int num;
 
   /**
@@ -78,7 +78,7 @@ public class TopSuggestDocsCollector extends SimpleCollector {
       throw new IllegalArgumentException("'num' must be > 0");
     }
     this.num = num;
-    this.priorityQueue = PriorityQueue.usingComparator(num, SUGGEST_SCORE_DOC_COMPARATOR);
+    this.priorityQueue = TernaryPriorityQueue.usingComparator(num, SUGGEST_SCORE_DOC_COMPARATOR);
     if (skipDuplicates) {
       seenSurfaceForms = new CharArraySet(num, false);
       pendingResults = new ArrayList<>(num);

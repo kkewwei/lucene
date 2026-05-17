@@ -18,7 +18,7 @@ package org.apache.lucene.search;
 
 import java.io.IOException;
 import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.util.PriorityQueue;
+import org.apache.lucene.util.TernaryPriorityQueue;
 
 /**
  * Expert: A hit queue for sorting by hits by terms in more than one field.
@@ -27,7 +27,8 @@ import org.apache.lucene.util.PriorityQueue;
  * @since 2.9
  * @see IndexSearcher#search(Query,int,Sort)
  */
-public class FieldValueHitQueue<T extends FieldValueHitQueue.Entry> extends PriorityQueue<T> {
+public class FieldValueHitQueue<T extends FieldValueHitQueue.Entry>
+    extends TernaryPriorityQueue<T> {
 
   /** Extension of ScoreDoc to also store the {@link FieldComparator} slot. */
   public static class Entry extends ScoreDoc {

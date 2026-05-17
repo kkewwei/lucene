@@ -16,10 +16,11 @@
  */
 package org.apache.lucene.facet;
 
-import org.apache.lucene.util.PriorityQueue;
+import org.apache.lucene.util.TernaryPriorityQueue;
 
 /** Keeps highest results, first by largest value, then tie-break by smallest ord. */
-public abstract class TopOrdAndNumberQueue extends PriorityQueue<TopOrdAndNumberQueue.OrdAndValue> {
+public abstract class TopOrdAndNumberQueue
+    extends TernaryPriorityQueue<TopOrdAndNumberQueue.OrdAndValue> {
 
   /** Holds a single entry. */
   public abstract static class OrdAndValue {

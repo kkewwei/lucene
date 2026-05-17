@@ -36,7 +36,7 @@ import org.apache.lucene.search.LongValues;
 import org.apache.lucene.search.LongValuesSource;
 import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.InPlaceMergeSorter;
-import org.apache.lucene.util.PriorityQueue;
+import org.apache.lucene.util.TernaryPriorityQueue;
 
 /**
  * {@link Facets} implementation that computes counts for all unique long values, more efficiently
@@ -421,8 +421,8 @@ public class LongValueFacetCounts extends Facets {
     }
 
     // sort by count descending, breaking ties by value ascending:
-    PriorityQueue<Entry> pq =
-        PriorityQueue.usingComparator(
+    TernaryPriorityQueue<Entry> pq =
+      TernaryPriorityQueue.usingComparator(
             Math.min(topN, counts.length + hashCounts.size()),
             Comparator.<Entry>comparingInt(e -> e.count)
                 .thenComparing(Comparator.<Entry>comparingLong(dv -> dv.value).reversed()));

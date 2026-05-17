@@ -45,7 +45,7 @@ import org.apache.lucene.util.IORunnable;
 import org.apache.lucene.util.IOUtils;
 import org.apache.lucene.util.LongValues;
 import org.apache.lucene.util.NumericUtils;
-import org.apache.lucene.util.PriorityQueue;
+import org.apache.lucene.util.TernaryPriorityQueue;
 import org.apache.lucene.util.bkd.BKDUtil.ByteArrayPredicate;
 import org.apache.lucene.util.packed.PackedInts;
 import org.apache.lucene.util.packed.PackedLongValues;
@@ -637,8 +637,8 @@ public class BKDWriter implements Closeable {
       throws IOException {
     assert docMaps == null || readers.size() == docMaps.size();
 
-    PriorityQueue<MergeReader> queue =
-        PriorityQueue.usingComparator(readers.size(), mergeComparator(config.bytesPerDim()));
+    TernaryPriorityQueue<MergeReader> queue =
+      TernaryPriorityQueue.usingComparator(readers.size(), mergeComparator(config.bytesPerDim()));
 
     for (int i = 0; i < readers.size(); i++) {
       PointValues pointValues = readers.get(i);

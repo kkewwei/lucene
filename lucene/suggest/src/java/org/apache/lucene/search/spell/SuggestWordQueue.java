@@ -17,7 +17,7 @@
 package org.apache.lucene.search.spell;
 
 import java.util.Comparator;
-import org.apache.lucene.util.PriorityQueue;
+import org.apache.lucene.util.TernaryPriorityQueue;
 
 /**
  * Sorts SuggestWord instances
@@ -25,7 +25,7 @@ import org.apache.lucene.util.PriorityQueue;
  * @see org.apache.lucene.search.spell.SuggestWordScoreComparator
  * @see org.apache.lucene.search.spell.SuggestWordFrequencyComparator
  */
-public final class SuggestWordQueue extends PriorityQueue<SuggestWord> {
+public final class SuggestWordQueue extends TernaryPriorityQueue<SuggestWord> {
   /**
    * Default comparator: score then frequency.
    *

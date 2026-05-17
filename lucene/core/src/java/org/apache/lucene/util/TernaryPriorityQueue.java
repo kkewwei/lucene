@@ -1,0 +1,416 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.apache.lucene.util;
+
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.Iterator;
+import java.util.NoSuchElementException;
+import java.util.function.Function;
+import java.util.function.IntFunction;
+import java.util.function.Predicate;
+import java.util.function.Supplier;
+import java.util.stream.Stream;
+
+/**
+ * A ternary (3-ary) priority queue maintains a partial ordering of its elements such that the least
+ * element can always be found in constant time. Put()'s and pop()'s require log_3(size) time. This
+ * is the object-oriented counterpart of {@link TernaryLongHeap}, which only stores primitive {@code
+ * long}s.
+ *
+ * <p>Compared to the standard binary {@link PriorityQueue}, a ternary heap is shallower by a factor
+ * of {@code log(3)/log(2) ~= 1.585}, which often results in fewer comparisons during {@code upHeap}
+ * (insertions) at the cost of slightly more comparisons per level during {@code downHeap}
+ * (removals). Whether this is faster than the binary heap depends on the relative cost of
+ * comparisons vs array access for the concrete {@code lessThan} implementation.
+ *
+ * <p><b>NOTE</b>: This class pre-allocates an array of length {@code maxSize+1} and pre-fills it
+ * with elements if instantiated via the {@link #TernaryPriorityQueue(int, LessThan, Supplier)}
+ * constructor.
+ *
+ * <p><b>NOTE</b>: Iteration order is not specified.
+ *
+ * @lucene.internal
+ */
+public class TernaryPriorityQueue<T> implements Iterable<T> {
+
+  public static final int ARITY = 3;
+
+  /** Represents a {@code <} operation, which is less prescriptive than {@link Comparator} */
+  @FunctionalInterface
+  public interface LessThan<T> {
+    boolean lessThan(T a, T b);
+  }
+
+  /**
+   * Create a {@code TernaryPriorityQueue} that orders elements using the specified {@code lessThan}
+   */
+  public static <T> TernaryPriorityQueue<T> usingLessThan(
+      int maxSize, LessThan<? super T> lessThan) {
+    return new TernaryPriorityQueue<>(maxSize, lessThan);
+  }
+
+  /**
+   * Create a {@code TernaryPriorityQueue} that orders elements using the specified {@code lessThan}
+   */
+  public static <T> TernaryPriorityQueue<T> usingLessThan(
+      int maxSize, Supplier<T> sentinelObjectSupplier, LessThan<? super T> lessThan) {
+    return new TernaryPriorityQueue<>(maxSize, lessThan, sentinelObjectSupplier);
+  }
+
+  /**
+   * Create a {@code TernaryPriorityQueue} that orders elements using the specified {@code
+   * comparator}
+   */
+  public static <T> TernaryPriorityQueue<T> usingComparator(
+      int maxSize, Comparator<? super T> comparator) {
+    return new TernaryPriorityQueue<>(maxSize, (a, b) -> comparator.compare(a, b) < 0);
+  }
+
+  /**
+   * Create a {@code TernaryPriorityQueue} that orders elements using the specified {@code
+   * comparator}
+   */
+  public static <T> TernaryPriorityQueue<T> usingComparator(
+      int maxSize, Supplier<T> sentinelObjectSupplier, Comparator<? super T> comparator) {
+    return new TernaryPriorityQueue<>(
+        maxSize, (a, b) -> comparator.compare(a, b) < 0, sentinelObjectSupplier);
+  }
+
+  protected int size = 0;
+  private final int maxSize;
+  private final T[] heap;
+  private final LessThan<? super T> lessThan;
+
+  /** Create an empty priority queue of the configured size using the specified {@link LessThan}. */
+  public TernaryPriorityQueue(int maxSize, LessThan<? super T> lessThan) {
+    this(maxSize, lessThan, () -> null);
+  }
+
+  /**
+   * Create a ternary priority queue that is pre-filled with sentinel objects, so that the code
+   * which uses that queue can always assume it's full and only change the top without attempting to
+   * insert any new object.
+   *
+   * <p>Those sentinel values should always compare worse than any non-sentinel value (i.e., {@link
+   * #lessThan} should always favor the non-sentinel values).
+   *
+   * <p>By default, the supplier returns null, which means the queue will not be filled with
+   * sentinel values. Otherwise, the value returned will be used to pre-populate the queue.
+   *
+   * <p><b>NOTE:</b> the given supplier will be called {@code maxSize} times, relying on a new
+   * object to be returned and will not check if it's null again. Therefore you should ensure any
+   * call to this method creates a new instance and behaves consistently, e.g., it cannot return
+   * null if it previously returned non-null and all returned instances must {@link LessThan compare
+   * equal}.
+   */
+  public TernaryPriorityQueue(
+      int maxSize, LessThan<? super T> lessThan, Supplier<T> sentinelObjectSupplier) {
+    final int heapSize;
+
+    if (0 == maxSize) {
+      // We allocate 1 extra to avoid if statement in top()
+      heapSize = 2;
+    } else {
+      if ((maxSize < 0) || (maxSize >= ArrayUtil.MAX_ARRAY_LENGTH)) {
+        // Throw exception to prevent confusing OOME:
+        throw new IllegalArgumentException(
+            "maxSize must be >= 0 and < " + (ArrayUtil.MAX_ARRAY_LENGTH) + "; got: " + maxSize);
+      }
+
+      // NOTE: we add +1 because all access to heap is
+      // 1-based not 0-based.  heap[0] is unused.
+      heapSize = maxSize + 1;
+    }
+
+    // T is an unbounded type, so this unchecked cast works always.
+    @SuppressWarnings("unchecked")
+    final T[] h = (T[]) new Object[heapSize];
+    this.heap = h;
+    this.maxSize = maxSize;
+    this.lessThan = lessThan;
+
+    // If sentinel objects are supported, populate the queue with them
+    T sentinel = sentinelObjectSupplier.get();
+    if (sentinel != null) {
+      heap[1] = sentinel;
+      for (int i = 2; i < heap.length; i++) {
+        heap[i] = sentinelObjectSupplier.get();
+      }
+      size = maxSize;
+    }
+  }
+
+  /**
+   * Adds all elements of the collection into the queue. This method should be preferred over
+   * calling {@link #add(Object)} in loop if all elements are known in advance as it builds queue
+   * faster.
+   *
+   * <p>If one tries to add more objects than the maxSize passed in the constructor, an {@link
+   * ArrayIndexOutOfBoundsException} is thrown. Which may result in parts of elements added into the
+   * queue, but the heap is still stay in correct state. In this case, if caller wants to readd or
+   * {@link #updateTop(Object)} with remaining elements, it should skip(continue) consumed elements
+   * with the delta size of queue.
+   */
+  public void addAll(Collection<T> elements) {
+    // Heap with size S always takes first S elements of the array,
+    // and thus it's safe to fill array further - no actual non-sentinel value will be overwritten.
+    try {
+      for (T element : elements) {
+        this.heap[size + 1] = element;
+        this.size++;
+      }
+    } finally {
+      // Build heap bottom-up. The last internal node is the parent of `size`.
+      // For a 1-based ternary heap: parent(i) = (i - 2) / ARITY + 1.
+      for (int i = lastInternalNode(size); i >= 1; i--) {
+        downHeap(i);
+      }
+    }
+  }
+
+  /**
+   * Adds all elements of the stream into the queue. This method should be preferred over calling
+   * {@link #add(Object)} in loop if all elements are known in advance as it builds queue faster.
+   *
+   * <p>If one needs to map or filter element in the iteration of elements in this method, call this
+   * method with elements wrapped by {@link Stream#map(Function)} or {@link
+   * Stream#filter(Predicate)}, etc. In these cases, this method should be preferred over calling
+   * {@link #addAll(Collection)}.
+   *
+   * <p>If one tries to add more objects than the maxSize passed in the constructor, an {@link
+   * ArrayIndexOutOfBoundsException} is thrown. Which may result in parts of elements added into the
+   * queue, but the heap is still stay in correct state. In this case, if caller wants to readd or
+   * {@link #updateTop(Object)} with remaining elements, it should use a new stream, and use {@link
+   * Stream#skip(long)} to skip consumed elements with the delta size of queue.
+   */
+  public void addAll(Stream<T> elements) {
+    try {
+      elements.forEachOrdered(
+          element -> {
+            this.heap[size + 1] = element;
+            this.size++;
+          });
+    } finally {
+      for (int i = lastInternalNode(size); i >= 1; i--) {
+        downHeap(i);
+      }
+    }
+  }
+
+  /**
+   * Adds an Object to a TernaryPriorityQueue in log_3(size) time. If one tries to add more objects
+   * than maxSize from initialize an {@link ArrayIndexOutOfBoundsException} is thrown.
+   *
+   * @return the new 'top' element in the queue.
+   */
+  public final T add(T element) {
+    // don't modify size until we know heap access didn't throw AIOOB.
+    int index = size + 1;
+    heap[index] = element;
+    size = index;
+    upHeap(index);
+    return heap[1];
+  }
+
+  /**
+   * Adds an Object to a TernaryPriorityQueue in log_3(size) time. It returns the object (if any)
+   * that was dropped off the heap because it was full. This can be the given parameter (in case it
+   * is smaller than the full heap's minimum, and couldn't be added), or another object that was
+   * previously the smallest value in the heap and now has been replaced by a larger one, or null if
+   * the queue wasn't yet full with maxSize elements.
+   */
+  public T insertWithOverflow(T element) {
+    if (size < maxSize) {
+      add(element);
+      return null;
+    } else if (size > 0 && lessThan.lessThan(heap[1], element)) {
+      T ret = heap[1];
+      heap[1] = element;
+      updateTop();
+      return ret;
+    } else {
+      return element;
+    }
+  }
+
+  /** Returns the least element of the TernaryPriorityQueue in constant time. */
+  public final T top() {
+    // We don't need to check size here: if maxSize is 0,
+    // then heap is length 2 array with both entries null.
+    // If size is 0 then heap[1] is already null.
+    return heap[1];
+  }
+
+  /** Removes and returns the least element of the TernaryPriorityQueue in log_3(size) time. */
+  public final T pop() {
+    if (size > 0) {
+      T result = heap[1]; // save first value
+      heap[1] = heap[size]; // move last to first
+      heap[size] = null; // permit GC of objects
+      size--;
+      downHeap(1); // adjust heap
+      return result;
+    } else {
+      return null;
+    }
+  }
+
+  /**
+   * Should be called when the Object at top changes values. Still log_3(n) worst case, but it's at
+   * least twice as fast to
+   *
+   * <pre><code class="language-java">
+   * pq.top().change();
+   * pq.updateTop();
+   * </code></pre>
+   *
+   * instead of
+   *
+   * <pre><code class="language-java">
+   * o = pq.pop();
+   * o.change();
+   * pq.push(o);
+   * </code></pre>
+   *
+   * @return the new 'top' element.
+   */
+  public final T updateTop() {
+    downHeap(1);
+    return heap[1];
+  }
+
+  /** Replace the top of the pq with {@code newTop} and run {@link #updateTop()}. */
+  public final T updateTop(T newTop) {
+    heap[1] = newTop;
+    return updateTop();
+  }
+
+  /** Returns the number of elements currently stored in the TernaryPriorityQueue. */
+  public final int size() {
+    return size;
+  }
+
+  /** Removes all entries from the TernaryPriorityQueue. */
+  public final void clear() {
+    Arrays.fill(heap, 0, size + 1, null);
+    size = 0;
+  }
+
+  /**
+   * Moves the contents of this queue into a new array created by {@code newArray}, lowest items
+   * first
+   */
+  public T[] drainToArrayLowestFirst(IntFunction<T[]> newArray) {
+    T[] array = newArray.apply(size);
+    for (int i = 0; i < array.length; i++) {
+      array[i] = pop();
+    }
+    return array;
+  }
+
+  /**
+   * Moves the contents of this queue into a new array created by {@code newArray}, highest items
+   * first
+   */
+  public T[] drainToArrayHighestFirst(IntFunction<T[]> newArray) {
+    T[] array = newArray.apply(size);
+    for (int i = array.length - 1; i >= 0; i--) {
+      array[i] = pop();
+    }
+    return array;
+  }
+
+  /** Returns the index of the last internal (non-leaf) node, or 0 if there are none. */
+  private static int lastInternalNode(int size) {
+    if (size < 2) {
+      return 0;
+    }
+    // parent(size) for 1-based ternary heap: (size - 2) / ARITY + 1
+    return (size - 2) / ARITY + 1;
+  }
+
+  protected boolean upHeap(int origPos) {
+    int i = origPos;
+    T node = heap[i]; // save bottom node
+    // parent(i) for 1-based ternary heap: (i - 2) / ARITY + 1
+    int j = (i - 2) / ARITY + 1;
+    while (i > 1 && lessThan.lessThan(node, heap[j])) {
+      heap[i] = heap[j]; // shift parents down
+      i = j;
+      j = (i - 2) / ARITY + 1;
+    }
+    heap[i] = node; // install saved node
+    return i != origPos;
+  }
+
+  protected void downHeap(int i) {
+    T node = heap[i]; // save top node
+    for (; ; ) {
+      // first child for 1-based ternary heap: ARITY * (i - 1) + 2
+      int firstChild = ARITY * (i - 1) + 2;
+      if (firstChild > size) break; // i is a leaf
+
+      int lastChild = Math.min(firstChild + ARITY - 1, size);
+
+      // find the smallest child in [firstChild, lastChild]
+      int best = firstChild;
+      for (int c = firstChild + 1; c <= lastChild; c++) {
+        if (lessThan.lessThan(heap[c], heap[best])) {
+          best = c;
+        }
+      }
+
+      if (lessThan.lessThan(heap[best], node) == false) break;
+
+      heap[i] = heap[best];
+      i = best;
+    }
+    heap[i] = node; // install saved node
+  }
+
+  /**
+   * This method returns the internal heap array as Object[].
+   *
+   * @lucene.internal
+   */
+  protected final Object[] getHeapArray() {
+    return heap;
+  }
+
+  @Override
+  public Iterator<T> iterator() {
+    return new Iterator<>() {
+
+      int i = 1;
+
+      @Override
+      public boolean hasNext() {
+        return i <= size;
+      }
+
+      @Override
+      public T next() {
+        if (hasNext() == false) {
+          throw new NoSuchElementException();
+        }
+        return heap[i++];
+      }
+    };
+  }
+}
