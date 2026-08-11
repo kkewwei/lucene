@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.util.Iterator;
 import org.apache.lucene.search.AcceptDocs;
 import org.apache.lucene.search.KnnCollector;
+import org.apache.lucene.util.FixedBitSet;
 import org.apache.lucene.util.AttributeSource;
 import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.BytesRef;
@@ -311,6 +312,16 @@ public abstract class FilterLeafReader extends LeafReader {
     @Override
     public long cost() {
       return in.cost();
+    }
+
+    @Override
+    public void intoBitSet(int upTo, FixedBitSet bitSet, int offset) throws IOException {
+      in.intoBitSet(upTo, bitSet, offset);
+    }
+
+    @Override
+    public int docIDRunEnd() throws IOException {
+      return in.docIDRunEnd();
     }
 
     @Override

@@ -70,6 +70,11 @@ public final class ConstantScoreScorer extends Scorer {
     }
 
     @Override
+    public int docIDRunEnd() throws IOException {
+      return delegate.docIDRunEnd();
+    }
+
+    @Override
     public int intoArray(int upTo, int[] docs) throws IOException {
       if (doc != delegate.docID()) {
         // See #intoBitSet.

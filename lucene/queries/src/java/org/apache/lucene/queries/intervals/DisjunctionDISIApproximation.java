@@ -18,6 +18,7 @@ package org.apache.lucene.queries.intervals;
 
 import java.io.IOException;
 import org.apache.lucene.search.DocIdSetIterator;
+import org.apache.lucene.util.FixedBitSet;
 
 /**
  * A {@link DocIdSetIterator} which is a disjunction of the approximations of the provided
@@ -70,5 +71,32 @@ class DisjunctionDISIApproximation extends DocIdSetIterator {
     } while (top.doc < target);
 
     return top.doc;
+  }
+
+  @Override
+  public void intoBitSet(int upTo, FixedBitSet bitSet, int offset) throws IOException {
+    // Disjunction over approximations: load each sub-iterator's matches in bulk into the same
+    // bitSet. Stale entries with doc < upTo will repeatedly load (and overwrite the same bits)
+    // until every sub-iterator has advanced past upTo, mirroring the core implementation.
+    DisiWrapper top = subIterators.top();
+    while (top.doc < upTo) {
+      top.approximation.intoBitSet(upTo, bitSet, offset);
+      top.doc = top.approximation.docID();
+      top = subIterators.updateTop();
+    }
+  }
+
+  @Override
+  public int docIDRunEnd() throws IOException {
+    // Only consider sub-iterators that are positioned on the current doc; their runs lower-bound
+    // the disjunction's run.
+    int curDoc = docID();
+    int maxRunEnd = curDoc + 1;
+    for (DisiWrapper w : subIterators) {
+      if (w.doc == curDoc) {
+        maxRunEnd = Math.max(maxRunEnd, w.approximation.docIDRunEnd());
+      }
+    }
+    return maxRunEnd;
   }
 }

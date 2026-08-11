@@ -17,6 +17,7 @@
 package org.apache.lucene.search;
 
 import java.io.IOException;
+import org.apache.lucene.util.FixedBitSet;
 
 /** Wrapper around a {@link DocIdSetIterator}. */
 public class FilterDocIdSetIterator extends DocIdSetIterator {
@@ -47,5 +48,23 @@ public class FilterDocIdSetIterator extends DocIdSetIterator {
   @Override
   public long cost() {
     return in.cost();
+  }
+
+  @Override
+  public void intoBitSet(int upTo, FixedBitSet bitSet, int offset) throws IOException {
+    if (getClass() == FilterDocIdSetIterator.class) {
+      in.intoBitSet(upTo, bitSet, offset);
+    } else {
+      super.intoBitSet(upTo, bitSet, offset);
+    }
+  }
+
+  @Override
+  public int docIDRunEnd() throws IOException {
+    if (getClass() == FilterDocIdSetIterator.class) {
+      return in.docIDRunEnd();
+    } else {
+      return super.docIDRunEnd();
+    }
   }
 }

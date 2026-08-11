@@ -18,6 +18,7 @@ package org.apache.lucene.queries.spans;
 
 import java.io.IOException;
 import org.apache.lucene.search.DocIdSetIterator;
+import org.apache.lucene.util.FixedBitSet;
 
 /**
  * A {@link DocIdSetIterator} which is a disjunction of the approximations of the provided
@@ -70,5 +71,30 @@ class SpanDisjunctionDISIApproximation extends DocIdSetIterator {
     } while (top.doc < target);
 
     return top.doc;
+  }
+
+  @Override
+  public void intoBitSet(int upTo, FixedBitSet bitSet, int offset) throws IOException {
+    // 把每个 sub-iterator 直至 upTo 之前的命中批量写入同一个 bitSet。
+    // 仍位于 doc < upTo 的 entries 会反复触发 intoBitSet，直到所有 sub 都越过 upTo。
+    SpanDisiWrapper top = subIterators.top();
+    while (top.doc < upTo) {
+      top.approximation.intoBitSet(upTo, bitSet, offset);
+      top.doc = top.approximation.docID();
+      top = subIterators.updateTop();
+    }
+  }
+
+  @Override
+  public int docIDRunEnd() throws IOException {
+    // 只看停在当前 doc 上的 sub-iterator，它们的 run 给出整个 disjunction run 的下界。
+    int curDoc = docID();
+    int maxRunEnd = curDoc + 1;
+    for (SpanDisiWrapper w : subIterators) {
+      if (w.doc == curDoc) {
+        maxRunEnd = Math.max(maxRunEnd, w.approximation.docIDRunEnd());
+      }
+    }
+    return maxRunEnd;
   }
 }

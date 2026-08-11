@@ -25,6 +25,7 @@ import java.util.List;
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
+import org.apache.lucene.document.StringField;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexWriter;
@@ -418,5 +419,102 @@ public class TestConstantScoreScorer extends LuceneTestCase {
     iw.close();
     ir.close();
     dir.close();
+  }
+
+  /**
+   * Verifies that ConstantScoreScorer$DocIdSetIteratorWrapper.docIDRunEnd forwards to the
+   * delegate's run-end. Without forwarding, the wrapper would return {@code docID()+1} via the
+   * DocIdSetIterator default implementation.
+   */
+  public void testWrapperDocIDRunEndForwarded() throws IOException {
+    DocIdSetIterator range = DocIdSetIterator.range(0, 1024);
+    ConstantScoreScorer scorer =
+        new ConstantScoreScorer(1f, ScoreMode.TOP_SCORES, range);
+    DocIdSetIterator it = scorer.iterator();
+    assertEquals(0, it.nextDoc());
+    assertEquals(1024, it.docIDRunEnd());
+
+    assertEquals(500, it.advance(500));
+    assertEquals(1024, it.docIDRunEnd());
+  }
+
+  public void testWrapperIntoBitSetIT_RealIndex() throws IOException {
+    final int numDocs = atLeast(2000);
+    try (Directory dir = newDirectory()) {
+      try (IndexWriter w =
+          new IndexWriter(dir, newIndexWriterConfig().setMergePolicy(newLogMergePolicy()))) {
+        for (int i = 0; i < numDocs; i++) {
+          Document d = new Document();
+          // Mostly dense, occasionally sparse: makes the test exercise both branches.
+          if (random().nextBoolean() || random().nextInt(10) != 0) {
+            d.add(new StringField("k", "x", Field.Store.NO));
+          } else {
+            d.add(new StringField("k", "y", Field.Store.NO));
+          }
+          w.addDocument(d);
+        }
+        w.forceMerge(1);
+      }
+
+      try (DirectoryReader reader = DirectoryReader.open(dir)) {
+        assertEquals(1, reader.leaves().size());
+        LeafReaderContext leaf = reader.leaves().get(0);
+
+        // Plain IndexSearcher so the materialized scorer is the real ConstantScoreScorer
+        // (TOP_SCORES gate => DocIdSetIteratorWrapper), not an asserting wrapper.
+        IndexSearcher searcher = new IndexSearcher(reader);
+        searcher.setQueryCache(null);
+        Query q = new ConstantScoreQuery(new TermQuery(new Term("k", "x")));
+
+        for (int iter = 0; iter < 20; iter++) {
+          DocIdSetIterator actual = freshWrapperIterator(searcher, q, leaf);
+          DocIdSetIterator expected = freshWrapperIterator(searcher, q, leaf);
+          assertEquals(
+              "TOP_SCORES ConstantScoreScorer must produce DocIdSetIteratorWrapper",
+              "DocIdSetIteratorWrapper",
+              actual.getClass().getSimpleName());
+
+          int start = random().nextInt(numDocs - 1);
+          int upTo = TestUtil.nextInt(random(), start, numDocs);
+          int offset = start == 0 ? 0 : random().nextInt(start);
+
+          actual.advance(start);
+          expected.advance(start);
+          assertEquals(expected.docID(), actual.docID());
+          if (actual.docID() == NO_MORE_DOCS) {
+            continue;
+          }
+
+          FixedBitSet actualBits = new FixedBitSet(numDocs - offset);
+          FixedBitSet expectedBits = new FixedBitSet(numDocs - offset);
+          actual.intoBitSet(upTo, actualBits, offset);
+          for (int doc = expected.docID(); doc < upTo; doc = expected.nextDoc()) {
+            expectedBits.set(doc - offset);
+          }
+
+          assertEquals(
+              "wrapper.intoBitSet must leave docID identical to manual iteration",
+              expected.docID(),
+              actual.docID());
+          assertEquals(
+              "wrapper.intoBitSet must collect the same docs as nextDoc()-driven iteration",
+              expectedBits,
+              actualBits);
+        }
+      }
+    }
+  }
+
+  /** Materialize a fresh {@code DocIdSetIteratorWrapper} from the query against the given leaf. */
+  private static DocIdSetIterator freshWrapperIterator(
+      IndexSearcher searcher, Query q, LeafReaderContext leaf) throws IOException {
+    Weight weight = searcher.createWeight(q, ScoreMode.TOP_SCORES, 1f);
+    ScorerSupplier ss = weight.scorerSupplier(leaf);
+    assertNotNull("scorerSupplier should be non-null for matching query", ss);
+    Scorer scorer = ss.get(Long.MAX_VALUE);
+    assertTrue(
+        "scorer should be ConstantScoreScorer but was " + scorer.getClass().getName(),
+        scorer instanceof ConstantScoreScorer);
+    return scorer.iterator();
   }
 }

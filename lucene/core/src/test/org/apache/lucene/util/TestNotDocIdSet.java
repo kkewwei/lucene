@@ -55,6 +55,29 @@ public class TestNotDocIdSet extends BaseDocIdSetTestCase<NotDocIdSet> {
     }
   }
 
+  public void testIntoBitSetDenseComplement() throws IOException {
+    final int maxDoc = 1_024;
+    FixedBitSet excluded = new FixedBitSet(maxDoc);
+    excluded.set(3);
+    excluded.set(10);
+    excluded.set(511);
+    excluded.set(900);
+
+    NotDocIdSet set = new NotDocIdSet(maxDoc, new BitDocIdSet(excluded));
+    DocIdSetIterator it = set.iterator();
+    assertEquals(0, it.nextDoc());
+
+    FixedBitSet actual = new FixedBitSet(maxDoc + 16);
+    actual.set(maxDoc + 1);
+    it.intoBitSet(maxDoc, actual, 0);
+
+    for (int doc = 0; doc < maxDoc; doc++) {
+      assertEquals("doc " + doc, excluded.get(doc) == false, actual.get(doc));
+    }
+    assertTrue(actual.get(maxDoc + 1));
+    assertEquals(DocIdSetIterator.NO_MORE_DOCS, it.docID());
+  }
+
   private static BitSet randomBitSet(int numBits, float percentSet) {
     final int numBitsSet = Math.min(numBits, (int) (percentSet * numBits));
     final BitSet set = new BitSet(numBits);
