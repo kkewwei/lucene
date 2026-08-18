@@ -71,19 +71,9 @@ final class MaxScoreBulkScorer extends BulkScorer {
     maxScoreSums = new double[allScorers.length];
 
     if (this.filter != null && this.filter.twoPhaseView == null && maxDoc >= INNER_WINDOW_SIZE) {
-      long minScorerCost = allScorers[0].cost;
-      for (int j = 1; j < allScorers.length; j++) {
-        minScorerCost = Math.min(minScorerCost, allScorers[j].cost);
-      }
-      // Use the bitset filter path if either:
-      //  - the sparsest disjunction scorer is denser than the filter, OR
-      //  - there are many scorers and their combined cost is denser than the filter, so the
-      //    candidate stream is dense enough to favor bulk bit-set gating over per-candidate
-      //    filter advance()
-      if (minScorerCost >= this.filter.cost
-          || (allScorers.length > 4 && this.cost >= this.filter.cost)) {
-        this.filterMatches = new FixedBitSet(INNER_WINDOW_SIZE);
-      }
+      // Materializing the filter allows essential scorers to use their bulk
+      // nextDocsAndScores implementation instead of advancing one document at a time.
+      this.filterMatches = new FixedBitSet(INNER_WINDOW_SIZE);
     }
   }
 
@@ -216,10 +206,10 @@ final class MaxScoreBulkScorer extends BulkScorer {
     int innerWindowMax = MathUtil.unsignedMin(max, innerWindowMin + INNER_WINDOW_SIZE);
 
     docAndScoreAccBuffer.size = 0;
-    if (filterMatches == null) {
-      fillScoreBufferViaLeapFrog(top, acceptDocs, innerWindowMax);
-    } else {
+    if (filterMatches != null) {
       fillScoreBufferViaBitSet(top, acceptDocs, innerWindowMax);
+    } else {
+      fillScoreBufferViaLeapFrog(top, acceptDocs, innerWindowMax);
     }
 
     scoreNonEssentialClauses(collector, docAndScoreAccBuffer, firstEssentialScorer);
@@ -542,6 +532,10 @@ final class MaxScoreBulkScorer extends BulkScorer {
       }
     }
     return next;
+  }
+
+  boolean usesBitSetFilterPath() {
+    return filterMatches != null;
   }
 
   @Override

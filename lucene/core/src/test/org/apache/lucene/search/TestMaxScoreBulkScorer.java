@@ -1080,12 +1080,8 @@ public class TestMaxScoreBulkScorer extends LuceneTestCase {
     }
   }
 
-  /**
-   * When the filter is sparse relative to the scorers, MaxScoreBulkScorer should use the leap-frog
-   * path (calling advance() on the filter) rather than the bitset path (calling intoBitSet()). This
-   * simulates a FilteredOrHighMed scenario: one dense scorer + one scorer sparser than the filter.
-   */
-  public void testSparseFilterUsesLeapFrog() throws IOException {
+  /** Regular filters should use the bitset path so essential scorers can read documents in bulk. */
+  public void testFilterUsesBitSet() throws IOException {
     Directory dir = newDirectory();
     IndexWriter w = new IndexWriter(dir, new IndexWriterConfig());
     for (int i = 0; i < 10000; i++) {
@@ -1105,7 +1101,6 @@ public class TestMaxScoreBulkScorer extends LuceneTestCase {
     IndexSearcher searcher = new IndexSearcher(reader);
     searcher.setQueryCache(null);
 
-    // minScorerCost = min(10000, 200) = 200 < filter.cost(500) → leap-frog
     int[] intoBitSetCalls = {0};
     int[] advanceCalls = {0};
 
@@ -1142,16 +1137,80 @@ public class TestMaxScoreBulkScorer extends LuceneTestCase {
             null,
             0,
             DocIdSetIterator.NO_MORE_DOCS);
+        assertTrue(((MaxScoreBulkScorer) bs).usesBitSetFilterPath());
       }
     }
 
     assertTrue(
-        "Expected advance() calls (leap-frog) but got intoBitSet="
+        "Expected intoBitSet() calls, got intoBitSet="
             + intoBitSetCalls[0]
             + " advance="
             + advanceCalls[0],
-        advanceCalls[0] > 0);
-    assertEquals("Expected no intoBitSet() calls for sparse filter", 0, intoBitSetCalls[0]);
+        intoBitSetCalls[0] >= 1);
+
+    reader.close();
+    dir.close();
+  }
+
+  /** The bitset path should also be used when the scoring clauses are sparser than the filter. */
+  public void testSparseScorersUseBitSet() throws IOException {
+    Directory dir = newDirectory();
+    IndexWriter w = new IndexWriter(dir, new IndexWriterConfig());
+    for (int i = 0; i < 20000; i++) {
+      Document doc = new Document();
+      if (i % 50 == 0) {
+        doc.add(new TextField("body", "sparse1", Field.Store.NO));
+      }
+      if (i % 100 == 1) {
+        doc.add(new TextField("body", "sparse2", Field.Store.NO));
+      }
+      if (i % 5 == 0) {
+        doc.add(new TextField("filter", "yes", Field.Store.NO));
+      }
+      w.addDocument(doc);
+    }
+    w.close();
+
+    DirectoryReader reader = DirectoryReader.open(dir);
+    IndexSearcher searcher = new IndexSearcher(reader);
+    searcher.setQueryCache(null);
+
+    int[] intoBitSetCalls = {0};
+    int[] advanceCalls = {0};
+    Query filterQuery =
+        new CountingFilterQuery(
+            new TermQuery(new Term("filter", "yes")), intoBitSetCalls, advanceCalls);
+    BooleanQuery innerOr =
+        new BooleanQuery.Builder()
+            .add(new TermQuery(new Term("body", "sparse1")), Occur.SHOULD)
+            .add(new TermQuery(new Term("body", "sparse2")), Occur.SHOULD)
+            .build();
+    BooleanQuery outerQuery =
+        new BooleanQuery.Builder().add(innerOr, Occur.MUST).add(filterQuery, Occur.FILTER).build();
+
+    Query rewritten = searcher.rewrite(outerQuery);
+    Weight weight = searcher.createWeight(rewritten, ScoreMode.TOP_SCORES, 1f);
+    for (LeafReaderContext ctx : reader.leaves()) {
+      ScorerSupplier ss = weight.scorerSupplier(ctx);
+      if (ss != null) {
+        BulkScorer bs = ss.bulkScorer();
+        assertTrue(bs instanceof MaxScoreBulkScorer);
+        bs.score(
+            new LeafCollector() {
+              @Override
+              public void setScorer(Scorable scorer) {}
+
+              @Override
+              public void collect(int doc) {}
+            },
+            null,
+            0,
+            DocIdSetIterator.NO_MORE_DOCS);
+        assertTrue(((MaxScoreBulkScorer) bs).usesBitSetFilterPath());
+      }
+    }
+
+    assertTrue(intoBitSetCalls[0] > 0);
 
     reader.close();
     dir.close();
