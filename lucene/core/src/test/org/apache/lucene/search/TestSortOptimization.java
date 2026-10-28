@@ -1355,6 +1355,188 @@ public class TestSortOptimization extends LuceneTestCase {
     dir.close();
   }
 
+  public void testStringSortPagingAfterMissingValue() throws IOException {
+    final Directory dir = newDirectory();
+    final IndexWriterConfig config =
+        new IndexWriterConfig().setMergePolicy(NoMergePolicy.INSTANCE);
+    try (IndexWriter writer = new IndexWriter(dir, config)) {
+      for (int segment = 0; segment < 3; segment++) {
+        for (int i = 0; i < 40; i++) {
+          final Document doc = new Document();
+          if (i >= 15) {
+            final String value = Integer.toString(100000 + segment * 40 + i);
+            doc.add(new StringField("sort", value, Field.Store.NO));
+            doc.add(new SortedDocValuesField("sort", new BytesRef(value)));
+          }
+          writer.addDocument(doc);
+        }
+        writer.flush();
+      }
+    }
+
+    try (DirectoryReader reader = DirectoryReader.open(dir)) {
+      assertEquals(3, reader.leaves().size());
+      final SortField sortField =
+          new SortField("sort", SortField.Type.STRING, false, SortField.STRING_FIRST);
+      final Sort sort = new Sort(sortField);
+      final int pageSize = 10;
+
+      TopFieldDocs firstPage = assertSearchHits(reader, sort, pageSize, null);
+      FieldDoc after = (FieldDoc) firstPage.scoreDocs[firstPage.scoreDocs.length - 1];
+      assertNull(after.fields[0]);
+
+      TopFieldDocs secondPage = assertSearchHits(reader, sort, pageSize, after);
+      assertEquals(reader.numDocs(), secondPage.totalHits.value());
+      for (ScoreDoc scoreDoc : secondPage.scoreDocs) {
+        assertNull(((FieldDoc) scoreDoc).fields[0]);
+      }
+    }
+    dir.close();
+  }
+
+  public void testStringSortPrimaryTiesWithSecondarySort() throws IOException {
+    final Directory dir = newDirectory();
+    final IndexWriterConfig config =
+        new IndexWriterConfig().setMergePolicy(NoMergePolicy.INSTANCE);
+    try (IndexWriter writer = new IndexWriter(dir, config)) {
+      final int docsPerSegment = 1000;
+      for (int segment = 0; segment < 3; segment++) {
+        for (int i = 0; i < docsPerSegment; i++) {
+          final int id = segment * docsPerSegment + i;
+          final String primary = id % 10 < 8 ? "a" : "b";
+          final long secondary = (id * 7919L) % 3001;
+          final Document doc = new Document();
+          doc.add(new StringField("primary", primary, Field.Store.NO));
+          doc.add(new SortedDocValuesField("primary", new BytesRef(primary)));
+          doc.add(new NumericDocValuesField("secondary", secondary));
+          writer.addDocument(doc);
+        }
+        writer.flush();
+      }
+    }
+
+    try (DirectoryReader reader = DirectoryReader.open(dir)) {
+      assertEquals(3, reader.leaves().size());
+      final Sort sort =
+          new Sort(
+              new SortField("primary", SortField.Type.STRING),
+              new SortField("secondary", SortField.Type.LONG, true));
+      final int pageSize = 37;
+
+      TopFieldDocs firstPage = assertSearchHits(reader, sort, pageSize, null);
+      assertPrimaryTiesAreOrderedBySecondary(firstPage);
+
+      FieldDoc after = (FieldDoc) firstPage.scoreDocs[firstPage.scoreDocs.length - 1];
+      TopFieldDocs secondPage = assertSearchHits(reader, sort, pageSize, after);
+      assertPrimaryTiesAreOrderedBySecondary(secondPage);
+      assertTrue(
+          (long) ((FieldDoc) firstPage.scoreDocs[firstPage.scoreDocs.length - 1]).fields[1]
+              >= (long) ((FieldDoc) secondPage.scoreDocs[0]).fields[1]);
+    }
+    dir.close();
+  }
+
+  public void testStringSortWithSelectiveQueryAcrossSegments() throws IOException {
+    final Directory dir = newDirectory();
+    final IndexWriterConfig config =
+        new IndexWriterConfig().setMergePolicy(NoMergePolicy.INSTANCE);
+    int expectedMatches = 0;
+    try (IndexWriter writer = new IndexWriter(dir, config)) {
+      final int docsPerSegment = 1000;
+      for (int segment = 0; segment < 4; segment++) {
+        for (int i = 0; i < docsPerSegment; i++) {
+          final int id = segment * docsPerSegment + i;
+          final String value = Integer.toString(100000 + id);
+          final Document doc = new Document();
+          if (id % 3 == 0) {
+            doc.add(new StringField("filter", "match", Field.Store.NO));
+            expectedMatches++;
+          }
+          doc.add(new StringField("sort", value, Field.Store.NO));
+          doc.add(new SortedDocValuesField("sort", new BytesRef(value)));
+          writer.addDocument(doc);
+        }
+        writer.flush();
+      }
+    }
+
+    try (DirectoryReader reader = DirectoryReader.open(dir)) {
+      assertEquals(4, reader.leaves().size());
+      final Query query = new TermQuery(new Term("filter", "match"));
+      final SortField sortField = new SortField("sort", SortField.Type.STRING);
+      final Sort optimizedSort = new Sort(sortField);
+      final Sort baselineSort = new Sort(SortField.withoutPruning(sortField));
+      final IndexSearcher searcher = new IndexSearcher(reader);
+      searcher.setQueryCache(null);
+
+      TopFieldDocs optimized =
+          searcher.search(
+              query, new TopFieldCollectorManager(optimizedSort, 10, null, 10));
+      TopFieldDocs baseline =
+          searcher.search(
+              query, new TopFieldCollectorManager(baselineSort, 10, null, 10));
+
+      CheckHits.checkEqual(query, baseline.scoreDocs, optimized.scoreDocs);
+      assertEquals(expectedMatches, baseline.totalHits.value());
+      assertNonCompetitiveHitsAreSkipped(optimized.totalHits.value(), expectedMatches);
+    }
+    dir.close();
+  }
+
+  public void testIndexSortedStringPagingAcrossSegments() throws IOException {
+    final Directory dir = newDirectory();
+    final Sort sort = new Sort(new SortField("sort", SortField.Type.STRING));
+    final IndexWriterConfig config =
+        new IndexWriterConfig().setIndexSort(sort).setMergePolicy(NoMergePolicy.INSTANCE);
+    final List<String> expected = new ArrayList<>();
+    try (IndexWriter writer = new IndexWriter(dir, config)) {
+      final int docsPerSegment = 100;
+      for (int segment = 0; segment < 4; segment++) {
+        for (int i = docsPerSegment - 1; i >= 0; i--) {
+          final String value = Integer.toString(100000 + i * 4 + segment);
+          expected.add(value);
+          final Document doc = new Document();
+          doc.add(new SortedDocValuesField("sort", new BytesRef(value)));
+          writer.addDocument(doc);
+        }
+        writer.flush();
+      }
+    }
+    Collections.sort(expected);
+
+    try (DirectoryReader reader = DirectoryReader.open(dir)) {
+      assertEquals(4, reader.leaves().size());
+      final IndexSearcher searcher = new IndexSearcher(reader);
+      FieldDoc after = null;
+      int expectedIndex = 0;
+      while (expectedIndex < expected.size()) {
+        TopFieldDocs page =
+            searcher.search(
+                MatchAllDocsQuery.INSTANCE,
+                new TopFieldCollectorManager(sort, 17, after, 5));
+        assertTrue(page.scoreDocs.length > 0);
+        for (ScoreDoc scoreDoc : page.scoreDocs) {
+          FieldDoc fieldDoc = (FieldDoc) scoreDoc;
+          assertEquals(expected.get(expectedIndex++), ((BytesRef) fieldDoc.fields[0]).utf8ToString());
+        }
+        after = (FieldDoc) page.scoreDocs[page.scoreDocs.length - 1];
+      }
+      assertEquals(expected.size(), expectedIndex);
+    }
+    dir.close();
+  }
+
+  private void assertPrimaryTiesAreOrderedBySecondary(TopFieldDocs topDocs) {
+    long previousSecondary = Long.MAX_VALUE;
+    for (ScoreDoc scoreDoc : topDocs.scoreDocs) {
+      FieldDoc fieldDoc = (FieldDoc) scoreDoc;
+      assertEquals(new BytesRef("a"), fieldDoc.fields[0]);
+      long secondary = (long) fieldDoc.fields[1];
+      assertTrue(secondary <= previousSecondary);
+      previousSecondary = secondary;
+    }
+  }
+
   private void doTestStringSortOptimization(DirectoryReader reader) throws IOException {
     final int numDocs = reader.numDocs();
     final int numHits = 5;
