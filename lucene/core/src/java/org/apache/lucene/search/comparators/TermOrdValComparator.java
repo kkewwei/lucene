@@ -415,7 +415,11 @@ public class TermOrdValComparator extends FieldComparator<BytesRef> {
     public void setScorer(Scorable scorer) {}
 
     private void updateCompetitiveIterator() throws IOException {
-      if (competitiveState == null || hitsThresholdReached == false || bottomSlot == -1) {
+      if (hitsThresholdReached == false || competitiveState == null) {
+        return;
+      }
+
+      if ((bottomSlot == -1 && canPruneBeforeQueueFull() == false)) {
         return;
       }
       // This logic to figure out min and max ords is quite complex and verbose, can it be made
@@ -447,7 +451,10 @@ public class TermOrdValComparator extends FieldComparator<BytesRef> {
           minOrd = -1;
         }
 
-        if (bottomOrd == missingOrd) {
+        if (bottomSlot == -1) {
+          // Missing values either sort first or dense , so the last term ord is a safe upper bound.
+          maxOrd = termsIndex.getValueCount() - 1;
+        } else if (bottomOrd == missingOrd) {
           // The queue still contains missing values.
           if (noTieBreaker()) {
             // If there is no tie breaker, we can start ignoring missing values from now on.
@@ -464,8 +471,10 @@ public class TermOrdValComparator extends FieldComparator<BytesRef> {
         }
 
       } else {
-
-        if (bottomOrd == missingOrd) {
+        if (bottomSlot == -1) {
+          // Missing values either sort last or dense , so the first term ord is a safe lower bound.
+          minOrd = 0;
+        } else if (bottomOrd == missingOrd) {
           // The queue still contains missing values.
           if (noTieBreaker()) {
             // If there is no tie breaker, we can start ignoring missing values from now on.
@@ -497,6 +506,10 @@ public class TermOrdValComparator extends FieldComparator<BytesRef> {
       assert minOrd >= 0;
       assert maxOrd < termsIndex.getValueCount();
       competitiveState.update(minOrd, maxOrd);
+    }
+
+    private boolean canPruneBeforeQueueFull() {
+      return topValue != null && (dense || reverse == sortMissingLast);
     }
 
     @Override

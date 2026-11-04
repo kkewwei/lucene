@@ -24,6 +24,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.function.BiFunction;
 import org.apache.lucene.codecs.Codec;
 import org.apache.lucene.codecs.lucene90.Lucene90DocValuesFormat;
@@ -1080,6 +1081,96 @@ public class TestSortOptimization extends LuceneTestCase {
 
   public void testStringSortOptimizationBasedDVSkipper() throws IOException {
     testStringSortOptimization(SortedDocValuesField::indexedField);
+  }
+
+  public void testStringSearchAfterPrunesBeforeQueueFullBasedPostings() throws IOException {
+    testStringSearchAfterPrunesBeforeQueueFull(
+        (field, value) -> new KeywordField(field, value, Field.Store.NO));
+  }
+
+  public void testStringSearchAfterPrunesBeforeQueueFullBasedDVSkipper() throws IOException {
+    testStringSearchAfterPrunesBeforeQueueFull(SortedDocValuesField::indexedField);
+  }
+
+  private void testStringSearchAfterPrunesBeforeQueueFull(
+      BiFunction<String, BytesRef, IndexableField> fieldsBuilder) throws IOException {
+    final int numDocs = 10_000;
+    final int afterDoc = 9_000;
+    for (boolean reverse : new boolean[] {false, true}) {
+      final Directory dir = newDirectory();
+      final IndexWriterConfig config = new IndexWriterConfig().setCodec(TestUtil.getDefaultCodec());
+      try (IndexWriter writer = new IndexWriter(dir, config)) {
+        for (int i = 0; i < numDocs; i++) {
+          int value = reverse ? numDocs - 1 - i : i;
+          Document doc = new Document();
+          doc.add(
+              fieldsBuilder.apply(
+                  "my_field", new BytesRef(String.format(Locale.ROOT, "%08d", value))));
+          writer.addDocument(doc);
+        }
+        writer.forceMerge(1);
+      }
+
+      try (DirectoryReader reader = DirectoryReader.open(dir)) {
+        SortField sortField =
+            KeywordField.newSortField(
+                "my_field",
+                reverse,
+                SortedSetSelector.Type.MIN,
+                reverse ? SortField.STRING_LAST : SortField.STRING_FIRST);
+        Sort sort = new Sort(sortField);
+        int afterValue = reverse ? numDocs - 1 - afterDoc : afterDoc;
+        FieldDoc after =
+            new FieldDoc(
+                afterDoc,
+                Float.NaN,
+                new Object[] {new BytesRef(String.format(Locale.ROOT, "%08d", afterValue))});
+        TopFieldDocs topDocs = assertSearchHits(reader, sort, 5, after);
+        assertEquals(5, topDocs.scoreDocs.length);
+        assertEquals(TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO, topDocs.totalHits.relation());
+        assertTrue(
+            "search-after pruning should skip most documents before the page boundary; collected="
+                + topDocs.totalHits.value(),
+            topDocs.totalHits.value() < afterDoc / 2);
+      }
+      dir.close();
+    }
+  }
+
+  public void testStringSearchAfterDoesNotPruneCompetitiveMissingValues() throws IOException {
+    final Directory dir = newDirectory();
+    try (IndexWriter writer =
+        new IndexWriter(dir, new IndexWriterConfig().setCodec(TestUtil.getDefaultCodec()))) {
+      for (int i = 0; i < 10_000; i++) {
+        Document doc = new Document();
+        if (i % 10 != 0) {
+          doc.add(
+              SortedDocValuesField.indexedField(
+                  "my_field", new BytesRef(String.format(Locale.ROOT, "%08d", i))));
+        }
+        writer.addDocument(doc);
+      }
+      writer.forceMerge(1);
+    }
+
+    try (DirectoryReader reader = DirectoryReader.open(dir)) {
+      for (boolean reverse : new boolean[] {false, true}) {
+        SortField sortField =
+            KeywordField.newSortField(
+                "my_field",
+                reverse,
+                SortedSetSelector.Type.MIN,
+                reverse ? SortField.STRING_FIRST : SortField.STRING_LAST);
+        BytesRef afterValue = new BytesRef(reverse ? "" : "99999999");
+        FieldDoc after = new FieldDoc(0, Float.NaN, new Object[] {afterValue});
+        TopFieldDocs topDocs = assertSearchHits(reader, new Sort(sortField), 5, after);
+        assertEquals(5, topDocs.scoreDocs.length);
+        for (ScoreDoc scoreDoc : topDocs.scoreDocs) {
+          assertNull(((FieldDoc) scoreDoc).fields[0]);
+        }
+      }
+    }
+    dir.close();
   }
 
   private void testStringSortOptimization(
