@@ -17,6 +17,7 @@
 package org.apache.lucene.codecs.lucene90;
 
 import java.io.IOException;
+import java.util.concurrent.atomic.AtomicLong;
 import org.apache.lucene.codecs.compressing.CompressionMode;
 import org.apache.lucene.codecs.compressing.Compressor;
 import org.apache.lucene.codecs.compressing.Decompressor;
@@ -41,6 +42,23 @@ public final class LZ4WithPresetDictCompressionMode extends CompressionMode {
   private static final int NUM_SUB_BLOCKS = 10;
   // And a dictionary whose size is about 2x smaller than sub blocks
   private static final int DICT_SIZE_FACTOR = 2;
+
+  private static final boolean REUSE_METRICS_ENABLED =
+      Boolean.getBoolean("lucene.lz4.presetDict.metrics");
+  private static final AtomicLong DICTIONARY_LOAD_COUNT = new AtomicLong();
+  private static final AtomicLong DICTIONARY_REUSE_COUNT = new AtomicLong();
+  private static final AtomicLong DICTIONARY_BYTES_SKIPPED = new AtomicLong();
+
+  public static void resetDictionaryReuseMetrics() {
+    DICTIONARY_LOAD_COUNT.set(0);
+    DICTIONARY_REUSE_COUNT.set(0);
+    DICTIONARY_BYTES_SKIPPED.set(0);
+  }
+
+  public static DictionaryReuseMetrics getDictionaryReuseMetrics() {
+    return new DictionaryReuseMetrics(
+        DICTIONARY_LOAD_COUNT.get(), DICTIONARY_REUSE_COUNT.get(), DICTIONARY_BYTES_SKIPPED.get());
+  }
 
   /** Sole constructor. */
   public LZ4WithPresetDictCompressionMode() {}
@@ -113,12 +131,14 @@ public final class LZ4WithPresetDictCompressionMode extends CompressionMode {
       if (reuseIfPossible) {
         assert buffer.length >= dictLength + blockLength;
         in.skipBytes(compressedLengths[0]);
+        recordDictionaryReuse(compressedLengths[0]);
       } else {
         // Read the dictionary
         buffer = ArrayUtil.growNoCopy(buffer, dictLength + blockLength);
         if (LZ4.decompress(in, dictLength, buffer, 0) != dictLength) {
           throw new CorruptIndexException("Illegal dict length", in);
         }
+        recordDictionaryLoad();
       }
 
       int offsetInBlock = dictLength;
@@ -162,6 +182,19 @@ public final class LZ4WithPresetDictCompressionMode extends CompressionMode {
     @Override
     public Decompressor clone() {
       return new LZ4WithPresetDictDecompressor();
+    }
+  }
+
+  private static void recordDictionaryLoad() {
+    if (REUSE_METRICS_ENABLED) {
+      DICTIONARY_LOAD_COUNT.incrementAndGet();
+    }
+  }
+
+  private static void recordDictionaryReuse(int compressedDictionaryLength) {
+    if (REUSE_METRICS_ENABLED) {
+      DICTIONARY_BYTES_SKIPPED.addAndGet(compressedDictionaryLength);
+      DICTIONARY_REUSE_COUNT.incrementAndGet();
     }
   }
 
@@ -214,4 +247,6 @@ public final class LZ4WithPresetDictCompressionMode extends CompressionMode {
       // no-op
     }
   }
+
+  public record DictionaryReuseMetrics(long loads, long reuses, long compressedBytesSkipped) {}
 }
